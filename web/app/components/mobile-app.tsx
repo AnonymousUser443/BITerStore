@@ -78,16 +78,17 @@ function Topbar({ title, back, navigate }: { title?: string; back?: boolean; nav
     <header className={`topbar ${title ? 'page-topbar' : ''}`}>
       {back ? <button className="round-button" onClick={() => history.back()} aria-label="返回"><ArrowLeft /></button> : <button className="brand-button" onClick={() => navigate('/home')} aria-label="返回首页"><Brand /></button>}
       {title && <h1>{title}</h1>}
-      <div className="top-actions"><button className="icon-button" aria-label="通知"><Bell size={24} /><i className="notification-dot" /></button>{!title && <Avatar user={getUser(CURRENT_USER_ID)} size={38} />}{title && <button className="icon-button" aria-label="更多"><MoreHorizontal /></button>}</div>
+      <div className="top-actions"><button className="icon-button" aria-label="通知"><Bell size={24} /><i className="notification-dot" /></button>{!title && <Avatar user={getUser(CURRENT_USER_ID)} size={38} />}{title && <button className={`icon-button ${back ? '' : 'leaf-action'}`} aria-label={back ? '更多' : '品牌快捷入口'}>{back ? <MoreHorizontal /> : <Leaf />}</button>}</div>
     </header>
   );
 }
 
 function AppShell({ children, active, navigate, title, back = false, noNav = false, className = '' }: { children: React.ReactNode; active?: string; navigate: (to: string) => void; title?: string; back?: boolean; noNav?: boolean; className?: string }) {
+  const shouldGoBack = back || active === '/publish';
   return (
     <section className={`phone-shell ${className}`}>
       <div className="paper-texture" aria-hidden="true" />
-      <Topbar title={title} back={back} navigate={navigate} />
+      <Topbar title={title} back={shouldGoBack} navigate={navigate} />
       <div className={`content-scroll ${noNav ? 'no-nav' : ''}`}>{children}</div>
       {!noNav && <BottomNav active={active ?? ''} navigate={navigate} />}
     </section>
@@ -153,6 +154,9 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
     { title: '看懂商品与状态', text: '价格、成色、校区和卖家信息一目了然，已售商品会清晰标注。', image: '/assets/tobby-question.webp', targets: ['商品信息', '收藏与联系', '交易状态'] },
     { title: '发布并完成交易', text: '从底栏一键发布，站内联系同学，再约在校内安心见面。', image: '/assets/tobby-guide-trade.webp', targets: ['发布入口', '消息中心', '个人中心'] },
   ];
+  useEffect(() => {
+    ['/assets/tobby-guide-search.webp', '/assets/tobby-question.webp', '/assets/tobby-guide-trade.webp'].forEach((src) => { const asset = new window.Image(); asset.src = src; });
+  }, []);
   const complete = () => { demoRepository.completeOnboarding(); navigate('/home'); };
   const current = steps[step];
   return (
@@ -161,8 +165,8 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
       <div className="onboarding-scrim" />
       <div className="onboarding-panel">
         <div className="onboarding-heading"><span>新手指引 {step + 1}/3</span><button onClick={complete}>跳过</button></div>
-        <Image src={current.image} alt="Tobby 新手引导" width={760} height={760} />
-        <div className="guide-card"><small>STEP 0{step + 1}</small><h1>{current.title}</h1><p>{current.text}</p><div className="guide-pills">{current.targets.map((target) => <span key={target}><Check size={12} />{target}</span>)}</div></div>
+        <Image key={`guide-image-${step}`} src={current.image} alt="Tobby 新手引导" width={760} height={760} unoptimized priority />
+        <div className="guide-card" key={`guide-card-${step}`}><small>STEP 0{step + 1}</small><h1>{current.title}</h1><p>{current.text}</p><div className="guide-pills">{current.targets.map((target) => <span key={target}><Check size={12} />{target}</span>)}</div></div>
         <div className="step-dots">{steps.map((_, index) => <i className={index === step ? 'active' : ''} key={index} />)}</div>
         <div className="guide-actions">{step > 0 && <button className="secondary-button" onClick={() => setStep(step - 1)}>上一步</button>}<button className="primary-button" onClick={() => step === 2 ? complete() : setStep(step + 1)}>{step === 2 ? '开始使用' : '下一步'}</button></div>
       </div>
@@ -201,8 +205,17 @@ function CategoryPage({ navigate, notify }: { navigate: (to: string) => void; no
     });
     return () => { active = false; };
   }, [filters]);
+  const updateFilters = (next: BookFilters) => { setLoading(true); setFilters(next); };
   const toggle = async (book: Book) => { const active = await demoRepository.toggleFavorite(book.id); setFavorites((ids) => active ? [...new Set([...ids, book.id])] : ids.filter((id) => id !== book.id)); notify(active ? '已收藏这本书' : '已取消收藏'); };
-  return <AppShell active="/category" navigate={navigate} className="category-page"><div className="search-input"><Search size={20} /><input aria-label="搜索书籍" placeholder="搜索书名 / 作者 / ISBN / 课程" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} /><button onClick={() => setFilters({ ...filters, query: '' })}>{filters.query ? <X size={18} /> : <Camera size={19} />}</button></div><nav className="category-chips">{categories.map((category) => <button className={filters.category === category ? 'chip active' : 'chip'} onClick={() => setFilters({ ...filters, category })} key={category}>{category}</button>)}</nav><div className="quick-filters"><button onClick={() => setSheet(true)}>校区 <ChevronDown /></button><button onClick={() => setSheet(true)}>成色 <ChevronDown /></button><button onClick={() => setSheet(true)}>价格 <ChevronDown /></button><button onClick={() => setFilters({ ...filters, sort: filters.sort === '最新发布' ? '价格从低到高' : '最新发布' })}>{filters.sort} <ChevronDown /></button><button className="filter-trigger" onClick={() => setSheet(true)}><Filter size={16} />筛选</button></div><div className="results-heading"><h2>为你找到 <em>{books.length}</em> 本书</h2><span>{filters.availableOnly ? '只显示可交易' : '显示全部状态'}</span></div>{loading ? <InlineLoading /> : books.length ? <div className="listing-stack">{books.map((book) => <BookListCard book={book} navigate={navigate} favorite={favorites.includes(book.id)} onFavorite={toggle} key={book.id} />)}</div> : <InlineEmpty navigate={navigate} />}{sheet && <FilterSheet filters={filters} onChange={setFilters} onClose={() => setSheet(false)} count={books.length} />}</AppShell>;
+  return <AppShell active="/category" navigate={navigate} className="category-page">
+    <div className="search-input"><Search size={20} /><input aria-label="搜索书籍" placeholder="搜索书名 / 作者 / ISBN / 课程" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} /><button onClick={() => updateFilters({ ...filters, query: '' })}>{filters.query ? <X size={18} /> : <Camera size={19} />}</button></div>
+    <nav className="category-chips">{categories.map((category) => <button className={filters.category === category ? 'chip active' : 'chip'} onClick={() => updateFilters({ ...filters, category })} key={category}>{category}</button>)}</nav>
+    <div className="quick-filters"><button onClick={() => setSheet(true)}>校区 <ChevronDown /></button><button onClick={() => setSheet(true)}>成色 <ChevronDown /></button><button onClick={() => setSheet(true)}>价格 <ChevronDown /></button><button onClick={() => updateFilters({ ...filters, sort: filters.sort === '最新发布' ? '价格从低到高' : '最新发布' })}>{filters.sort} <ChevronDown /></button><button className={`availability-filter ${filters.availableOnly ? 'active' : ''}`} aria-pressed={filters.availableOnly} onClick={() => updateFilters({ ...filters, availableOnly: !filters.availableOnly })}><span>只看可交易</span><i /></button><button className="filter-trigger" onClick={() => setSheet(true)}><Filter size={16} />筛选</button></div>
+    <div className="search-tobby-hint"><Image src="/assets/tobby-search.webp" alt="Tobby 筛选提示" width={760} height={760} /><span><strong>托比提示</strong>组合筛选，找书更快更准。</span></div>
+    <div className="results-heading"><h2>为你找到 <em>{books.length}</em> 本书</h2><span>{filters.availableOnly ? '只显示可交易' : '显示全部状态'}</span></div>
+    {loading ? <InlineLoading /> : books.length ? <div className="listing-stack">{books.map((book) => <BookListCard book={book} navigate={navigate} favorite={favorites.includes(book.id)} onFavorite={toggle} key={book.id} />)}</div> : <InlineEmpty navigate={navigate} />}
+    {sheet && <FilterSheet filters={filters} onChange={updateFilters} onClose={() => setSheet(false)} count={books.length} />}
+  </AppShell>;
 }
 
 function InlineLoading() { return <div className="inline-state"><Image src="/assets/tobby-search.webp" alt="正在搜索" width={760} height={760} /><h3>托比正在翻找书架…</h3><span className="loading-bar"><i /></span></div>; }
@@ -252,7 +265,17 @@ function ProfilePage({ navigate, notify }: { navigate: (to: string) => void; not
   useEffect(() => { Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings()]).then(([user, favoriteBooks, myBooks]) => { setProfile(user); setFavorites(favoriteBooks.length); setListings(myBooks.length); }); }, []);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
   const reset = async () => { await demoRepository.resetDemoData(); notify('演示数据已重置'); navigate('/'); };
-  return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page"><section className="profile-hero"><Avatar user={profile} size={78} /><div><h1>{profile.name}<ShieldCheck /></h1><p>{profile.campus}校区 · 北理身份已认证</p><span>{profile.bio}</span></div><button aria-label="设置"><Settings /></button></section><div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong>12</strong><span>校园信用</span></button></div><section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section><section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section><div className="profile-tobby"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心" width={760} height={760} /><p>谢谢你让闲置继续流动。</p></div></AppShell>;
+  return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
+    <section className="profile-hero">
+      <Avatar user={profile} size={86} />
+      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>LV.12 · 书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus}校区 · 北京理工大学</p><small>{profile.bio}</small></div>
+      <button aria-label="设置"><Settings /></button>
+    </section>
+    <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong>12</strong><span>校园信用</span></button></div>
+    <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
+    <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
+    <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section>
+  </AppShell>;
 }
 
 function MenuButton({ icon: Icon, label, detail, onClick, danger }: { icon: typeof Heart; label: string; detail: string; onClick: () => void; danger?: boolean }) { return <button className={danger ? 'danger' : ''} onClick={onClick}><span><Icon /></span><div><strong>{label}</strong><small>{detail}</small></div><ChevronRight /></button>; }
@@ -309,5 +332,5 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;
   else if (effectivePath.startsWith('/states/')) page = <StatePage type={effectivePath.split('/')[2]} navigate={navigate} />;
   else page = <StatePage type="404" navigate={navigate} />;
-  return <main className="app-stage">{page}{toast && <div className="toast" role="status"><Leaf size={17} />{toast}</div>}</main>;
+  return <main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className="toast" role="status"><Leaf size={17} />{toast}</div>}</main>;
 }
