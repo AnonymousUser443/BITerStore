@@ -50,6 +50,8 @@
 - [x] 保存 Sites 版本 3，部署同一提交构建归档并复核仅所有者访问策略
 - [x] 创建 GitHub 公共仓库 `AnonymousUser443/BITerStore`，配置 `origin` 并推送完整 `main` 分支历史
 - [x] 完成公开前敏感信息审计，并重制含品牌封面、真机画廊、交互/架构图与快速开始的精美 README
+- [x] 在 README 结尾加入 StudentOP Aiden（前端）与 Smal_Young（后端）头像署名
+- [x] 添加标准 Apache License 2.0，并同步 README 许可徽章与说明
 
 ## 进行中
 

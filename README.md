@@ -9,7 +9,7 @@
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-4F5940?style=flat-square&logo=typescript&logoColor=white" />
     <img alt="Tests" src="https://img.shields.io/badge/tests-5%2F5%20passed-AEB69A?style=flat-square" />
     <img alt="Mobile" src="https://img.shields.io/badge/mobile-360--430px-C8AE72?style=flat-square" />
-    <img alt="License" src="https://img.shields.io/badge/license-not%20specified-D5C7A7?style=flat-square" />
+    <a href="./LICENSE"><img alt="Apache License 2.0" src="https://img.shields.io/badge/license-Apache--2.0-D5C7A7?style=flat-square&logo=apache&logoColor=4F5940" /></a>
   </p>
 
   <p>
@@ -143,6 +143,7 @@ npm run build
 ```text
 BITerStore/
 ├─ Assets/                 # 原始设计参考与 Tobby 素材，不覆盖源文件
+├─ docs/avatars/           # 开发团队头像素材
 ├─ qa-screenshots/         # 360 / 390 / 430px 浏览器验收截图
 ├─ web/
 │  ├─ app/
@@ -151,6 +152,7 @@ BITerStore/
 │  ├─ public/assets/       # WebP 响应式角色与背景资源
 │  ├─ public/sw.js         # 首次资源包缓存
 │  └─ package.json
+├─ LICENSE                 # Apache License 2.0
 ├─ TODO.md                 # 持续开发与验收记录
 └─ README.md
 ```
@@ -159,8 +161,34 @@ BITerStore/
 
 BITerStore 目前是纯前端高保真交互原型，默认用户已经完成北理校园身份认证。项目暂不连接真实后端、支付、短信、地图、内容审核或 AI 服务；所有外部能力都通过可替换的异步接口进行本地模拟。
 
-> [!IMPORTANT]
-> 本仓库目前未附带开源许可证。源码公开可见不代表自动授予复制、修改或商业使用许可。如需合作或复用，请先联系仓库所有者。
+## 📄 开源许可
+
+本项目采用 [Apache License 2.0](./LICENSE) 开源。你可以在遵守许可证条款并保留版权与许可声明的前提下使用、修改和分发本项目。
+
+## 👥 开发团队
+
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/avatars/studentop-aiden.jpg" width="128" alt="StudentOP Aiden" />
+      <br />
+      <strong>StudentOP Aiden</strong>
+      <br />
+      <sub>Frontend Developer · 前端开发</sub>
+      <br />
+      <sub>移动端 UI、交互体验与前端工程</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/avatars/smal-young.jpg" width="128" alt="Smal_Young" />
+      <br />
+      <strong>Smal_Young</strong>
+      <br />
+      <sub>Backend Developer · 后端开发</sub>
+      <br />
+      <sub>杨景博 · 后端仓库筹备中</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
