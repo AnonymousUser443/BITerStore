@@ -20,6 +20,8 @@ npm run lint
 npm run build
 ```
 
+仅所有者可访问的部署版本：[打开 BITerStore](https://biterstore-mobile.studentop.chatgpt.site)。首次访问会通过 ChatGPT 确认所有者身份。
+
 ## 功能范围
 
 - 首次欢迎与 3 步新手指引
