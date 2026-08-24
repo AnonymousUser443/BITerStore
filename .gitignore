@@ -1,0 +1,20 @@
+# CodeWhale 工具目录（不入库）
+.codewhale/
+
+# Windows 系统文件
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# macOS
+.DS_Store
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.suo
+*.user
+
+# 日志与临时文件
+*.log
+*.tmp
