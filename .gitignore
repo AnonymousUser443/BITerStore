@@ -1,6 +1,19 @@
 # CodeWhale 工具目录（不入库）
 .codewhale/
 
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
 # Windows 系统文件
 Thumbs.db
 Desktop.ini
@@ -18,3 +31,4 @@ ehthumbs.db
 # 日志与临时文件
 *.log
 *.tmp
+tmp/
