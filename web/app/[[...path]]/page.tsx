@@ -1,6 +1,6 @@
-import { MobileApp } from '../components/mobile-app';
+import { ClientMobileApp } from '../components/client-mobile-app';
 
 export default async function AppRoute({ params }: { params: Promise<{ path?: string[] }> }) {
   const { path = [] } = await params;
-  return <MobileApp initialPath={`/${path.join('/')}`} />;
+  return <ClientMobileApp initialPath={`/${path.join('/')}`} />;
 }

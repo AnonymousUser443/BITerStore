@@ -478,8 +478,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .welcome-tobby { margin-bottom: -34px; }
   .listing-main { grid-template-columns: 100px 1fr; gap: 9px; }
   .listing-main .book-cover { width: 100px; }
-  .notification-grid { grid-template-columns: 1fr; }
-  .notification-grid > button { min-height: 78px; }
   .ai-card { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
 }
@@ -617,4 +615,162 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 
 @media (min-width: 431px) {
   .route-view { height: calc(100dvh - 24px); }
+}
+
+/* Resource bootstrap, readability and interaction completion */
+.boot-screen { min-height: 100dvh; overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: max(28px, env(safe-area-inset-top)) 26px 28px; background: linear-gradient(155deg, rgba(255,253,248,.96), rgba(240,239,225,.96)), url('/assets/paper-bg.webp') center / cover; }
+.boot-screen > *:not(.paper-texture) { position: relative; z-index: 1; }
+.boot-brand { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.boot-brand > span { color: #8b8b7f; font-size: 11px; letter-spacing: .08em; }
+.boot-visual { width: 292px; height: 318px; display: grid; place-items: center; position: relative; margin: 23px 0 -8px; }
+.boot-visual::before, .boot-visual::after, .boot-visual > i { content: ''; position: absolute; border-radius: 50%; }
+.boot-visual::before { inset: 12px; border: 1px dashed rgba(111,121,86,.34); animation: boot-orbit 11s linear infinite; }
+.boot-visual::after { inset: 43px; background: radial-gradient(circle, rgba(174,182,154,.42), rgba(247,244,234,.08) 68%, transparent 70%); box-shadow: 0 24px 55px rgba(79,89,64,.12); }
+.boot-visual > i { width: 10px; height: 10px; top: 16px; left: 50%; background: var(--gold); box-shadow: 128px 132px 0 var(--aqua), -130px 156px 0 rgba(111,121,86,.6); }
+.boot-visual img { z-index: 2; width: 278px; height: 278px; object-fit: contain; filter: drop-shadow(0 18px 17px rgba(67,70,53,.16)); animation: boot-tobby 2.8s ease-in-out infinite; }
+.boot-copy { width: 100%; text-align: center; }
+.boot-copy p { margin: 0 0 8px; color: var(--gold); font: 700 10px Georgia, serif; letter-spacing: .18em; }
+.boot-copy h1 { margin: 0; color: var(--olive); font: 700 23px/1.48 "Noto Serif SC", "Songti SC", serif; }
+.boot-copy > span { display: block; margin-top: 9px; color: var(--muted); font-size: 12px; }
+.boot-progress { width: 100%; height: 10px; overflow: hidden; margin-top: 25px; border: 1px solid rgba(213,199,167,.8); border-radius: 999px; background: rgba(255,253,248,.72); box-shadow: inset 0 2px 5px rgba(79,89,64,.08); }
+.boot-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--sage), var(--aqua), #e3cf96); transition: width .22s ease; }
+.boot-status { width: 100%; display: flex; justify-content: space-between; margin-top: 8px; color: #74776a; font-size: 11px; }
+.boot-status strong { color: var(--olive); font: 700 12px Georgia, serif; }
+.boot-screen > small { margin-top: auto; color: #939185; font-size: 10px; }
+
+.welcome-tobby { mix-blend-mode: normal; -webkit-mask-image: none; mask-image: none; }
+
+.section-more { min-height: 36px; display: inline-flex; align-items: center; gap: 3px; padding: 0 11px 0 13px; border: 1px solid rgba(111,121,86,.5); border-radius: 999px; background: linear-gradient(145deg, rgba(255,253,248,.95), rgba(235,239,223,.9)); color: var(--olive); box-shadow: 0 5px 13px rgba(79,89,64,.08), inset 0 0 0 2px rgba(255,255,255,.55); font-size: 11px; font-weight: 700; }
+.section-more svg { width: 15px; height: 15px; }
+
+.ranking-card { padding: 14px; }
+.rank-item { width: 100%; min-height: 82px; display: grid; grid-template-columns: 34px 49px minmax(0,1fr) auto 14px; gap: 9px; align-items: center; margin: 0; padding: 8px 8px 8px 5px; border: 1px solid rgba(213,199,167,.58); border-radius: 15px; background: linear-gradient(100deg, rgba(255,253,248,.9), rgba(244,244,233,.82)); text-align: left; box-shadow: 0 5px 12px rgba(75,75,58,.045); }
+.rank-item + .rank-item { margin-top: 8px; }
+.rank-number { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid rgba(200,174,114,.7); border-radius: 50%; background: #fffaf0; color: #aa8843; font: italic 700 13px Georgia, serif; }
+.ranking-card .rank-item .book-cover { width: 49px; height: 64px; padding: 5px; border-radius: 6px 9px 9px 6px; }
+.ranking-card .rank-item .book-cover .cover-leaf { margin: 0 0 3px; font-size: 13px; }
+.ranking-card .rank-item .book-cover strong { display: -webkit-box; overflow: hidden; font-size: 7px; line-height: 1.25; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.rank-copy { min-width: 0; }
+.rank-copy strong, .rank-copy small, .rank-copy em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-copy strong { color: var(--text); font-size: 13px; }
+.rank-copy small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.rank-copy em { margin-top: 5px; color: #7c826e; font-size: 9px; font-style: normal; }
+.rank-price { text-align: right; }
+.rank-price b, .rank-price small { display: block; }
+.rank-price b { color: var(--price); font: 700 15px Georgia, serif; }
+.rank-price small { margin-top: 5px; color: #8b8c80; font-size: 8px; }
+.rank-item > svg { width: 14px; color: #9b9a8e; }
+
+.nav-item.publish { justify-content: center; gap: 1px; padding-top: 3px; }
+.nav-item.publish > span { font-size: 9px; line-height: 1; transform: translateY(-2px); }
+
+.notification-grid > button { padding-right: 24px; }
+.notification-grid > button small { display: block; margin-top: 6px; color: var(--sage); font-size: 9px; font-weight: 700; }
+.notice-chevron { position: absolute; right: 7px; bottom: 8px; width: 14px; color: #97988b; }
+.notification-detail-hero { min-height: 118px; display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 12px; position: relative; overflow: hidden; padding: 17px; border: 1px solid rgba(213,199,167,.68); border-radius: 22px; background: linear-gradient(125deg, rgba(255,253,248,.95), rgba(235,239,222,.9)); box-shadow: var(--shadow); }
+.notification-detail-hero::after { content: '❧'; position: absolute; right: 13px; bottom: 3px; color: rgba(111,121,86,.24); font-size: 30px; transform: rotate(-16deg); }
+.notification-detail-hero .notice-icon { width: 56px; height: 56px; }
+.notification-detail-hero p { margin: 0; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.notification-detail-hero h1 { margin: 3px 0 4px; color: var(--olive); font: 700 21px "Noto Serif SC", serif; }
+.notification-detail-hero div > span { color: var(--muted); font-size: 11px; }
+.notification-detail-hero > b { align-self: start; position: relative; z-index: 1; padding: 5px 8px; border-radius: 999px; background: var(--sage); color: white; font-size: 9px; }
+.notification-feed { display: grid; gap: 9px; margin-top: 14px; }
+.notification-feed > button { width: 100%; min-height: 96px; display: grid; grid-template-columns: 35px 1fr 17px; align-items: center; gap: 10px; padding: 13px; border: 1px solid rgba(213,199,167,.62); border-radius: 17px; background: rgba(255,253,248,.88); text-align: left; box-shadow: 0 6px 15px rgba(73,72,56,.05); }
+.feed-index { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #edf0e3; color: var(--sage); font: 700 11px Georgia, serif; }
+.notification-feed strong { font-size: 13px; }
+.notification-feed p { margin: 5px 0; color: #686b60; font-size: 11px; line-height: 1.6; }
+.notification-feed time { color: #96948a; font-size: 9px; }
+.notification-feed svg { width: 16px; color: #96988b; }
+.notification-safe { display: flex; align-items: center; gap: 6px; margin: 14px 2px; padding: 11px 12px; border-radius: 14px; background: #edf0e3; color: #656c59; font-size: 10px; line-height: 1.5; }
+.notification-safe svg { width: 16px; flex: 0 0 auto; }
+
+/* Keep key reading sizes comfortably above the former 8–9px range. */
+.eyebrow { font-size: 11px; }
+.hero-copy > p:not(.eyebrow) { font-size: 12.5px; }
+.section-title h2 { font-size: 19px; }
+.section-title a, .section-title > span { font-size: 12.5px; }
+.book-cover small { font-size: 8.5px; }
+.book-tile h3 { font-size: 13.5px; }
+.book-tile > p { font-size: 11px; }
+.book-meta span, .results-heading span { font-size: 10px; }
+.nav-item { font-size: 11px; }
+.welcome-copy > span { font-size: 13px; }
+.welcome-copy p { font-size: 14px; }
+.welcome-steps span { font-size: 9.5px; }
+.welcome-actions p { font-size: 11px; }
+.guide-card p { font-size: 13px; }
+.guide-pills span { font-size: 10px; }
+.search-tobby-hint span { font-size: 10.5px; }
+.search-tobby-hint strong { font-size: 11.5px; }
+.quick-filters button { font-size: 11px; }
+.listing-copy > p { font-size: 11px; }
+.listing-price del, .listing-price span, .listing-detail, .seller-line { font-size: 10px; }
+.listing-actions button { font-size: 11px; }
+.status-badge, .status-pill { font-size: 9px; }
+.inline-state p { font-size: 12px; }
+.sheet-title button, .filter-group button { font-size: 11px; }
+.range-label, .filter-group > strong, .switch-row { font-size: 12.5px; }
+.detail-title p, .detail-price del, .description-block p { font-size: 12px; }
+.detail-price span, .detail-facts span, .description-block span, .seller-card p, .safety-note, .detail-cta > button:first-child { font-size: 10.5px; }
+.seller-card span { font-size: 9.5px; }
+.stepper p { font-size: 10px; }
+.add-image span, .ai-card span { font-size: 9.5px; }
+.ai-card button { font-size: 10px; }
+.form-field, .form-field input, .form-field select, .form-field textarea { font-size: 12px; }
+.tag-picker > span, .tag-picker button, .form-error { font-size: 10px; }
+.notification-grid strong { font-size: 14px; }
+.notification-grid p { font-size: 10px; line-height: 1.45; }
+.thread-list h3 { font-size: 14px; }
+.thread-list h3 span, .thread-list time, .thread-list b { font-size: 9px; }
+.thread-list p { font-size: 11px; }
+.tobby-banner span, .chat-user, .chat-safety { font-size: 10.5px; }
+.message-row p { font-size: 12px; }
+.message-row time, .trade-tip { font-size: 9px; }
+.chat-composer input { font-size: 12px; }
+.profile-hero p, .profile-hero span, .profile-copy small, .profile-stats span, .profile-menu small, .profile-reminder p, .profile-reminder button { font-size: 10px; }
+.profile-menu strong { font-size: 12px; }
+.state-grid span { font-size: 12px; }
+.full-state > small { font-size: 9px; }
+
+/* Final readability lift: secondary copy remains compact, but never hairline-small on a phone. */
+.hero-copy > p:not(.eyebrow) { font-size: 13.5px; }
+.book-tile h3 { font-size: 14px; }
+.book-tile > p { font-size: 12px; }
+.book-meta span, .results-heading span { font-size: 11px; }
+.nav-item { font-size: 12px; }
+.ranking-card .rank-item { min-height: 86px; }
+.rank-copy strong { font-size: 14px; }
+.rank-copy small { font-size: 11px; }
+.rank-copy em { font-size: 10px; }
+.rank-price small { font-size: 9px; }
+.notification-grid strong { font-size: 15px; }
+.notification-grid p { font-size: 11px; }
+.notification-grid > button small { font-size: 10px; }
+.thread-list p { font-size: 12px; }
+.thread-list h3 span, .thread-list time, .thread-list b { font-size: 10px; }
+.notification-detail-hero div > span { font-size: 12px; }
+.notification-feed strong { font-size: 14px; }
+.notification-feed p { font-size: 12px; }
+.notification-feed time { font-size: 10px; }
+.notification-safe { font-size: 11px; }
+.form-field, .form-field input, .form-field select, .form-field textarea { font-size: 13px; }
+.profile-hero p, .profile-hero span, .profile-copy small, .profile-stats span, .profile-menu small, .profile-reminder p, .profile-reminder button { font-size: 11px; }
+.profile-menu strong { font-size: 13px; }
+
+@keyframes boot-orbit { to { transform: rotate(360deg); } }
+@keyframes boot-tobby { 0%, 100% { transform: translateY(3px); } 50% { transform: translateY(-5px); } }
+
+@media (max-width: 370px) {
+  .boot-screen { padding-left: 20px; padding-right: 20px; }
+  .boot-visual { width: 270px; height: 285px; margin-top: 16px; }
+  .boot-visual img { width: 250px; height: 250px; }
+  .boot-copy h1 { font-size: 21px; }
+  .ranking-card .rank-item { grid-template-columns: 31px 44px minmax(0,1fr) auto 12px; gap: 7px; }
+  .ranking-card .rank-item .book-cover { width: 44px; height: 60px; }
+  .rank-price small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-visual::before, .boot-visual img { animation: none; }
+  .boot-progress i { transition: none; }
 }

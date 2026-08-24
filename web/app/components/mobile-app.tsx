@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CURRENT_USER_ID, notifications, seedBooks } from '../lib/demo-data';
 import { compressImage, getImages, saveImages } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser } from '../lib/repository';
-import type { Book, BookFilters, ChatThread, Condition, ListingStatus, PublishDraft, User } from '../lib/types';
+import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
   { label: '首页', href: '/home', icon: Home },
@@ -28,6 +28,66 @@ const categories = ['全部', '教材教辅', '专业课', '考研考公', '文�
 const campuses = ['全部', '中关村', '良乡', '西山', '珠海'] as const;
 const conditions = ['全部', '全新', '九成新', '八成新', '七成新及以下'] as const;
 
+const UI_ASSET_BUNDLE_VERSION = '2026.08.24.11';
+const UI_ASSET_BUNDLE_KEY = 'biterstore.ui-assets.bundle';
+const UI_ASSETS = [
+  '/assets/paper-bg.webp',
+  '/assets/avatar-jian.webp', '/assets/avatar-lin.webp', '/assets/avatar-zhou.webp',
+  '/assets/tobby-cheer.webp', '/assets/tobby-guide-publish.webp', '/assets/tobby-guide-search.webp',
+  '/assets/tobby-guide-trade.webp', '/assets/tobby-heart.webp', '/assets/tobby-hello.webp',
+  '/assets/tobby-maintenance.webp', '/assets/tobby-master-transparent.webp', '/assets/tobby-news.webp',
+  '/assets/tobby-question.webp', '/assets/tobby-sad.webp', '/assets/tobby-search.webp',
+  '/assets/tobby-unavailable.webp',
+] as const;
+
+const notificationDetails: Record<Notification['type'], Array<{ source: string; text: string; time: string; route: string }>> = {
+  like: [
+    { source: '林小暖', text: '赞了你发布的《高等数学（第七版）上册》', time: '10:18', route: '/books/math-7' },
+    { source: '简一一', text: '赞了你的校园书单「期末复习好书」', time: '昨天 18:42', route: '/favorites' },
+    { source: 'Oliver_周', text: '赞了你分享的旧书循环动态', time: '周五 20:06', route: '/profile' },
+  ],
+  comment: [
+    { source: 'Oliver_周', text: '评论：书的笔记多吗？方便拍一下目录页吗？', time: '10:05', route: '/books/data-c' },
+    { source: '林小暖', text: '评论：这本高数正好是我需要的版本～', time: '昨天 21:30', route: '/books/math-7' },
+    { source: 'Leo 学长', text: '评论：中关村校区也可以约时间自取。', time: '昨天 16:12', route: '/messages/thread-leo' },
+    { source: '简一一', text: '评论：谢谢你的书单推荐！', time: '周四 19:45', route: '/messages/thread-jian' },
+    { source: 'Tobby', text: '你的发布收到了新的留言，记得及时回复。', time: '周三 12:08', route: '/messages' },
+  ],
+  system: [
+    { source: '校园交易安全提醒', text: '请尽量选择校内公共区域当面交易，确认书况后再付款。', time: '今天 09:00', route: '/states' },
+    { source: 'BITerStore 试运行公告', text: '演示数据与状态体验入口已经更新完成。', time: '昨天 12:00', route: '/profile' },
+  ],
+  follow: [
+    { source: '简一一', text: '关注了你，之后发布的新书会更容易被她发现。', time: '昨天 15:26', route: '/messages/thread-jian' },
+  ],
+};
+
+async function warmUiAssetBundle(onProgress: (value: number) => void) {
+  const workerReady = 'serviceWorker' in navigator
+    ? navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(() => navigator.serviceWorker.ready).catch(() => undefined)
+    : Promise.resolve(undefined);
+  let completed = 0;
+  await Promise.all(UI_ASSETS.map((src) => new Promise<void>((resolve) => {
+    const asset = new window.Image();
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      completed += 1;
+      onProgress(Math.round((completed / UI_ASSETS.length) * 100));
+      resolve();
+    };
+    const timeout = window.setTimeout(done, 12000);
+    asset.onload = () => { void asset.decode().catch(() => undefined).finally(done); };
+    asset.onerror = done;
+    asset.src = src;
+    if (asset.complete && asset.naturalWidth > 0) done();
+  })));
+  await Promise.race([workerReady, new Promise((resolve) => window.setTimeout(resolve, 3000))]);
+  return true;
+}
+
 const emptyDraft: PublishDraft = {
   title: '', author: '', isbn: '', category: '教材教辅', course: '', price: '', originalPrice: '',
   condition: '九成新', campus: '良乡', description: '', tags: [],
@@ -38,6 +98,10 @@ function statusLabel(status: ListingStatus) { return { available: '可交易', s
 
 function Brand() {
   return <span className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>BITerStore</span></span>;
+}
+
+function BootScreen({ progress }: { progress: number }) {
+  return <section className="phone-shell boot-screen" aria-live="polite"><div className="paper-texture" aria-hidden="true" /><div className="boot-brand"><Brand /><span>移动校园书站</span></div><div className="boot-visual"><i aria-hidden="true" /><Image src="/assets/tobby-cheer.webp" alt="Tobby 正在准备 BITerStore" width={760} height={760} priority /></div><div className="boot-copy"><p>APP RESOURCE PACK</p><h1>托比正在从服务器<br />下载 App 资源包……</h1><span>第一次见面会稍久一点，之后打开就会快很多。</span></div><div className="boot-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${Math.max(5, progress)}%` }} /></div><div className="boot-status"><span>正在初始化界面与角色素材</span><strong>{progress}%</strong></div><small>请稍候，书页马上就准备好啦 ❧</small></section>;
 }
 
 function Avatar({ user, size = 42 }: { user: User; size?: number }) {
@@ -135,7 +199,7 @@ function WelcomePage({ navigate }: { navigate: (to: string) => void }) {
       <div className="welcome-decoration" aria-hidden="true" />
       <header className="welcome-brand"><Brand /><span className="leaf-seal"><Leaf /></span></header>
       <div className="welcome-copy"><span>你好呀，我是托比 <Leaf size={14} /></span><h1>欢迎来到你的<br /><em>校园二手书小站</em></h1><p>搜索闲置教材、发布旧书、站内联系，<br />在校内安心完成交易。</p></div>
-      <Image className="welcome-tobby" src="/assets/tobby-master.webp" alt="Tobby 欢迎你来到 BITerStore" width={760} height={760} priority />
+      <Image className="welcome-tobby" src="/assets/tobby-master-transparent.webp" alt="Tobby 欢迎你来到 BITerStore" width={760} height={760} priority />
       <div className="welcome-steps">
         {[['01', Search, '找书', '搜索教材与参考书'], ['02', MessageCircle, '联系', '站内沟通更方便'], ['03', PackageCheck, '交易', '线下见面更安心']].map(([n, Icon, title, text]) => {
           const StepIcon = Icon as typeof Search;
@@ -180,8 +244,8 @@ function HomePage({ navigate }: { navigate: (to: string) => void }) {
       <button className="search-box" onClick={() => navigate('/category')}><Search size={21} /><span>搜索书名、作者或 ISBN</span><SlidersHorizontal size={18} /></button>
       <nav className="category-chips">{categories.map((category, index) => <button className={index === 0 ? 'chip active' : 'chip'} onClick={() => navigate(`/category?category=${encodeURIComponent(category)}`)} key={category}>{category}</button>)}</nav>
       <section className="hero-card"><div className="hero-copy"><p className="eyebrow">书页轻翻 · 好物续航</p><h1>以书会友<br />共享知识之美</h1><p>让每一本闲置书，遇见下一位需要它的人。</p><button className="hero-button" onClick={() => navigate('/category')}>探索好书 <span>→</span></button></div><Image className="hero-tobby" src="/assets/tobby-hello.webp" alt="Tobby 抱着书向你打招呼" width={760} height={760} priority /></section>
-      <section className="section-block"><div className="section-title"><h2>精选推荐</h2><button onClick={() => navigate('/category')}>查看全部 ›</button></div><div className="book-row">{seedBooks.slice(0, 5).map((book) => <BookTile book={book} navigate={navigate} key={book.id} />)}</div></section>
-      <section className="ranking-card"><div className="section-title"><h2>校园热榜</h2><span>本周流动好书</span></div>{seedBooks.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><span><strong>{book.title}</strong><small>{book.author} · {book.campus}校区</small></span><b>¥{book.price}</b></button>)}</section>
+      <section className="section-block"><div className="section-title"><h2>精选推荐</h2><button className="section-more" onClick={() => navigate('/category')}>查看全部 <ChevronRight /></button></div><div className="book-row">{seedBooks.slice(0, 5).map((book) => <BookTile book={book} navigate={navigate} key={book.id} />)}</div></section>
+      <section className="ranking-card"><div className="section-title"><h2>校园热榜</h2><span>本周流动好书</span></div>{seedBooks.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><BookCover book={book} compact /><span className="rank-copy"><strong>{book.title}</strong><small>{book.author}</small><em>{book.campus}校区 · {book.condition}</em></span><span className="rank-price"><b>¥{book.price}</b><small>查看详情</small></span><ChevronRight /></button>)}</section>
     </AppShell>
   );
 }
@@ -248,7 +312,14 @@ function FormField({ label, children, required, error }: { label: string; childr
 
 function MessagesPage({ navigate }: { navigate: (to: string) => void }) {
   const [threads, setThreads] = useState<ChatThread[]>([]); useEffect(() => { demoRepository.listThreads().then(setThreads); }, []);
-  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{notifications.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p></div>{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />全部已读</span></div><div className="thread-list">{threads.map((thread) => { const user = getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3>{user.name}<span>{user.campus}校区</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div><div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
+  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{notifications.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />全部已读</span></div><div className="thread-list">{threads.map((thread) => { const user = getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3>{user.name}<span>{user.campus}校区</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div><div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
+}
+
+function NotificationDetailPage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
+  const notificationType = (['like', 'comment', 'system', 'follow'].includes(type) ? type : 'system') as Notification['type'];
+  const summary = notifications.find((item) => item.type === notificationType) ?? notifications[2];
+  const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[notificationType];
+  return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{summary.unread} 条未读</b></section><div className="notification-feed">{notificationDetails[notificationType].map((item, index) => <button onClick={() => navigate(item.route)} key={`${item.source}-${item.time}`}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.source}</strong><p>{item.text}</p><time>{item.time}</time></div><ChevronRight /></button>)}</div><div className="notification-safe"><ShieldCheck />通知内容为本地演示数据，不会向校外账号发送。</div></AppShell>;
 }
 
 function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: (to: string) => void; notify: (text: string) => void }) {
@@ -311,11 +382,29 @@ function StatePage({ type, navigate }: { type: string; navigate: (to: string) =>
 }
 
 export function MobileApp({ initialPath }: { initialPath: string }) {
-  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState('');
+  const hasCurrentAssetBundle = () => window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
+  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle);
   const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
   useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => {
+    let active = true;
+    const cached = window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
+    if (cached) {
+      void warmUiAssetBundle(() => undefined);
+      return () => { active = false; };
+    }
+    const started = Date.now();
+    warmUiAssetBundle((value) => { if (active) setAssetProgress(value); }).then(async (complete) => {
+      if (complete) window.localStorage.setItem(UI_ASSET_BUNDLE_KEY, UI_ASSET_BUNDLE_VERSION);
+      const remaining = Math.max(0, 900 - (Date.now() - started));
+      if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+      if (active) { setAssetProgress(100); setAssetsReady(true); }
+    });
+    return () => { active = false; };
+  }, []);
   const notify = useCallback((text: string) => setToast(text), []);
+  if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
   const effectivePath = path === '/' && demoRepository.isOnboardingComplete() ? '/home' : path;
   let page: React.ReactNode;
   if (effectivePath === '/') page = <WelcomePage navigate={navigate} />;
@@ -325,6 +414,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath.startsWith('/books/')) page = <BookDetailPage id={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
   else if (effectivePath === '/publish') page = <PublishPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/messages') page = <MessagesPage navigate={navigate} />;
+  else if (effectivePath.startsWith('/messages/notifications/')) page = <NotificationDetailPage type={effectivePath.split('/')[3]} navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
   else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
