@@ -48,6 +48,7 @@
 - [x] 第三轮 ESLint、5 项单元测试和生产构建全部通过
 - [x] 提交第三轮 UI/资源缓存里程碑（`f2ed302`）并推送 Sites 源分支
 - [x] 保存 Sites 版本 3，部署同一提交构建归档并复核仅所有者访问策略
+- [x] 创建 GitHub 私有仓库 `AnonymousUser443/BITerStore`，配置 `origin` 并推送完整 `main` 分支历史
 
 ## 进行中
 
