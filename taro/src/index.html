@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width,initial-scale=1,user-scalable=no" name="viewport">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no,address=no">
+  <meta name="apple-mobile-web-app-status-bar-style" content="white">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" >
+  <title>BITerStore · 让每一本书继续被需要</title>
+  <script>
+    (function () {
+      var path = location.pathname;
+      var match = path.match(/^\/books\/([^/]+)$/);
+      if (match) history.replaceState({}, '', '/books?id=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
+      match = path.match(/^\/messages\/([^/]+)$/);
+      if (match) history.replaceState({}, '', '/chat?id=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
+      match = path.match(/^\/states\/([^/]+)$/);
+      if (match) history.replaceState({}, '', '/states?type=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
+    }());
+  </script>
+  <script><%= htmlWebpackPlugin.options.script %></script>
+</head>
+<body>
+  <div id="app"></div>
+</body>
+</html>

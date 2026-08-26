@@ -1,6 +1,6 @@
 # BITerStore 开发进度
 
-最后更新：2026-08-25
+最后更新：2026-08-26
 
 ## 已完成
 
@@ -54,11 +54,31 @@
 - [x] 添加标准 Apache License 2.0，并同步 README 许可徽章与说明
 - [x] 调研 BIT101 前端、Go 后端、BIT-Login 及公开 API 的校园认证实现与许可证边界
 - [x] 完成小程序/H5 技术选型、后端架构、认证、治理及 8 周里程碑整体计划（`docs/整体实施计划.md`）
-- [x] 完成 Taro 迁移技术验证；经视觉回归后决定停止该路线并删除实验代码，原 `web/` H5 作为唯一客户端
+- [x] 完成早期 Taro 迁移成本验证；该次“停止迁移”结论已被 2026-08-26 的正式双端迁移决策覆盖
+- [x] 创建 `refactor/taro-migration` 并保留 `h5-prototype-v0.1` Golden Reference
+- [x] 建立 Taro 4.2.1 + React 18.3.1 + TypeScript 5.4.5 + Webpack 5 双端工程
+- [x] 建立 Listing 领域模型、DemoRepository 与 Storage/Media/Navigation/Share/Feedback/Cache 适配器
+- [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
+- [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
 
 ## 进行中
 
-- 无
+### Taro 双端迁移 Phase 0–8
+
+- [ ] Phase 0：开启微信开发者工具服务端口，完成原生 `miniapp/` CLI/9420/automator Spike
+- [x] Phase 1：Taro 骨架、双端构建、公共 touristappid 配置和版本锁定
+- [x] Phase 2：Listing Domain、Repository、平台适配器和独立存储命名空间
+- [x] Phase 3：首页、搜索、详情、发布、消息与个人中心核心流程
+- [x] Phase 4：状态页、旧 H5 路由转写和手机/平板/桌面响应式样式
+- [x] Phase 5：doctor、open、connect/launch E2E 和 qa 命令
+- [ ] Phase 6：在微信开发者工具运行核心 E2E，检查 route、结构、异常和截图
+- [ ] Phase 7：已完成 360/390/430/820/1280 精确视口 H5 视觉回归；待至少一台微信真机冒烟
+- [ ] Phase 8：用户确认后创建 owner-only Taro H5 私有预览；不替换正式 H5
+
+### 已知依赖风险
+
+- [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
+- [ ] H5 生产入口约 356 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
 
 ## 待完成
 
@@ -68,7 +88,7 @@
 - [ ] 确认微信小程序主体、服务类目、备案 HTTPS 域名和隐私指引要求
 - [ ] 使用现有原型访谈/测试 10–20 名学生，验证找书、发布、联系和安全需求
 - [ ] 冻结 MVP 范围、数据字典、商品状态机、验收指标与团队负责人
-- [x] 完成 Taro React 迁移成本验证，结论为当前阶段继续使用原 H5
+- [x] 完成 Taro React 迁移成本验证并正式重启双端迁移；旧 H5 保留为 Golden Reference
 - [ ] 部署加固后的 BIT-Login 专用实例，只开放认证路由并收紧 CORS、网关与限流
 - [ ] 完成一次不写业务数据库的 challenge → registration JWT → BITerStore 后端验签技术验证
 - [ ] 完成原 H5 在 360–430px 真机上的视觉、分享、图片选择和返回栈验收
@@ -84,6 +104,6 @@
 
 - 参考图只能作为视觉标杆，不可整页贴图实现 UI。
 - 现阶段只实现纯前端移动原型，不接真实后端、认证、支付或 AI。
-- 底栏固定为：首页 / 分类 / 发布 / 消息 / 我的。
+- 底栏固定为：首页 / 搜索 / 发布 / 消息 / 我的。
 - 校区固定为：中关村 / 良乡 / 西山 / 珠海。
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
