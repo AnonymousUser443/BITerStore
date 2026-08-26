@@ -1,0 +1,38 @@
+export default defineAppConfig({
+  pages: [
+    'pages/welcome/index',
+    'pages/onboarding/index',
+    'pages/home/index',
+    'pages/search/index',
+    'pages/book-detail/index',
+    'pages/publish/index',
+    'pages/messages/index',
+    'pages/notification-detail/index',
+    'pages/chat/index',
+    'pages/profile/index',
+    'pages/favorites/index',
+    'pages/my-listings/index',
+    'pages/states/index',
+    'pages/not-found/index',
+  ],
+  window: {
+    navigationStyle: 'custom',
+    backgroundColor: '#F7F4EA',
+    backgroundTextStyle: 'dark',
+  },
+  tabBar: {
+    custom: true,
+    color: '#77766E',
+    selectedColor: '#4F5940',
+    backgroundColor: '#FFFDF8',
+    borderStyle: 'white',
+    list: [
+      { pagePath: 'pages/home/index', text: '首页' },
+      { pagePath: 'pages/search/index', text: '搜索' },
+      { pagePath: 'pages/publish/index', text: '发布' },
+      { pagePath: 'pages/messages/index', text: '消息' },
+      { pagePath: 'pages/profile/index', text: '我的' },
+    ],
+  },
+  lazyCodeLoading: 'requiredComponents',
+})
