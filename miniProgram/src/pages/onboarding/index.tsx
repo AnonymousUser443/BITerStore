@@ -1,12 +1,22 @@
 import { useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
-import { AppShell, Tobby } from '@/components/ui'
+import { AppShell, Brand, Tobby } from '@/components/ui'
+import { Glyph } from '@/components/Glyph'
 import { demoRepository } from '@/domain/repository'
 import { navigationAdapter } from '@/platform'
 
 const steps = [
-  { mood: 'guide-search' as const, title: '找到正好需要的书', text: '按课程、校区、成色与价格组合筛选。' },
-  { mood: 'guide-publish' as const, title: 'Tobby 帮你快速发布', text: '添加图片和基本信息，一键补全文案。' },
-  { mood: 'guide-trade' as const, title: '校内沟通更安心', text: '站内联系，在公共区域当面验书。' }
+  { mood: 'guide-search' as const, title: '快速找到一本书', text: '使用搜索栏与分类入口，按课程、ISBN 或书名找到需要的教材。', targets: ['搜索栏', '分类筛选', '推荐书籍'] },
+  { mood: 'question' as const, title: '看懂商品与状态', text: '价格、成色、校区和卖家信息一目了然，已售商品会清晰标注。', targets: ['商品信息', '收藏与联系', '交易状态'] },
+  { mood: 'guide-trade' as const, title: '发布并完成交易', text: '从底栏一键发布，站内联系同学，再约在校内安心见面。', targets: ['发布入口', '消息中心', '个人中心'] }
 ]
-export default function OnboardingPage() { const [index, setIndex] = useState(0); const step = steps[index]; const next = async () => { if (index < steps.length - 1) setIndex(index + 1); else { await demoRepository.completeOnboarding(); await navigationAdapter.switchTab('/pages/home/index') } }; return <AppShell title='新手引导' back><View className='paper-card profile-hero'><Tobby mood={step.mood} /><Text className='section-title'>{step.title}</Text><Text className='muted'>{step.text}</Text><View className='chip-row'>{steps.map((_, i) => <Text key={i} className={`chip ${i === index ? 'active' : ''}`}>{i + 1}</Text>)}</View><Button id='e2e-onboarding-next' className='primary-button' onClick={next}>{index === 2 ? '进入首页' : '下一步'}</Button></View></AppShell> }
+export default function OnboardingPage() {
+  const [index, setIndex] = useState(0)
+  const step = steps[index]
+  const complete = async () => { await demoRepository.completeOnboarding(); await navigationAdapter.switchTab('/pages/home/index') }
+  const next = async () => { if (index < steps.length - 1) setIndex(index + 1); else await complete() }
+  return <AppShell className='onboarding-page' noNav>
+    <View className='onboarding-preview'><Brand /><View className='fake-search' /><View className='fake-hero' /><View className='fake-cards'><Text /><Text /><Text /></View><View className='fake-nav' /></View><View className='onboarding-scrim' />
+    <View className='onboarding-panel'><View className='onboarding-heading'><Text>新手指引 {index + 1}/3</Text><Button onClick={complete}>跳过</Button></View><Tobby mood={step.mood} /><View className='guide-card'><Text>STEP 0{index + 1}</Text><Text>{step.title}</Text><Text>{step.text}</Text><View className='guide-pills'>{step.targets.map((target) => <Text key={target}><Glyph name='check' />{target}</Text>)}</View></View><View className='step-dots'>{steps.map((_, dot) => <Text className={dot === index ? 'active' : ''} key={dot} />)}</View><View className='guide-actions'>{index > 0 && <Button className='secondary-button' onClick={() => setIndex(index - 1)}>上一步</Button>}<Button id='e2e-onboarding-next' className='primary-button' onClick={next}>{index === 2 ? '开始使用' : '下一步'}</Button></View></View>
+  </AppShell>
+}

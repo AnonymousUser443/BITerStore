@@ -1,20 +1,56 @@
 import { PropsWithChildren, ReactNode } from 'react'
 import { Button, Image, Input, Text, View } from '@tarojs/components'
+import { getUser } from '@/domain/repository'
 import { navigationAdapter } from '@/platform'
 import type { Listing, ListingStatus } from '@/domain/types'
 import { Glyph, type GlyphName } from './Glyph'
 
-export function BrandHeader({ title = 'BITerStore', back = false, action }: { title?: string; back?: boolean; action?: ReactNode }) { return <View className='brand-header'>{back ? <Button className='icon-button' onClick={() => navigationAdapter.back()}>‹</Button> : <View className='brand-mark'>B</View>}<View className='brand-title'><Text>{title}</Text><Text className='brand-subtitle'>书页轻翻 · 好物续航</Text></View><View className='header-action'>{action}</View></View> }
-const h5Tabs: ReadonlyArray<readonly [string, string, GlyphName]> = [['home', '首页', 'home'], ['search', '搜索', 'search'], ['publish', '发布', 'publish'], ['messages', '消息', 'message'], ['profile', '我的', 'user']]
-function H5Navigation() {
-  if (process.env.TARO_ENV !== 'h5') return null
-  return <View className='h5-navigation'>{h5Tabs.map(([route, label, glyph]) => <Button key={route} id={`e2e-nav-${route}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><Glyph name={glyph} className='nav-dot' /><Text>{label}</Text></Button>)}</View>
+export function Brand() {
+  return <View className='brand'><View className='brand-mark'><View /><View /></View><Text>BITerStore</Text></View>
 }
-export function AppShell({ children, title, back, className = '' }: PropsWithChildren<{ title?: string; back?: boolean; className?: string }>) { return <View className={`app-shell ${className}`}><BrandHeader title={title} back={back} /><View className='page-scroll'>{children}</View><H5Navigation /></View> }
-export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable'
-export function Tobby({ mood = 'hello', caption }: { mood?: TobbyMood; caption?: string }) { return <View className='tobby'><Image mode='aspectFit' src={`/assets/tobby-${mood}.webp`} />{caption && <Text>{caption}</Text>}</View> }
-export function StatusTag({ status }: { status: ListingStatus }) { const labels: Record<ListingStatus, string> = { available: '可交易', sold: '已售出', offline: '已下架', draft: '草稿' }; return <Text className={`status-tag ${status}`}>{labels[status]}</Text> }
-export function ListingCard({ listing, onTap }: { listing: Listing; onTap?: () => void }) { return <Button id={`e2e-listing-${listing.id}`} className='listing-card' onClick={onTap}><View className={`book-cover ${listing.tone}`}><Text>{listing.title.slice(0, 8)}</Text></View><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><StatusTag status={listing.status} /></View><Text className='listing-meta'>{listing.author} · {listing.condition}</Text><Text className='listing-meta'>{listing.campus}校区 · {listing.course}</Text><View className='price-row'><Text className='price'>¥{listing.price}</Text><Text className='original'>¥{listing.originalPrice}</Text></View></View></Button> }
+
+export function BrandHeader({ title, back = false, action }: { title?: string; back?: boolean; action?: ReactNode }) {
+  return <View className={`brand-header ${title ? 'page-header' : ''}`}>
+    {back ? <Button className='round-button' onClick={() => navigationAdapter.back()}><Glyph name='back' /></Button> : <Button className='brand-button' onClick={() => navigationAdapter.switchTab('/pages/home/index')}><Brand /></Button>}
+    {title && <Text className='page-title'>{title}</Text>}
+    <View className='header-actions'>{action || <><Button className='header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Image className='header-avatar' src='/assets/avatar-zhou.webp' mode='aspectFill' />}</>}</View>
+  </View>
+}
+
+const h5Tabs: ReadonlyArray<readonly [string, string, GlyphName]> = [['home', '首页', 'home'], ['search', '分类', 'search'], ['publish', '发布', 'publish'], ['messages', '消息', 'message'], ['profile', '我的', 'user']]
+function H5Navigation({ active }: { active?: string }) {
+  if (process.env.TARO_ENV !== 'h5') return null
+  return <View className='h5-navigation'>{h5Tabs.map(([route, label, glyph]) => <Button key={route} id={`e2e-nav-${route}`} className={`${active === route ? 'active' : ''} ${route === 'publish' ? 'publish' : ''}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><Glyph name={glyph} /><Text>{label}</Text></Button>)}</View>
+}
+
+export function AppShell({ children, title, back, active, className = '', noNav = false }: PropsWithChildren<{ title?: string; back?: boolean; active?: string; className?: string; noNav?: boolean }>) {
+  return <View className={`app-shell ${className}`}><View className='paper-texture' /><BrandHeader title={title} back={back} /><View className={`page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <H5Navigation active={active} />}</View>
+}
+
+export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'
+export function Tobby({ mood = 'hello', caption, className = '' }: { mood?: TobbyMood; caption?: string; className?: string }) { return <View className={`tobby ${className}`}><Image mode='aspectFit' src={`/assets/tobby-${mood}.webp`} />{caption && <Text>{caption}</Text>}</View> }
+export function StatusTag({ status }: { status: ListingStatus }) { const labels: Record<ListingStatus, string> = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿' }; return <Text className={`status-tag ${status}`}>{labels[status]}</Text> }
+
+export function BookCover({ listing, compact = false }: { listing: Listing; compact?: boolean }) {
+  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''}`}><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</View>
+}
+
+export function BookTile({ listing, onTap }: { listing: Listing; onTap?: () => void }) {
+  return <Button className='book-tile' onClick={onTap}><BookCover listing={listing} /><Text className='tile-title'>{listing.title}</Text><Text className='tile-author'>{listing.author}</Text><View className='book-meta'><Text>¥{listing.price.toFixed(2)}</Text><Text>{listing.campus}</Text></View></Button>
+}
+
+export function ListingCard({ listing, onTap }: { listing: Listing; onTap?: () => void }) {
+  const seller = getUser(listing.sellerId)
+  return <View className={`listing-card ${listing.status !== 'available' ? 'unavailable-card' : ''}`}>
+    <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Text className='more-glyph'>•••</Text></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text>¥{listing.price.toFixed(2)}</Text><Text>¥{listing.originalPrice.toFixed(2)}</Text><Text>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></Button>
+    <View className='listing-actions'><Button><Glyph name='heart' />收藏</Button><Button><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={onTap}>详情 <Glyph name='chevron' /></Button></View><StatusTag status={listing.status} />
+  </View>
+}
+
+export function RankItem({ listing, index, onTap }: { listing: Listing; index: number; onTap?: () => void }) {
+  return <Button className='rank-item' onClick={onTap}><Text className='rank-number'>0{index + 1}</Text><BookCover listing={listing} compact /><View className='rank-copy'><Text>{listing.title}</Text><Text>{listing.author}</Text><Text>{listing.campus}校区 · {listing.condition}</Text></View><View className='rank-price'><Text>¥{listing.price}</Text><Text>查看详情</Text></View><Glyph name='chevron' /></Button>
+}
+
 export function FormField({ label, value, placeholder, onInput, type = 'text', id }: { label: string; value: string; placeholder?: string; onInput: (value: string) => void; type?: 'text' | 'number'; id?: string }) { return <View className='form-field'><Text>{label}</Text><Input id={id} type={type} value={value} placeholder={placeholder} onInput={(event) => onInput(event.detail.value)} /></View> }
 export function Toast({ children }: PropsWithChildren) { return <View className='inline-toast'>{children}</View> }
 export function Modal({ open, title, children, onClose }: PropsWithChildren<{ open: boolean; title: string; onClose: () => void }>) { if (!open) return null; return <View className='modal-mask' onClick={onClose}><View className='modal-card' onClick={(event) => event.stopPropagation()}><Text className='section-title'>{title}</Text>{children}<Button id='e2e-modal-close' onClick={onClose}>知道了</Button></View></View> }

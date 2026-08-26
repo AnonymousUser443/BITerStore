@@ -12,6 +12,10 @@
   <script>
     (function () {
       var path = location.pathname;
+      if (path === '/' || path === '/pages/welcome/index') {
+        history.replaceState({}, '', '/welcome' + location.search + location.hash);
+        path = '/welcome';
+      }
       var match = path.match(/^\/books\/([^/]+)$/);
       if (match) history.replaceState({}, '', '/books?id=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
       match = path.match(/^\/messages\/([^/]+)$/);

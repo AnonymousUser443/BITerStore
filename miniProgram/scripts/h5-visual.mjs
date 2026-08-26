@@ -8,9 +8,13 @@ const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Ap
 const artifactDir = path.join(root, 'qa-artifacts', 'h5-actual')
 const profileDir = path.join(root, 'qa-artifacts', 'chrome-cdp-profile')
 const targets = [
+  ['welcome-390', 390, 900, '/'],
+  ['onboarding-390', 390, 900, '/onboarding'],
   ['home-360', 360, 900, '/home'],
   ['search-390', 390, 900, '/search'],
   ['publish-430', 430, 900, '/publish'],
+  ['messages-390', 390, 900, '/messages'],
+  ['detail-390', 390, 900, '/books/math-7'],
   ['home-820', 820, 1000, '/home'],
   ['profile-1280', 1280, 900, '/profile']
 ]
@@ -25,7 +29,7 @@ async function waitForEndpoint(url) {
 }
 
 class CdpClient {
-  constructor(url) {
+  constructor(url, onEvent = () => undefined) {
     this.nextId = 1
     this.pending = new Map()
     this.events = new Map()
@@ -39,6 +43,7 @@ class CdpClient {
         this.pending.delete(message.id)
         return message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result)
       }
+      onEvent(message)
       const listeners = this.events.get(message.method) || []
       this.events.delete(message.method)
       listeners.forEach((resolve) => resolve(message.params))
@@ -57,22 +62,36 @@ await fs.mkdir(artifactDir, { recursive: true })
 await fs.mkdir(profileDir, { recursive: true })
 const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--disable-gpu', '--hide-scrollbars', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
+const diagnostics = []
+const pages = []
 try {
   await waitForEndpoint('http://127.0.0.1:9333/json/version')
   const tabResponse = await fetch(`http://127.0.0.1:9333/json/new?${encodeURIComponent(`${preview}/`)}`, { method: 'PUT' })
   const tab = await tabResponse.json()
-  client = new CdpClient(tab.webSocketDebuggerUrl)
+  client = new CdpClient(tab.webSocketDebuggerUrl, (message) => {
+    if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.text || 'Runtime exception' })
+    if (message.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(message.params.type)) diagnostics.push({ type: message.params.type, text: message.params.args?.map((arg) => arg.value || arg.description).join(' ') })
+  })
   await client.send('Page.enable')
+  await client.send('Runtime.enable')
   for (const [name, width, height, route] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
     await client.send('Page.navigate', { url: `${preview}${route}` })
     await loaded
     await delay(750)
+    if (name === 'welcome-390') {
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-modal-close')?.click()` })
+      await delay(250)
+    }
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.app-shell'); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null })
+    if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
   }
-  console.log(JSON.stringify({ ok: true, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`) }))
+  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`), pages, diagnostics }))
+  if (diagnostics.length) process.exitCode = 1
 } finally {
   client?.close()
   browser.kill()

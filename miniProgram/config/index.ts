@@ -19,7 +19,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
       router: {
         mode: 'browser',
         customRoutes: {
-          '/pages/welcome/index': '/', '/pages/onboarding/index': '/onboarding',
+          '/pages/welcome/index': '/welcome', '/pages/onboarding/index': '/onboarding',
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
           '/pages/messages/index': '/messages', '/pages/chat/index': '/chat',
