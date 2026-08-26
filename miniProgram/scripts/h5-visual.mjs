@@ -5,7 +5,7 @@ import { root } from './weapp-env.mjs'
 
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
 const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-const artifactDir = path.join(root, 'qa-artifacts', 'h5-actual')
+const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
 const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
 const targets = [
   ['welcome-390', 390, 900, '/'],
@@ -87,11 +87,13 @@ try {
     await client.send('Page.navigate', { url: `${preview}${route}` })
     await loaded
     await delay(750)
+    await client.send('Runtime.evaluate', { expression: `window.scrollTo(0, 0); document.querySelectorAll('.taro_router, .taro_page, .content-scroll').forEach((element) => { element.scrollTop = 0 })` })
+    await delay(100)
     if (name === 'welcome-390') {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-modal-close')?.click()` })
       await delay(250)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const metrics = Object.fromEntries(['.page-title','.primary-button','.welcome-title','.profile-badges'].map(selector => { const element = document.querySelector(selector); if (!element) return [selector, null]; const box = element.getBoundingClientRect(); return [selector, { width: Math.round(box.width), height: Math.round(box.height), fontSize: getComputedStyle(element).fontSize }]; })); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const selectors = ['.page-title','.primary-button','.welcome-title','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), fontSize: style.fontSize, lineHeight: style.lineHeight, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
     pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics })
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })

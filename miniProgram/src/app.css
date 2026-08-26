@@ -13,6 +13,9 @@ page, #app { min-height: 100%; }
 button, input, textarea { font: inherit; }
 button { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; line-height: normal; }
 button::after { border: 0; }
+taro-text-core, taro-button-core { font-size: inherit; line-height: inherit; }
+taro-image-core { display: block; }
+taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !important; transform: none !important; }
 
 /* Taro renders View/Text/Image as custom elements on H5 and native nodes on
  * WeChat. These aliases preserve the original element-based selectors. */
@@ -20,22 +23,31 @@ button::after { border: 0; }
 .brand-mark .brand-leaf + .brand-leaf { transform: scaleX(-1) skewY(9deg); }
 .page-topbar .brand-label { display: inline; }
 .page-title { margin: 0; color: var(--text); font: 700 20px/1.2 "Noto Serif SC","Songti SC",serif; white-space: nowrap; }
-.primary-button, .secondary-button { font-size: 14px; line-height: 1; }
+.phone-shell { font-size: 16px; line-height: normal; }
+.header-icon, .leaf-action, .round-button { font-size: 24px; line-height: 1; }
+.search-box > .glyph:first-child, .search-input > .glyph:first-child { font-size: 20px; }
+.notice-icon { font-size: 22px; }
+.detail-title > button { font-size: 24px; }
+.primary-button, .secondary-button { font-size: 16px; line-height: 1; }
 .avatar-image { width: 100%; height: 100%; object-fit: cover; }
-.image-avatar .avatar-image { width: 126%; height: 126%; object-fit: contain; transform: translateY(7%); }
+.avatar-image > img { width: 100%; height: 100%; object-fit: cover; }
+.image-avatar .avatar-image { width: 126%; height: 126%; object-fit: contain; transform: translate(-10%,7%); }
+.image-avatar .avatar-image > img { object-fit: contain; }
 .avatar-initial { font-size: 14px; }
 .hero-title { display: block; margin: 0; color: var(--olive); font: 700 27px/1.28 "Noto Serif SC","Songti SC",serif; letter-spacing: .03em; white-space: pre-line; }
-.hero-description { display: block; margin: 9px 0 15px; color: #6e7365; font-size: 11px; line-height: 1.6; }
-.search-placeholder { color: #8b887e; font-size: 13px; }
+.hero-description { display: block; margin: 9px 0 15px; color: #6e7365; font-size: 13.5px; line-height: 1.6; }
+.home-page .search-box { width: fit-content; max-width: 100%; }
+.category-chips .chip { height: 40px; min-height: 40px; display: inline-flex; align-items: center; margin: 0; padding-top: 0; padding-bottom: 0; }
+.search-placeholder { color: #8b887e; font-size: 16px; }
 .search-box > .glyph:last-child { margin-left: auto; font-size: 18px; }
 .section-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: transparent; color: #8a877c; font-size: 12px; }
 .section-heading-text { display: block; color: var(--olive); font: 700 18px/1.2 "Noto Serif SC","Songti SC",serif; }
 .section-heading-text::before { content: '❧'; margin-right: 7px; color: var(--sage); }
 .section-note { color: #8a877c; font-size: 12px; }
-.tile-title { min-height: 38px; display: block; margin: 9px 1px 1px; font-size: 13px; font-weight: 700; line-height: 1.45; }
-.tile-author { display: block; margin: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.tile-title { min-height: 38px; display: block; margin: 9px 1px 1px; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.tile-author { display: block; margin: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .book-meta .book-price { color: var(--price); font: 700 15px Georgia,serif; }
-.book-meta .book-campus { padding: 3px 6px; border-radius: 6px; background: #eef0e2; color: #687159; font-size: 9px; }
+.book-meta .book-campus { padding: 3px 6px; border-radius: 6px; background: #eef0e2; color: #687159; font-size: 11px; }
 .cover-title { position: relative; z-index: 1; font: 700 15px/1.35 "Noto Serif SC",serif; }
 .cover-caption { margin-top: 9px; font-size: 7px; letter-spacing: .08em; opacity: .75; }
 .book-cover.cream, .book-cover.paper { background: linear-gradient(145deg,#f3eee0,#c8ceb7); }
@@ -45,8 +57,9 @@ button::after { border: 0; }
 .book-cover.sand { background: linear-gradient(145deg,#d8c59d,#f1e6ce); }
 .book-cover.clay { color: #f8eee7; background: linear-gradient(145deg,#9b6655,#d7a78d); }
 .book-cover.earth { color: #f0eee5; background: linear-gradient(145deg,#655f50,#a49b82); }
-.listing-title { display: block; font-size: 14px; font-weight: 700; line-height: 1.45; }
-.listing-author { display: block; margin: 4px 0 9px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.listing-heading .listing-title { min-width: 0; flex: 1; display: block; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.more-glyph { flex: 0 0 auto; width: 20px; font-size: 18px; }
+.listing-author { display: block; margin: 4px 0 9px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .listing-price .price-current { color: var(--olive); font: 700 20px Georgia,serif; }
 .listing-price .price-original { color: #aaa69b; font-size: 9px; text-decoration: line-through; }
 .listing-price .condition { margin-left: auto; padding: 4px 7px; border: 1px solid #d7cfb2; border-radius: 8px; color: #697357; font-size: 9px; }
@@ -74,8 +87,9 @@ button::after { border: 0; }
 .welcome-steps .step-title { font: 700 14px "Noto Serif SC",serif; }
 .welcome-steps .step-copy { margin-top: 3px; color: var(--muted); font-size: 8px; white-space: nowrap; }
 .welcome-footnote { margin: 7px 0 0; text-align: center; color: #8f8c80; font-size: 10px; }
-.welcome-actions .primary-button, .welcome-actions .secondary-button { min-height: 48px; font-size: 14px; line-height: 1; }
-.onboarding-tobby { width: 80%; height: 340px; flex: 0 1 340px; margin: auto auto -17px; object-fit: contain; filter: drop-shadow(0 20px 18px rgba(0,0,0,.2)); }
+.welcome-actions .primary-button, .welcome-actions .secondary-button { min-height: 48px; font-size: 16px; line-height: 1; }
+.onboarding-tobby { width: 80%; height: 340px; flex: 0 1 340px; min-height: 0; margin: auto auto -17px; object-fit: contain; filter: drop-shadow(0 20px 18px rgba(0,0,0,.2)); }
+.onboarding-tobby > img { object-fit: contain; }
 .onboarding-heading > text { font: 700 24px "Noto Serif SC",serif; }
 .onboarding-heading > button { min-height: 42px; padding: 0 15px; font-size: 14px; }
 .guide-step { color: var(--gold); font: 700 10px Georgia,serif; letter-spacing: .16em; }
@@ -132,7 +146,7 @@ button::after { border: 0; }
 .thread-campus { margin-left: 5px; color: #7b806e; font-size: 8px; font-weight: 400; }
 .thread-message { display: block; margin-top: 6px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .thread-time { align-self: start; color: #9b988e; font-size: 8px; }
-.thread-unread { position: absolute; right: 12px; bottom: 14px; width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: var(--sage); color: white; font-size: 8px; }
+.thread-unread { position: absolute; right: 10px; bottom: 10px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #e5924b; color: white; font-size: 10px; }
 .tobby-banner .tobby-banner-image { position: absolute; width: 96px; height: 96px; object-fit: contain; left: -4px; bottom: -3px; }
 .tobby-banner-copy { color: #6b6f61; font-size: 10.5px; line-height: 1.6; }
 .tobby-banner-copy > text { color: var(--olive); font-weight: 700; }
@@ -160,11 +174,13 @@ button::after { border: 0; }
 .shared-title { font-size: 10px; font-weight: 700; }
 .shared-author { margin: 5px 0; color: var(--muted); font-size: 8px; }
 .shared-price { color: var(--price); font: 700 13px Georgia,serif; }
-.inline-state > image { width: 140px; height: 140px; object-fit: contain; }
+.inline-state > image, .inline-state > taro-image-core { width: 190px; height: 190px; object-fit: contain; }
+.inline-state > taro-image-core > img { object-fit: contain; }
 .inline-title { display: block; margin-top: -8px; color: var(--olive); font: 700 16px "Noto Serif SC",serif; }
 .inline-copy { display: block; margin: 7px 0 14px; color: var(--muted); font-size: 10px; }
 .state-card-title { position: relative; z-index: 1; font: 700 11px "Noto Serif SC",serif; }
 .full-state .state-image { position: relative; width: 260px; height: 260px; object-fit: contain; filter: drop-shadow(0 18px 18px rgba(70,72,56,.12)); }
+.full-state .state-image > img { object-fit: contain; }
 .state-title { position: relative; display: block; margin: -12px 0 8px; color: var(--olive); font: 700 25px "Noto Serif SC",serif; }
 .state-copy { position: relative; display: block; max-width: 290px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
 .state-footnote { position: absolute; bottom: 25px; color: #9b978c; font-size: 8px; }
@@ -177,6 +193,7 @@ button::after { border: 0; }
 .feed-time { display: block; color: #96948a; font-size: 10px; }
 
 .glyph { display: inline-flex; align-items: center; justify-content: center; font-family: Georgia,serif; }
+.glyph svg { width: 1em; height: 1em; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .grow { flex: 1; }
 .empty { padding: 36px 18px; text-align: center; color: var(--muted); }
 .inline-toast { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fffdf8; color: var(--olive); font-size: 12px; }
@@ -187,6 +204,18 @@ button::after { border: 0; }
 .sheet-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .menu-row { min-height: 50px; display: flex; align-items: center; border-bottom: 1px dashed #ddd2b9; }
 
+/* Element-selector equivalents required by Taro H5 custom elements. */
+.hero-tobby > img, .search-hint-image > img, .tobby-banner-image > img,
+.profile-reminder-image > img, .state-image > img { object-fit: contain; }
+.state-grid taro-image-core { position: absolute; width: 115px; height: 115px; right: -12px; top: -9px; opacity: .88; }
+.state-grid taro-image-core > img { object-fit: contain; }
+.state-grid .state-card-title { position: relative; z-index: 1; font: 700 12px "Noto Serif SC",serif; }
+.detail-gallery > .book-cover { min-width: 100%; height: 275px; flex: 0 0 100%; }
+.chat-composer { font-size: 16px; }
+.chat-composer .send-button { min-width: 58px; min-height: 42px; padding: 0 13px; border-radius: 13px; background: var(--sage); color: white; font-size: 14px; font-weight: 700; }
+.chat-composer taro-input-core { min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #dfd4bd; border-radius: 13px; background: #fbf9f2; font-size: 12px; }
+.chat-composer taro-input-core input { height: 100%; font-size: 12px; }
+
 @media (max-width: 370px) { .hero-title { font-size: 24px; } }
-@media (min-width: 700px) { #app { padding: 16px; } .hero-title { font-size: 34px; } .welcome-title { font-size: 44px; } }
-@media (min-width: 1024px) { #app { padding: 24px; place-items: center; } .onboarding-tobby { width: 440px; max-height: 44vh; object-fit: contain; } }
+@media (min-width: 700px) { #app { padding: 0; } .taro_page { box-sizing: border-box; padding: 16px; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); } .hero-title { font-size: 34px; } .welcome-title { font-size: 44px; } }
+@media (min-width: 1024px) { .taro_page { padding: 24px; place-items: center; } .onboarding-tobby { width: 440px; max-height: 44vh; object-fit: contain; } }

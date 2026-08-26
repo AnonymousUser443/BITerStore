@@ -15,7 +15,7 @@ export function BrandHeader({ title, back = false, action }: { title?: string; b
   return <View className={`topbar brand-header ${title ? 'page-topbar page-header' : ''}`}>
     {back ? <Button className='round-button' onClick={() => navigationAdapter.back()}><Glyph name='back' /></Button> : <Button className='brand-button' onClick={() => navigationAdapter.switchTab('/pages/home/index')}><Brand /></Button>}
     {title && <Text className='page-title'>{title}</Text>}
-    <View className='top-actions header-actions'>{action || <><Button className='icon-button header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Avatar user={current} size={38} />}{title && <Button className='icon-button leaf-action'><Text>❧</Text></Button>}</>}</View>
+    <View className='top-actions header-actions'>{action || <><Button className='icon-button header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Avatar user={current} size={38} />}{title && <Button className='icon-button leaf-action'><Glyph name={back ? 'more' : 'leaf'} /></Button>}</>}</View>
   </View>
 }
 
@@ -47,11 +47,11 @@ export function BookTile({ listing, onTap }: { listing: Listing; onTap?: () => v
   return <Button className='book-tile' onClick={onTap}><BookCover listing={listing} /><Text className='tile-title'>{listing.title}</Text><Text className='tile-author'>{listing.author}</Text><View className='book-meta'><Text className='book-price'>¥{listing.price.toFixed(2)}</Text><Text className='book-campus'>{listing.campus}</Text></View></Button>
 }
 
-export function ListingCard({ listing, onTap, favorite = false, onFavorite }: { listing: Listing; onTap?: () => void; favorite?: boolean; onFavorite?: () => void }) {
+export function ListingCard({ listing, onTap, favorite = false, onFavorite, onContact }: { listing: Listing; onTap?: () => void; favorite?: boolean; onFavorite?: () => void; onContact?: () => void }) {
   const seller = getUser(listing.sellerId)
   return <View className={`listing-card ${listing.status !== 'available' ? 'unavailable-card' : ''}`}>
-    <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Text className='more-glyph'>•••</Text></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></Button>
-    <View className='listing-actions'><Button onClick={onFavorite}><Glyph name='heart' />{favorite ? '已收藏' : '收藏'}</Button><Button><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={onTap}>详情 <Glyph name='chevron' /></Button></View><Text className={`status-badge ${listing.status}`}>{{ available: '可交易', sold: '已售', offline: '已下架', draft: '草稿' }[listing.status]}</Text>
+    <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Glyph name='more' className='more-glyph' /></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></Button>
+    <View className='listing-actions'><Button onClick={onFavorite}><Glyph name='heart' />{favorite ? '已收藏' : '收藏'}</Button><Button onClick={onContact}><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={onTap}>详情 <Glyph name='chevron' /></Button></View><Text className={`status-badge ${listing.status}`}>{{ available: '可交易', sold: '已售', offline: '已下架', draft: '草稿' }[listing.status]}</Text>
   </View>
 }
 

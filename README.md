@@ -150,7 +150,7 @@ npm run build:weapp
 
 微信开发者工具和自动化环境配置见 [`WEAPP_CODEX_AUTOMATION_SETUP.md`](./WEAPP_CODEX_AUTOMATION_SETUP.md)。旧 `web/` 在迁移期间继续作为视觉、交互和回滚基线。
 
-当前锁定 Taro 4.2.1 的传递依赖仍有 npm audit 上游告警，且完整复用 Golden Reference 样式后的 H5 入口约 431 KiB。它们不阻塞离线演示，但属于正式生产化前必须解决的升级与性能门禁；不要对 lockfile 执行不兼容的 `npm audit fix --force`。
+当前锁定 Taro 4.2.1 的传递依赖仍有 npm audit 上游告警；H5 直接复用 `web/app/components/mobile-app.tsx` 与 Golden Reference CSS，生产入口约 357 KiB。它们不阻塞离线演示，但属于正式生产化前必须解决的升级与性能门禁；不要对 lockfile 执行不兼容的 `npm audit fix --force`。
 
 ## 🗂 项目结构
 

@@ -16,11 +16,15 @@ export default function SearchPage() {
   const initialQuery = Taro.getCurrentInstance().router?.params.q || ''
   const [filters, setFilters] = useState<ListingFilters>({ ...defaultFilters, query: initialQuery })
   const [items, setItems] = useState<Listing[]>([])
+  const [favorites, setFavorites] = useState<string[]>([])
   const [drawer, setDrawer] = useState(false)
   useEffect(() => { void demoRepository.getFilters().then((saved) => setFilters(initialQuery ? { ...saved, query: initialQuery } : saved)) }, [initialQuery])
   useEffect(() => { void demoRepository.saveFilters(filters) }, [filters])
   const load = useCallback(() => demoRepository.listListings(filters).then(setItems), [filters])
   useEffect(() => { void load() }, [load])
+  useEffect(() => { void demoRepository.listFavorites().then((saved) => setFavorites(saved.map((item) => item.id))) }, [])
+  const toggleFavorite = async (id: string) => { const active = await demoRepository.toggleFavorite(id); setFavorites((current) => active ? [...new Set([...current, id])] : current.filter((value) => value !== id)) }
+  const contact = async (item: Listing) => { const thread = await demoRepository.ensureThread(item.id); await navigationAdapter.go(`/pages/chat/index?id=${thread}`) }
 
   return <AppShell active='search' className='search-page'>
     <View className='search-input'><Glyph name='search' /><Input id='e2e-search-input' value={filters.query} onInput={(e) => setFilters({ ...filters, query: e.detail.value })} placeholder='搜索书名 / 作者 / ISBN / 课程' /><Button onClick={() => setFilters({ ...filters, query: '' })}><Glyph name={filters.query ? 'back' : 'camera'} /></Button></View>
@@ -28,7 +32,7 @@ export default function SearchPage() {
     <View className='quick-filters'><Button onClick={() => setDrawer(true)}>校区 <Glyph name='chevron' /></Button><Button onClick={() => setDrawer(true)}>成色 <Glyph name='chevron' /></Button><Button onClick={() => setDrawer(true)}>价格 <Glyph name='chevron' /></Button><Button onClick={() => setDrawer(true)}>{filters.sort} <Glyph name='chevron' /></Button><Button className='availability-filter' onClick={() => setFilters({ ...filters, availableOnly: !filters.availableOnly })}>{filters.availableOnly ? '✓ ' : ''}只看可交易</Button><Button id='e2e-search-filter' className='filter-trigger' onClick={() => setDrawer(true)}><Glyph name='filter' />筛选</Button></View>
     <View className='search-tobby-hint'><Image className='search-hint-image' src='/assets/tobby-search.webp' mode='aspectFit' /><View className='search-hint-copy'><Text>托比提示</Text><Text>组合筛选，找书更快更准。</Text></View></View>
     <View className='results-heading'><Text>为你找到 <Text>{items.length}</Text> 本书</Text><Text>{filters.availableOnly ? '只显示可交易' : filters.sort}</Text></View>
-    {items.length ? <View className='listing-stack'>{items.map((item) => <ListingCard key={item.id} listing={item} onTap={() => navigationAdapter.go(`/pages/listing/detail?id=${item.id}`)} />)}</View> : <View className='empty'>没有找到匹配的书，换个关键词试试。</View>}
+    {items.length ? <View className='listing-stack'>{items.map((item) => <ListingCard key={item.id} listing={item} favorite={favorites.includes(item.id)} onFavorite={() => toggleFavorite(item.id)} onContact={() => contact(item)} onTap={() => navigationAdapter.go(`/pages/listing/detail?id=${item.id}`)} />)}</View> : <View className='inline-state'><Image src='/assets/tobby-question.webp' mode='aspectFit' /><Text className='inline-title'>这次没有找到合适的书</Text><Text className='inline-copy'>换个关键词，或者发布一条求书心愿吧。</Text><Button className='secondary-button' onClick={() => navigationAdapter.go('/pages/states/index?type=no-results')}>查看空状态</Button></View>}
     <FilterDrawer open={drawer} onClose={() => setDrawer(false)}><View className='sheet-heading'><Text className='section-title'>高级筛选</Text><Button onClick={() => setFilters(defaultFilters)}>清空</Button></View><Picker mode='selector' range={campusRange} onChange={(e) => setFilters({ ...filters, campus: campusRange[Number(e.detail.value)] as Campus | '全部' })}><View className='menu-row'>校区<Text className='grow' /><Text>{filters.campus}</Text></View></Picker><Picker mode='selector' range={conditionRange} onChange={(e) => setFilters({ ...filters, condition: conditionRange[Number(e.detail.value)] as Condition | '全部' })}><View className='menu-row'>成色<Text className='grow' /><Text>{filters.condition}</Text></View></Picker><View className='menu-row'><Text className='grow'>仅看可交易</Text><Switch checked={filters.availableOnly} onChange={(e) => setFilters({ ...filters, availableOnly: e.detail.value })} /></View><Button className='primary-button' onClick={() => setDrawer(false)}>查看 {items.length} 个结果</Button></FilterDrawer>
   </AppShell>
 }

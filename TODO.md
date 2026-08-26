@@ -61,7 +61,7 @@
 - [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
 - [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
 - [x] 合并云端 Taro 骨架，收敛并重命名为唯一 `miniProgram/` 客户端，移除临时原生 `miniapp/`
-- [x] 以 `web/app/components/mobile-app.tsx` 和 `web/app/globals.css` 为唯一 Golden Reference，逐项同构迁移品牌壳层、导航、演示数据、核心页面与响应式布局；Taro 兼容层不改变原视觉值，并将空白页/运行时异常纳入 H5 视觉门禁
+- [x] 以 `web/app/components/mobile-app.tsx` 和 `web/app/globals.css` 为唯一 Golden Reference；Taro H5 直接使用原组件和原 CSS，微信端只保留必要的平台组件映射，并将空白页/运行时异常纳入 H5 视觉门禁
 
 ## 进行中
 
@@ -80,7 +80,7 @@
 ### 已知依赖风险
 
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
-- [ ] 完整复用 Golden Reference 样式后的 H5 生产入口约 431 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
+- [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
 
 ## 待完成
 

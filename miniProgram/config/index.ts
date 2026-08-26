@@ -1,4 +1,5 @@
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
+import path from 'node:path'
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin'
 import devConfig from './dev'
 import prodConfig from './prod'
@@ -28,8 +29,16 @@ export default defineConfig<'webpack5'>(async (merge) => {
         }
       },
       miniCssExtractPluginOption: { ignoreOrder: true },
-      postcss: { autoprefixer: { enable: true, config: {} }, cssModules: { enable: false } },
-      webpackChain(chain) { chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin) }
+      postcss: { htmltransform: { enable: false }, pxtransform: { enable: false, config: {} }, autoprefixer: { enable: true, config: {} }, cssModules: { enable: false } },
+      webpackChain(chain) {
+        chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
+        chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))
+        chain.resolve.alias
+          .set('next/image', path.resolve(__dirname, '../src/h5/next-image.tsx'))
+          .set('lucide-react', path.resolve(__dirname, '../node_modules/lucide-react'))
+          .set('react', path.resolve(__dirname, '../node_modules/react'))
+          .set('react-dom', path.resolve(__dirname, '../node_modules/react-dom'))
+      }
     }
   }
   return merge({}, baseConfig, process.env.NODE_ENV === 'development' ? devConfig : prodConfig)
