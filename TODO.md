@@ -60,13 +60,13 @@
 - [x] 建立 Listing 领域模型、DemoRepository 与 Storage/Media/Navigation/Share/Feedback/Cache 适配器
 - [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
 - [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
-- [x] 合并云端 Taro 骨架，收敛为唯一 `taro/` 客户端并移除重复 `miniProgram/`
+- [x] 合并云端 Taro 骨架，收敛并重命名为唯一 `miniProgram/` 客户端，移除临时原生 `miniapp/`
 
 ## 进行中
 
 ### Taro 双端迁移 Phase 0–8
 
-- [ ] Phase 0：开启微信开发者工具服务端口，完成原生 `miniapp/` CLI/9420/automator Spike
+- [ ] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
 - [x] Phase 1：Taro 骨架、双端构建、公共 touristappid 配置和版本锁定
 - [x] Phase 2：Listing Domain、Repository、平台适配器和独立存储命名空间
 - [x] Phase 3：首页、搜索、详情、发布、消息与个人中心核心流程
@@ -110,4 +110,4 @@
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
 - Taro 迁移期间保留现有 `web/`，不得删除、重命名或用 Taro 中间状态覆盖其部署。
 - 微信端禁止自动上传、提审、发布、修改 AppID 或配置 `miniprogram-ci`。
-- 正式双端客户端目录唯一为 `taro/`；不得再次引入并行的 `miniProgram/` 工程。
+- 正式双端客户端目录唯一为 `miniProgram/`；不得再次引入并行的 `taro/` 或原生 `miniapp/` 工程。

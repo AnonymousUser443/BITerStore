@@ -141,7 +141,7 @@ npm run build
 Taro 双端客户端：
 
 ```bash
-cd ../taro
+cd ../miniProgram
 npm install
 npm run dev:h5
 # 或构建微信小程序
@@ -159,7 +159,7 @@ BITerStore/
 ├─ Assets/                 # 原始设计参考与 Tobby 素材，不覆盖源文件
 ├─ docs/avatars/           # 开发团队头像素材
 ├─ qa-screenshots/         # 360 / 390 / 430px 浏览器验收截图
-├─ taro/                   # Taro 4.2.1 微信小程序与 H5 双端客户端
+├─ miniProgram/            # Taro 4.2.1 微信小程序与 H5 双端客户端
 ├─ web/
 │  ├─ app/
 │  │  ├─ components/       # 页面与通用移动组件

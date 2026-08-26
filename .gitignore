@@ -15,7 +15,7 @@ coverage/
 !.env.example
 project.private.config.json
 **/project.private.config.json
-!taro/.env.example
+!miniProgram/.env.example
 
 # WeChat automation local state and evidence
 qa-screenshots/weapp-actual/
@@ -26,7 +26,7 @@ weapp-automation.log
 **/weapp-automation.log
 
 # Taro/SWC compiler cache (platform-specific binaries)
-taro/.swc/
+miniProgram/.swc/
 
 # Windows 系统文件
 Thumbs.db
