@@ -1,30 +1,38 @@
 import { PropsWithChildren, ReactNode } from 'react'
 import { Button, Image, Input, Text, View } from '@tarojs/components'
 import { getUser } from '@/domain/repository'
+import { CURRENT_USER_ID } from '@/domain/seed'
 import { navigationAdapter } from '@/platform'
 import type { Listing, ListingStatus } from '@/domain/types'
-import { Glyph, type GlyphName } from './Glyph'
+import { Glyph } from './Glyph'
 
 export function Brand() {
-  return <View className='brand'><View className='brand-mark'><View /><View /></View><Text>BITerStore</Text></View>
+  return <View className='brand'><View className='brand-mark'><View className='brand-leaf' /><View className='brand-leaf' /></View><Text className='brand-label'>BITerStore</Text></View>
 }
 
 export function BrandHeader({ title, back = false, action }: { title?: string; back?: boolean; action?: ReactNode }) {
-  return <View className={`brand-header ${title ? 'page-header' : ''}`}>
+  const current = getUser(CURRENT_USER_ID)
+  return <View className={`topbar brand-header ${title ? 'page-topbar page-header' : ''}`}>
     {back ? <Button className='round-button' onClick={() => navigationAdapter.back()}><Glyph name='back' /></Button> : <Button className='brand-button' onClick={() => navigationAdapter.switchTab('/pages/home/index')}><Brand /></Button>}
     {title && <Text className='page-title'>{title}</Text>}
-    <View className='header-actions'>{action || <><Button className='header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Image className='header-avatar' src='/assets/avatar-zhou.webp' mode='aspectFill' />}</>}</View>
+    <View className='top-actions header-actions'>{action || <><Button className='icon-button header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Avatar user={current} size={38} />}{title && <Button className='icon-button leaf-action'><Text>❧</Text></Button>}</>}</View>
   </View>
 }
 
-const h5Tabs: ReadonlyArray<readonly [string, string, GlyphName]> = [['home', '首页', 'home'], ['search', '分类', 'search'], ['publish', '发布', 'publish'], ['messages', '消息', 'message'], ['profile', '我的', 'user']]
+export function Avatar({ user, size = 42 }: { user: ReturnType<typeof getUser>; size?: number }) {
+  const source = user.id === CURRENT_USER_ID ? '/assets/tobby-hello.webp' : user.avatar
+  return <View className={`avatar avatar-${user.avatarTone || 'sage'} ${user.id === CURRENT_USER_ID ? 'image-avatar' : ''}`} style={{ width: `${size}px`, height: `${size}px` }}>{source ? <Image className='avatar-image' src={source} mode={user.id === CURRENT_USER_ID ? 'aspectFit' : 'aspectFill'} /> : <Text className='avatar-initial'>{user.name.slice(0, 1)}</Text>}</View>
+}
+
+const h5Tabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '分类', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
 function H5Navigation({ active }: { active?: string }) {
   if (process.env.TARO_ENV !== 'h5') return null
-  return <View className='h5-navigation'>{h5Tabs.map(([route, label, glyph]) => <Button key={route} id={`e2e-nav-${route}`} className={`${active === route ? 'active' : ''} ${route === 'publish' ? 'publish' : ''}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><Glyph name={glyph} /><Text>{label}</Text></Button>)}</View>
+  return <View className='bottom-nav h5-navigation'>{h5Tabs.map(([route, label, icon]) => <Button key={route} id={`e2e-nav-${route}`} className={`nav-item ${active === route ? 'active' : ''} ${route === 'publish' ? 'publish' : ''}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><View className={`nav-icon ${icon}`} /><Text>{label}</Text></Button>)}</View>
 }
 
 export function AppShell({ children, title, back, active, className = '', noNav = false }: PropsWithChildren<{ title?: string; back?: boolean; active?: string; className?: string; noNav?: boolean }>) {
-  return <View className={`app-shell ${className}`}><View className='paper-texture' /><BrandHeader title={title} back={back} /><View className={`page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <H5Navigation active={active} />}</View>
+  const shouldGoBack = back || active === 'publish'
+  return <View className={`phone-shell app-shell ${className}`}><View className='paper-texture' /><BrandHeader title={title} back={shouldGoBack} /><View className={`content-scroll page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <H5Navigation active={active} />}</View>
 }
 
 export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'
@@ -36,14 +44,14 @@ export function BookCover({ listing, compact = false }: { listing: Listing; comp
 }
 
 export function BookTile({ listing, onTap }: { listing: Listing; onTap?: () => void }) {
-  return <Button className='book-tile' onClick={onTap}><BookCover listing={listing} /><Text className='tile-title'>{listing.title}</Text><Text className='tile-author'>{listing.author}</Text><View className='book-meta'><Text>¥{listing.price.toFixed(2)}</Text><Text>{listing.campus}</Text></View></Button>
+  return <Button className='book-tile' onClick={onTap}><BookCover listing={listing} /><Text className='tile-title'>{listing.title}</Text><Text className='tile-author'>{listing.author}</Text><View className='book-meta'><Text className='book-price'>¥{listing.price.toFixed(2)}</Text><Text className='book-campus'>{listing.campus}</Text></View></Button>
 }
 
-export function ListingCard({ listing, onTap }: { listing: Listing; onTap?: () => void }) {
+export function ListingCard({ listing, onTap, favorite = false, onFavorite }: { listing: Listing; onTap?: () => void; favorite?: boolean; onFavorite?: () => void }) {
   const seller = getUser(listing.sellerId)
   return <View className={`listing-card ${listing.status !== 'available' ? 'unavailable-card' : ''}`}>
-    <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Text className='more-glyph'>•••</Text></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text>¥{listing.price.toFixed(2)}</Text><Text>¥{listing.originalPrice.toFixed(2)}</Text><Text>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></Button>
-    <View className='listing-actions'><Button><Glyph name='heart' />收藏</Button><Button><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={onTap}>详情 <Glyph name='chevron' /></Button></View><StatusTag status={listing.status} />
+    <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Text className='more-glyph'>•••</Text></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></Button>
+    <View className='listing-actions'><Button onClick={onFavorite}><Glyph name='heart' />{favorite ? '已收藏' : '收藏'}</Button><Button><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={onTap}>详情 <Glyph name='chevron' /></Button></View><Text className={`status-badge ${listing.status}`}>{{ available: '可交易', sold: '已售', offline: '已下架', draft: '草稿' }[listing.status]}</Text>
   </View>
 }
 

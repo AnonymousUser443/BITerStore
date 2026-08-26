@@ -18,6 +18,8 @@
       }
       var match = path.match(/^\/books\/([^/]+)$/);
       if (match) history.replaceState({}, '', '/books?id=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
+      match = path.match(/^\/messages\/notifications\/([^/]+)$/);
+      if (match) history.replaceState({}, '', '/notifications?type=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
       match = path.match(/^\/messages\/([^/]+)$/);
       if (match) history.replaceState({}, '', '/chat?id=' + encodeURIComponent(match[1]) + location.search.replace(/^\?/, '&'));
       match = path.match(/^\/states\/([^/]+)$/);

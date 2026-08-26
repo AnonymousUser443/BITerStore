@@ -1,6 +1,7 @@
 import { PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { prepareAssetBundle } from './platform'
+import './golden.css'
 import './app.css'
 
 function App({ children }: PropsWithChildren) {

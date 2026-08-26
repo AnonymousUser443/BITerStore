@@ -2,7 +2,7 @@ export type Campus = '中关村' | '良乡' | '西山' | '珠海'
 export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft'
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下'
 
-export interface User { id: string; name: string; campus: Campus; verified: boolean; bio: string; responseTime: string; avatar?: string }
+export interface User { id: string; name: string; campus: Campus; verified: boolean; bio: string; responseTime: string; avatar?: string; avatarTone?: 'sage' | 'peach' | 'blue' | 'gold' | 'olive' }
 export type Seller = User
 export interface StoredMedia { id: string; uri: string; mime: string; size: number; width?: number; height?: number }
 export interface Listing {

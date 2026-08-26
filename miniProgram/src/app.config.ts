@@ -12,7 +12,7 @@ export default defineAppConfig({
     custom: true, color: '#7f846f', selectedColor: '#4f5940', backgroundColor: '#fffdf7',
     list: [
       { pagePath: 'pages/home/index', text: '首页' },
-      { pagePath: 'pages/search/index', text: '搜索' },
+      { pagePath: 'pages/search/index', text: '分类' },
       { pagePath: 'pages/publish/index', text: '发布' },
       { pagePath: 'pages/messages/index', text: '消息' },
       { pagePath: 'pages/profile/index', text: '我的' }

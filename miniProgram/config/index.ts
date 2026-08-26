@@ -22,7 +22,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
           '/pages/welcome/index': '/welcome', '/pages/onboarding/index': '/onboarding',
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
-          '/pages/messages/index': '/messages', '/pages/chat/index': '/chat',
+          '/pages/messages/index': '/messages', '/pages/notification/detail': '/notifications', '/pages/chat/index': '/chat',
           '/pages/profile/index': '/profile', '/pages/favorites/index': '/favorites',
           '/pages/my-listings/index': '/my-listings', '/pages/states/index': '/states'
         }

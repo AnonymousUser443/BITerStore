@@ -6,7 +6,7 @@ import { root } from './weapp-env.mjs'
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
 const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 const artifactDir = path.join(root, 'qa-artifacts', 'h5-actual')
-const profileDir = path.join(root, 'qa-artifacts', 'chrome-cdp-profile')
+const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
 const targets = [
   ['welcome-390', 390, 900, '/'],
   ['onboarding-390', 390, 900, '/onboarding'],
@@ -14,7 +14,13 @@ const targets = [
   ['search-390', 390, 900, '/search'],
   ['publish-430', 430, 900, '/publish'],
   ['messages-390', 390, 900, '/messages'],
+  ['notification-390', 390, 900, '/messages/notifications/comment'],
+  ['chat-390', 390, 900, '/messages/thread-lin'],
   ['detail-390', 390, 900, '/books/math-7'],
+  ['favorites-390', 390, 900, '/favorites'],
+  ['my-listings-390', 390, 900, '/my-listings'],
+  ['states-390', 390, 900, '/states'],
+  ['unavailable-390', 390, 900, '/states/unavailable'],
   ['home-820', 820, 1000, '/home'],
   ['profile-1280', 1280, 900, '/profile']
 ]
@@ -60,7 +66,7 @@ class CdpClient {
 
 await fs.mkdir(artifactDir, { recursive: true })
 await fs.mkdir(profileDir, { recursive: true })
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--disable-gpu', '--hide-scrollbars', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
 const pages = []
@@ -74,6 +80,7 @@ try {
   })
   await client.send('Page.enable')
   await client.send('Runtime.enable')
+  await client.send('Storage.clearDataForOrigin', { origin: preview, storageTypes: 'all' })
   for (const [name, width, height, route] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
@@ -84,8 +91,8 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-modal-close')?.click()` })
       await delay(250)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.app-shell'); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
-    pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null })
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const metrics = Object.fromEntries(['.page-title','.primary-button','.welcome-title','.profile-badges'].map(selector => { const element = document.querySelector(selector); if (!element) return [selector, null]; const box = element.getBoundingClientRect(); return [selector, { width: Math.round(box.width), height: Math.round(box.height), fontSize: getComputedStyle(element).fontSize }]; })); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics })
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
