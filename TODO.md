@@ -60,6 +60,7 @@
 - [x] 建立 Listing 领域模型、DemoRepository 与 Storage/Media/Navigation/Share/Feedback/Cache 适配器
 - [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
 - [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
+- [x] 合并云端 Taro 骨架，收敛为唯一 `taro/` 客户端并移除重复 `miniProgram/`
 
 ## 进行中
 
@@ -107,3 +108,6 @@
 - 底栏固定为：首页 / 搜索 / 发布 / 消息 / 我的。
 - 校区固定为：中关村 / 良乡 / 西山 / 珠海。
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
+- Taro 迁移期间保留现有 `web/`，不得删除、重命名或用 Taro 中间状态覆盖其部署。
+- 微信端禁止自动上传、提审、发布、修改 AppID 或配置 `miniprogram-ci`。
+- 正式双端客户端目录唯一为 `taro/`；不得再次引入并行的 `miniProgram/` 工程。
