@@ -4,6 +4,9 @@ import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin'
 import devConfig from './dev'
 import prodConfig from './prod'
 
+const assetPerformanceBudget = 384 * 1024
+const entrypointPerformanceBudget = 640 * 1024
+
 export default defineConfig<'webpack5'>(async (merge) => {
   const baseConfig: UserConfigExport<'webpack5'> = {
     projectName: 'BITerStore', date: '2026-08-26', designWidth: 390,
@@ -15,7 +18,12 @@ export default defineConfig<'webpack5'>(async (merge) => {
     copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
     mini: {
       postcss: { pxtransform: { enable: true, config: {} }, cssModules: { enable: false } },
-      webpackChain(chain) { chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin) }
+      webpackChain(chain) {
+        chain.performance
+          .maxAssetSize(assetPerformanceBudget)
+          .maxEntrypointSize(entrypointPerformanceBudget)
+        chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
+      }
     },
     h5: {
       publicPath: '/', staticDirectory: 'static',
@@ -33,11 +41,14 @@ export default defineConfig<'webpack5'>(async (merge) => {
       miniCssExtractPluginOption: { ignoreOrder: true },
       postcss: { htmltransform: { enable: false }, pxtransform: { enable: false, config: {} }, autoprefixer: { enable: true, config: {} }, cssModules: { enable: false } },
       webpackChain(chain) {
+        chain.performance
+          .maxAssetSize(assetPerformanceBudget)
+          .maxEntrypointSize(entrypointPerformanceBudget)
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
         chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))
         chain.resolve.alias
           .set('next/image', path.resolve(__dirname, '../src/h5/next-image.tsx'))
-          .set('lucide-react', path.resolve(__dirname, '../node_modules/lucide-react'))
+          .set('lucide-react$', path.resolve(__dirname, '../src/h5/lucide-react.ts'))
           .set('react', path.resolve(__dirname, '../node_modules/react'))
           .set('react-dom', path.resolve(__dirname, '../node_modules/react-dom'))
       }
