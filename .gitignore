@@ -13,6 +13,15 @@ coverage/
 .env
 .env.*
 !.env.example
+project.private.config.json
+**/project.private.config.json
+
+# WeChat automation local state and evidence
+qa-screenshots/weapp-actual/
+qa-artifacts/
+**/qa-artifacts/
+weapp-automation.log
+**/weapp-automation.log
 
 # Windows 系统文件
 Thumbs.db
