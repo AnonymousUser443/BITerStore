@@ -13,6 +13,12 @@ coverage/
 .env
 .env.*
 !.env.example
+project.private.config.json
+
+# Local WeChat DevTools automation artifacts
+qa-screenshots/weapp-actual/
+qa-screenshots/weapp-logs/
+miniProgram/automation-artifacts/
 
 # Windows 系统文件
 Thumbs.db
@@ -32,3 +38,6 @@ ehthumbs.db
 *.log
 *.tmp
 tmp/
+
+# Superseded local dependency bootstrap (the formal client lives in miniProgram/)
+taro/

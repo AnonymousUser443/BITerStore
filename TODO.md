@@ -1,6 +1,6 @@
 # BITerStore 开发进度
 
-最后更新：2026-08-24
+最后更新：2026-08-26
 
 ## 已完成
 
@@ -55,16 +55,29 @@
 
 ## 进行中
 
-- 无
+- [ ] Taro Phase 1：完成 `miniProgram/` Taro React 双端骨架、品牌 App Shell 与页面路由
+- [ ] Taro Phase 2：迁移 Domain、DemoRepository、Storage/Media/Navigation 等平台适配器
+- [ ] Taro Phase 3：迁移欢迎、引导、首页、搜索和商品详情
+- [ ] Taro Phase 4：迁移图片、草稿、Tobby 一键成文、预览与发布闭环
+- [ ] Taro Phase 5：迁移通知、消息列表、聊天和未读状态
+- [ ] Taro Phase 6：迁移个人中心、收藏、发布管理和演示重置
+- [ ] Taro Phase 7：迁移完整状态页与 404
+- [ ] Taro Phase 8：完成 H5 / 微信小程序视觉、行为、自动化和真机验收
+- [ ] 建立微信开发者工具 CLI + `miniprogram-automator` + 受限 MCP 本地闭环
+- [ ] 建立 Taro H5 所有者私有 Sites 预览，验收后再决定是否替换现网
 
 ## 待完成
 
-- 无
+- [ ] 微信开发者工具中确认账号登录并开启安全设置里的服务端口
+- [ ] 在 `miniProgram/project.private.config.json` 中保留真实 AppID，本文件不入 Git
+- [ ] 合并前完成常见手机尺寸、小程序 Safe Area、键盘、媒体选择与返回栈真机验收
 
 ## 固定要求
 
 - 参考图只能作为视觉标杆，不可整页贴图实现 UI。
 - 现阶段只实现纯前端移动原型，不接真实后端、认证、支付或 AI。
-- 底栏固定为：首页 / 分类 / 发布 / 消息 / 我的。
+- 底栏固定为：首页 / 搜索 / 发布 / 消息 / 我的。
 - 校区固定为：中关村 / 良乡 / 西山 / 珠海。
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
+- Taro 迁移期间保留现有 `web/`，不得删除、重命名或用 Taro 中间状态覆盖其部署。
+- 微信端禁止自动上传、提审、发布、修改 AppID 或配置 `miniprogram-ci`。
