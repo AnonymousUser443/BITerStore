@@ -10,10 +10,10 @@ export function Brand() {
   return <View className='brand'><View className='brand-mark'><View className='brand-leaf' /><View className='brand-leaf' /></View><Text className='brand-label'>BITerStore</Text></View>
 }
 
-export function BrandHeader({ title, back = false, action }: { title?: string; back?: boolean; action?: ReactNode }) {
+export function BrandHeader({ title, back = false, backTo, action }: { title?: string; back?: boolean; backTo?: string; action?: ReactNode }) {
   const current = getUser(CURRENT_USER_ID)
-  return <View className={`topbar brand-header ${title ? 'page-topbar page-header' : ''}`}>
-    {back ? <Button className='round-button' onClick={() => navigationAdapter.back()}><Glyph name='back' /></Button> : <Button className='brand-button' onClick={() => navigationAdapter.switchTab('/pages/home/index')}><Brand /></Button>}
+  return <View className={`topbar brand-header ${title ? 'page-topbar page-header' : ''} ${back ? 'back-header' : 'root-header'}`}>
+    {back ? <Button id='e2e-header-back' className='round-button' onClick={() => backTo ? navigationAdapter.switchTab(backTo) : navigationAdapter.back()}><Glyph name='back' /></Button> : <Button className='brand-button' onClick={() => navigationAdapter.switchTab('/pages/home/index')}><Brand /></Button>}
     {title && <Text className='page-title'>{title}</Text>}
     <View className='top-actions header-actions'>{action || <><Button className='icon-button header-icon'><Glyph name='bell' /><Text className='notification-dot' /></Button>{!title && <Avatar user={current} size={38} />}{title && <Button className='icon-button leaf-action'><Glyph name={back ? 'more' : 'leaf'} /></Button>}</>}</View>
   </View>
@@ -24,15 +24,16 @@ export function Avatar({ user, size = 42 }: { user: ReturnType<typeof getUser>; 
   return <View className={`avatar avatar-${user.avatarTone || 'sage'} ${user.id === CURRENT_USER_ID ? 'image-avatar' : ''}`} style={{ width: `${size}px`, height: `${size}px` }}>{source ? <Image className='avatar-image' src={source} mode={user.id === CURRENT_USER_ID ? 'aspectFit' : 'aspectFill'} /> : <Text className='avatar-initial'>{user.name.slice(0, 1)}</Text>}</View>
 }
 
-const h5Tabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '分类', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
+const h5Tabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '搜索', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
 function H5Navigation({ active }: { active?: string }) {
   if (process.env.TARO_ENV !== 'h5') return null
   return <View className='bottom-nav h5-navigation'>{h5Tabs.map(([route, label, icon]) => <Button key={route} id={`e2e-nav-${route}`} className={`nav-item ${active === route ? 'active' : ''} ${route === 'publish' ? 'publish' : ''}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><View className={`nav-icon ${icon}`} /><Text>{label}</Text></Button>)}</View>
 }
 
-export function AppShell({ children, title, back, active, className = '', noNav = false }: PropsWithChildren<{ title?: string; back?: boolean; active?: string; className?: string; noNav?: boolean }>) {
+export function AppShell({ children, title, back, backTo, active, className = '', noNav = false }: PropsWithChildren<{ title?: string; back?: boolean; backTo?: string; active?: string; className?: string; noNav?: boolean }>) {
   const shouldGoBack = back || active === 'publish'
-  return <View className={`phone-shell app-shell ${className}`}><View className='paper-texture' /><BrandHeader title={title} back={shouldGoBack} /><View className={`content-scroll page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <H5Navigation active={active} />}</View>
+  const destination = backTo || (active === 'publish' ? '/pages/home/index' : undefined)
+  return <View className={`phone-shell app-shell ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' /><BrandHeader title={title} back={shouldGoBack} backTo={destination} /><View className={`content-scroll page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <H5Navigation active={active} />}</View>
 }
 
 export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'

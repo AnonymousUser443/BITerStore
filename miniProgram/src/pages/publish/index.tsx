@@ -24,7 +24,7 @@ export default function PublishPage() {
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0 }
   const next = () => { if (step === 1) setStep(2); else if (validate()) setStep(3) }
   const save = async () => { await demoRepository.saveDraft(draft); await feedbackAdapter.toast('草稿已保存') }
-  const publish = async () => { if (!validate()) return setStep(2); await demoRepository.publishListing(draft); await navigationAdapter.go('/pages/states/index?type=published') }
+  const publish = async () => { if (!validate()) return setStep(2); await demoRepository.publishListing(draft); await navigationAdapter.go('/pages/states/index?type=success') }
 
   return <AppShell title='发布闲置书籍' active='publish' className='publish-page'>
     <View className='stepper'>{['上传图片', '填写信息', '确认发布'].map((label, index) => <View className={`stepper-item ${step >= index + 1 ? 'active' : ''}`} key={label}><Text className='stepper-number'>{index + 1}</Text><Text className='stepper-label'>{label}</Text>{index < 2 && <Text className='stepper-line' />}</View>)}</View>
