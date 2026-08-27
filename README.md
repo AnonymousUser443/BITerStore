@@ -148,6 +148,8 @@ npm run dev:h5
 npm run build:weapp
 ```
 
+校园登录使用 [BIT-Login](https://github.com/BIT101-dev/BIT-Login) 的异步 challenge 接口，支持统一身份认证和短信二次验证。服务地址可在 `web/.env.local` 中通过 `NEXT_PUBLIC_BIT_LOGIN_URL` 配置，也可在 `miniProgram/.env` 中通过 `BIT_LOGIN_URL` 配置；微信小程序上线前还需要把对应 HTTPS 域名加入 request 合法域名。
+
 微信开发者工具和自动化环境配置见 [`WEAPP_CODEX_AUTOMATION_SETUP.md`](./WEAPP_CODEX_AUTOMATION_SETUP.md)。旧 `web/` 在迁移期间继续作为视觉、交互和回滚基线。
 
 当前锁定 Taro 4.2.1 的传递依赖仍有 npm audit 上游告警；H5 直接复用 `web/app/components/mobile-app.tsx` 与 Golden Reference CSS，生产入口约 357 KiB。它们不阻塞离线演示，但属于正式生产化前必须解决的升级与性能门禁；不要对 lockfile 执行不兼容的 `npm audit fix --force`。

@@ -1,3 +1,21 @@
+/* Browser-only globals. Universal selectors are intentionally kept out of
+ * golden.css because the WeChat WXSS compiler does not support `*`. */
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #deddd6; color: var(--text); }
+body { font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif; }
+a { color: inherit; text-decoration: none; }
+button, input, textarea, select { font: inherit; }
+button { color: inherit; cursor: pointer; }
+button, a { -webkit-tap-highlight-color: transparent; }
+
+/* H5 paints the paper texture as a CSS background. WeChat renders the same
+ * asset with an Image node so the bitmap does not get embedded in app.wxss. */
+.paper-texture { background: url('./assets/paper-bg.webp') center top / 920px auto repeat-y; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}
+
 /* Taro's router wrappers sit outside the Golden Reference app. Keep them
  * layout-neutral so the original H5 DOM and CSS remain authoritative. */
 #app, .taro_router, .taro_page {

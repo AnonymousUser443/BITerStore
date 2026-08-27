@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 import type { StoredMedia } from '@/domain/types'
 import { AppError } from '@/domain/types'
+import type { BitLoginChallenge } from '@/domain/bit-login'
 
 export const STORAGE_NAMESPACE = 'biterstore:taro:v1'
 const keyOf = (key: string) => `${STORAGE_NAMESPACE}:${key}`
@@ -32,6 +33,25 @@ export const feedbackAdapter: FeedbackAdapter = {
 }
 export interface ShareAdapter { shareListing(id: string, title: string): Promise<void> }
 export const shareAdapter: ShareAdapter = { async shareListing(id, title) { await Taro.setClipboardData({ data: `${title} · BITerStore /books/${id}` }); await feedbackAdapter.toast('分享链接已复制') } }
+
+function bitLoginMessage(data: unknown) {
+  if (data && typeof data === 'object' && 'detail' in data) {
+    const detail = data.detail
+    if (typeof detail === 'string') return detail
+    if (detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string') return detail.message
+  }
+  return '统一身份认证失败，请稍后重试'
+}
+async function bitLoginRequest(path: string, method: 'GET' | 'POST', data?: object, token?: string): Promise<BitLoginChallenge> {
+  const response = await Taro.request({ url: `${__BIT_LOGIN_URL__}${path}`, method, data, header: { 'Content-Type': 'application/json', ...(token ? { 'X-Challenge-Token': token } : {}) } })
+  if (response.statusCode < 200 || response.statusCode >= 300) throw new AppError('BIT_LOGIN', bitLoginMessage(response.data), response.data)
+  return response.data as BitLoginChallenge
+}
+export const bitLoginTransport = {
+  start(username: string, password: string) { return bitLoginRequest('/api/auth/start', 'POST', { username, password, services: ['jwb'], wait_seconds: 1 }) },
+  status(challengeId: string, token: string) { return bitLoginRequest(`/api/auth/${challengeId}`, 'GET', undefined, token) },
+  sms(challengeId: string, token: string, code: string) { return bitLoginRequest(`/api/auth/${challengeId}/sms`, 'POST', { code }, token) }
+}
 
 const MEDIA_KEY = 'media'
 const MEDIA_DB = 'biterstore-taro-media-v1'

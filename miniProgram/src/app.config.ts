@@ -1,7 +1,7 @@
 export default defineAppConfig({
   entryPagePath: 'pages/startup/index',
   pages: [
-    'pages/startup/index', 'pages/welcome/index', 'pages/onboarding/index', 'pages/home/index',
+    'pages/startup/index', 'pages/welcome/index', 'pages/onboarding/index', 'pages/login/index', 'pages/home/index',
     'pages/search/index', 'pages/publish/index', 'pages/messages/index',
     'pages/profile/index', 'pages/listing/detail', 'pages/notification/detail',
     'pages/chat/index', 'pages/favorites/index', 'pages/my-listings/index',

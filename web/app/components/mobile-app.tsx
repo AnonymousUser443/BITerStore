@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CURRENT_USER_ID, notifications, seedBooks } from '../lib/demo-data';
+import { startBitLogin, submitBitLoginSms, type BitLoginChallenge } from '../lib/bit-login';
 import { compressImage, getImages, saveImages } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
@@ -221,7 +222,7 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
   useEffect(() => {
     ['/assets/tobby-guide-search.webp', '/assets/tobby-question.webp', '/assets/tobby-guide-trade.webp'].forEach((src) => { const asset = new window.Image(); asset.src = src; });
   }, []);
-  const complete = () => { demoRepository.completeOnboarding(); navigate('/home'); };
+  const complete = () => { demoRepository.completeOnboarding(); navigate('/login'); };
   const current = steps[step];
   return (
     <section className="phone-shell onboarding-page">
@@ -236,6 +237,35 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
       </div>
     </section>
   );
+}
+
+function LoginPage({ navigate }: { navigate: (to: string) => void }) {
+  const [sid, setSid] = useState('');
+  const [password, setPassword] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [challenge, setChallenge] = useState<BitLoginChallenge>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const finish = () => { demoRepository.markAuthenticated(sid.trim()); setPassword(''); navigate('/home'); };
+  const continueAsGuest = () => { demoRepository.markAuthenticated('guest'); setPassword(''); navigate('/home'); };
+  const login = async () => {
+    if (!/^\d{8,12}$/.test(sid.trim())) return setError('请输入正确的北理工学号');
+    if (!password) return setError('请输入统一身份认证密码');
+    setLoading(true); setError('');
+    try {
+      const result = await startBitLogin(sid.trim(), password);
+      if (result.status === 'waiting_sms') { setPassword(''); setChallenge(result); } else finish();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '统一身份认证失败'); }
+    finally { setLoading(false); }
+  };
+  const verifySms = async () => {
+    if (!challenge || !/^\d{4,8}$/.test(smsCode.trim())) return setError('请输入 4 至 8 位短信验证码');
+    setLoading(true); setError('');
+    try { const result = await submitBitLoginSms(challenge, smsCode.trim()); if (result.status === 'authenticated') finish(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '短信验证失败'); }
+    finally { setLoading(false); }
+  };
+  return <section className="phone-shell login-page"><div className="paper-texture" aria-hidden="true" /><header className="login-brand"><Brand /><span><ShieldCheck /></span></header><div className="login-hero"><Image src="/assets/tobby-hello.webp" alt="Tobby 欢迎北理同学" width={760} height={760} priority /><div><p className="eyebrow">BIT CAMPUS IDENTITY</p><h1>{challenge ? '确认是你本人' : '北理同学，你好'}</h1><p>{challenge ? <>验证码已发送至 <strong>{challenge.masked_phone || '绑定手机'}</strong></> : '使用学校统一身份认证登录，完成校园身份验证。'}</p></div></div><div className="login-card">{challenge ? <><label><span>短信验证码</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ''))} placeholder="请输入验证码" autoFocus /></label><button className="primary-button" disabled={loading} onClick={verifySms}>{loading ? <><RefreshCw className="spin" />正在验证</> : '继续验证'}</button><button className="login-link" disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError(''); }}>返回重新登录</button></> : <><label><span>学号</span><input inputMode="numeric" autoComplete="username" value={sid} onChange={(event) => setSid(event.target.value.replace(/\D/g, ''))} placeholder="请输入北理工学号" autoFocus /></label><label><span>统一身份认证密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login(); }} placeholder="请输入密码" /></label><button className="primary-button" disabled={loading} onClick={login}>{loading ? <><RefreshCw className="spin" />正在安全验证</> : '登录 BITerStore'}</button><div className="guest-divider"><span>或</span></div><button className="secondary-button guest-button" disabled={loading} onClick={continueAsGuest}>游客访问</button><p className="guest-note">先逛逛校园书架，之后可在“我的”页面重新登录。</p></>}{error && <div className="login-error" role="alert"><CircleAlert />{error}</div>}</div><div className="login-security"><ShieldCheck /><p><strong>凭据安全说明</strong><span>密码仅用于本次学校统一身份认证，不会保存在 BITerStore 本地。</span></p></div><button className="login-guide" onClick={() => navigate('/onboarding')}>返回新手指引</button></section>;
 }
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
@@ -346,6 +376,7 @@ function ProfilePage({ navigate, notify }: { navigate: (to: string) => void; not
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
     <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section>
+    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { demoRepository.clearAuthentication(); navigate('/login'); }} danger /></section>
   </AppShell>;
 }
 
@@ -405,10 +436,11 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   }, []);
   const notify = useCallback((text: string) => setToast(text), []);
   if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
-  const effectivePath = path === '/' && demoRepository.isOnboardingComplete() ? '/home' : path;
+  const effectivePath = path === '/' && demoRepository.isOnboardingComplete() ? (demoRepository.getAuthenticatedSid() ? '/home' : '/login') : path;
   let page: React.ReactNode;
   if (effectivePath === '/') page = <WelcomePage navigate={navigate} />;
   else if (effectivePath === '/onboarding') page = <OnboardingPage navigate={navigate} />;
+  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} />;
   else if (effectivePath === '/home') page = <HomePage navigate={navigate} />;
   else if (effectivePath === '/category') page = <CategoryPage navigate={navigate} notify={notify} />;
   else if (effectivePath.startsWith('/books/')) page = <BookDetailPage id={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;

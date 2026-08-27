@@ -14,7 +14,10 @@ export default defineConfig<'webpack5'>(async (merge) => {
     framework: 'react',
     compiler: { type: 'webpack5', prebundle: { exclude: ['lucide-react'] } },
     cache: { enable: true },
-    defineConstants: { __BITERSTORE_E2E__: JSON.stringify(process.env.BITERSTORE_E2E === '1') },
+    defineConstants: {
+      __BITERSTORE_E2E__: JSON.stringify(process.env.BITERSTORE_E2E === '1'),
+      __BIT_LOGIN_URL__: JSON.stringify((process.env.BIT_LOGIN_URL || 'https://login.bit101.flwfdd.xyz').replace(/\/$/, ''))
+    },
     copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
     mini: {
       postcss: { pxtransform: { enable: true, config: {} }, cssModules: { enable: false } },
@@ -30,7 +33,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
       router: {
         mode: 'browser',
         customRoutes: {
-          '/pages/welcome/index': '/welcome', '/pages/onboarding/index': '/onboarding',
+          '/pages/welcome/index': '/welcome', '/pages/onboarding/index': '/onboarding', '/pages/login/index': '/login',
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
           '/pages/messages/index': '/messages', '/pages/notification/detail': '/notifications', '/pages/chat/index': '/chat',

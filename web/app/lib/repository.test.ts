@@ -52,4 +52,11 @@ describe('demoRepository persistence', () => {
     const thread = await demoRepository.getThread('thread-lin');
     expect(thread?.messages.at(-1)?.text).toBe('新的测试消息');
   });
+
+  it('stores only the authenticated student id', () => {
+    demoRepository.markAuthenticated('1120230000');
+    expect(demoRepository.getAuthenticatedSid()).toBe('1120230000');
+    demoRepository.clearAuthentication();
+    expect(demoRepository.getAuthenticatedSid()).toBe('');
+  });
 });

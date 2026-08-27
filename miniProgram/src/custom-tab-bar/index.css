@@ -14,7 +14,7 @@
   box-shadow: 0 10px 28px rgba(64, 67, 53, 0.18);
 }
 
-.custom-tabbar button {
+.custom-tabbar .nav-item {
   position: relative;
   flex: 1;
   height: 54px;
@@ -31,7 +31,7 @@
   overflow: visible;
 }
 
-.custom-tabbar button::after { border: 0; }
+.custom-tabbar .nav-item::after { border: 0; }
 
 .custom-tabbar .nav-icon {
   width: 34px;
@@ -45,22 +45,22 @@
 .custom-tabbar .glyph { font-size: 24px; line-height: 1; }
 .custom-tabbar .nav-label { margin-top: 4px; }
 
-.custom-tabbar button.active {
+.custom-tabbar .nav-item.active {
   color: #4f5940;
   font-weight: 700;
 }
 
-.custom-tabbar button.active .nav-icon {
+.custom-tabbar .nav-item.active .nav-icon {
   background: #eef1e3;
   border: 1px solid #aeb69a;
 }
 
-.custom-tabbar button.publish {
+.custom-tabbar .nav-item.publish {
   color: #ffffff;
   transform: translateY(-6px);
 }
 
-.custom-tabbar button.publish .nav-icon {
+.custom-tabbar .nav-item.publish .nav-icon {
   width: 56px;
   height: 56px;
   margin-bottom: -9px;
@@ -70,5 +70,5 @@
   box-shadow: 0 0 0 1px #d5c7a7, 0 7px 16px rgba(79, 89, 64, 0.24);
 }
 
-.custom-tabbar button.publish .glyph { font-size: 27px; }
-.custom-tabbar button.publish .nav-label { color: #4f5940; font-size: 10px; }
+.custom-tabbar .nav-item.publish .glyph { font-size: 27px; }
+.custom-tabbar .nav-item.publish .nav-label { color: #4f5940; font-size: 10px; }

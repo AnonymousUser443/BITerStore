@@ -1,5 +1,5 @@
-/* Taro compatibility only. Visual values live in golden.css, copied verbatim
- * from web/app/globals.css so the original H5 remains the single design source. */
+/* WeChat compatibility only. Visual values live in golden.css; browser-only
+ * global rules live in h5.css so app.wxss contains no unsupported selectors. */
 :root, page {
   --sage: #6f7956; --olive: #4f5940; --soft-sage: #aeb69a; --cream: #f7f4ea;
   --paper: #fffdf8; --border: #d5c7a7; --text: #303229; --muted: #77766e;
@@ -9,6 +9,7 @@
   font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
 }
 page, #app { min-height: 100%; }
+page, view, text, image, button, input, textarea, picker, scroll-view { box-sizing: border-box; }
 #app { min-height: 100dvh; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); }
 button, input, textarea { font: inherit; }
 button { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; line-height: normal; }
@@ -17,12 +18,42 @@ taro-text-core, taro-button-core { font-size: inherit; line-height: inherit; }
 taro-image-core { display: block; }
 taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !important; transform: none !important; }
 
+/* Native Image counterpart of the Golden Reference paper background. */
+.paper-texture { z-index: 0; width: 100%; height: 100%; }
+
+/* Native node aliases for the Golden Reference login page. */
+.login-brand > text { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: rgba(255,253,248,.72); color: var(--sage); }
+.login-hero > image { width: 42%; height: 190px; margin-left: -12px; object-fit: contain; filter: drop-shadow(0 12px 12px rgba(73,75,57,.12)); }
+.login-hero > view { flex: 1; margin-left: -3px; }
+.login-title { display: block; margin: 4px 0 8px; color: var(--olive); font: 700 27px/1.3 "Noto Serif SC",serif; }
+.login-description { display: block; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.login-field > text { display: block; margin-bottom: 7px; color: #64685c; font-size: 12px; font-weight: 700; }
+.login-field input { box-sizing: border-box; width: 100%; min-height: 50px; padding: 0 14px; border: 1px solid #ddd2ba; border-radius: 14px; background: #fffefa; color: var(--text); }
+.login-security > view > text { display: block; }
+.login-security > view > text:first-child { color: var(--olive); font-size: 11px; font-weight: 700; }
+.login-security > view > text:last-child { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.6; }
+.guest-divider > text { flex: 0 0 auto; }
+.guest-note { display: block; }
+
+/* Native node aliases for the Golden Reference resource bootstrap screen. */
+.boot-screen { background: linear-gradient(155deg, rgba(255,253,248,.96), rgba(240,239,225,.96)); }
+.boot-brand > text { color: #8b8b7f; font-size: 11px; letter-spacing: .08em; }
+.boot-visual > .boot-orbit-dot { position: absolute; width: 10px; height: 10px; top: 16px; left: 50%; border-radius: 50%; background: var(--gold); box-shadow: 128px 132px 0 var(--aqua), -130px 156px 0 rgba(111,121,86,.6); }
+.boot-visual > image { z-index: 2; width: 278px; height: 278px; object-fit: contain; filter: drop-shadow(0 18px 17px rgba(67,70,53,.16)); animation: boot-tobby 2.8s ease-in-out infinite; }
+.boot-kicker { display: block; margin: 0 0 8px; color: var(--gold); font: 700 10px Georgia,serif; letter-spacing: .18em; }
+.boot-title { display: block; margin: 0; color: var(--olive); font: 700 23px/1.48 "Noto Serif SC","Songti SC",serif; white-space: pre-line; }
+.boot-description { display: block; margin-top: 9px; color: var(--muted); font-size: 12px; }
+.boot-progress-value { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--sage), var(--aqua), #e3cf96); transition: width .22s ease; }
+.boot-percent { color: var(--olive); font: 700 12px Georgia,serif; }
+.boot-footnote { position: relative; z-index: 1; margin-top: auto; color: #939185; font-size: 10px; }
+
 /* Taro renders View/Text/Image as custom elements on H5 and native nodes on
  * WeChat. These aliases preserve the original element-based selectors. */
 .brand-mark .brand-leaf { width: 15px; height: 24px; background: var(--olive); border-radius: 3px 8px 3px 4px; transform: skewY(9deg); box-shadow: inset -2px 0 rgba(255,255,255,.3); }
 .brand-mark .brand-leaf + .brand-leaf { transform: scaleX(-1) skewY(9deg); }
 .page-topbar .brand-label { display: inline; }
 .page-title { margin: 0; color: var(--text); font: 700 20px/1.2 "Noto Serif SC","Songti SC",serif; white-space: nowrap; }
+.header-actions { min-width: 76px; justify-content: flex-end; }
 .phone-shell { font-size: 16px; line-height: normal; }
 .header-icon, .leaf-action, .round-button { font-size: 24px; line-height: 1; }
 .search-box > .glyph:first-child, .search-input > .glyph:first-child { font-size: 20px; }
@@ -64,6 +95,7 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .listing-price .price-original { color: #aaa69b; font-size: 9px; text-decoration: line-through; }
 .listing-price .condition { margin-left: auto; padding: 4px 7px; border: 1px solid #d7cfb2; border-radius: 8px; color: #697357; font-size: 9px; }
 .seller-avatar { width: 25px; height: 25px; border: 2px solid var(--paper); border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px var(--border); }
+.seller-rating { margin-left: auto; color: #9b8354; }
 .status-badge, .status-tag { position: absolute; z-index: 2; left: 5px; right: auto; top: 5px; width: auto; padding: 5px 8px; border-radius: 8px; background: rgba(93,110,75,.92); color: white; font-size: 9px; }
 .status-badge.sold, .status-badge.offline, .status-tag.sold, .status-tag.offline { background: rgba(112,108,99,.88); }
 .rank-copy, .rank-price { min-width: 0; }
@@ -135,6 +167,8 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .form-label { display: block; color: #65685e; font-size: 10px; font-weight: 700; }
 .form-field input, .form-field textarea, .select-control { width: 100%; margin-top: 6px; padding: 11px; border: 1px solid #ddd2ba; border-radius: 12px; background: #fffefa; color: var(--text); font-size: 12px; }
 .form-field textarea { min-height: 105px; }
+.preview-listing .book-cover { height: 240px; }
+.notice-copy { min-width: 0; margin-left: 8px; }
 .notice-title { display: block; font: 700 15px "Noto Serif SC",serif; }
 .notice-subtitle { display: block; margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .notice-link { display: block; margin-top: 6px; color: var(--sage); font-size: 10px; font-weight: 700; }
@@ -154,6 +188,7 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .profile-badges > text { font-size: 11px; }
 .profile-campus { display: block; margin: 7px 0 4px; color: #6e735f; font-size: 11px; }
 .profile-bio { display: block; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-settings { align-self: flex-start; flex: 0 0 37px; width: 37px; height: 37px; display: flex; align-items: center; justify-content: center; color: #777a6e; font-size: 20px; }
 .profile-stat-value { color: var(--olive); font: 700 19px Georgia,serif; }
 .profile-stat-label { margin-top: 4px; color: var(--muted); font-size: 11px; }
 .profile-reminder .profile-reminder-image { width: 86px; height: 86px; object-fit: contain; align-self: end; margin-bottom: -10px; }

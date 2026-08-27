@@ -19,4 +19,5 @@ describe('domain', () => {
   it('消息发送后可读取且未读归零', async () => { await demoRepository.sendMessage('thread-lin', '收到'); const thread = await demoRepository.getThread('thread-lin'); expect(thread.messages.at(-1)?.text).toBe('收到'); expect(thread.unread).toBe(0) })
   it('Tobby 规则成文可重放', async () => { const a = await listingAssistant.generate({ course: '线性代数', condition: '九成新' }); const b = await listingAssistant.generate({ course: '线性代数', condition: '九成新' }); expect(a).toEqual(b); expect(a.tags).toContain('线性代数') })
   it('重置仅清理新版命名空间', async () => { await demoRepository.completeOnboarding(); memory.set('legacy:key', true); await demoRepository.resetDemoData(); expect(memory.get('legacy:key')).toBe(true); expect(await demoRepository.isOnboardingComplete()).toBe(false) })
+  it('认证状态只保存学号', async () => { await demoRepository.markAuthenticated('1120230000'); expect(await demoRepository.getAuthenticatedSid()).toBe('1120230000'); await demoRepository.clearAuthentication(); expect(await demoRepository.getAuthenticatedSid()).toBe('') })
 })

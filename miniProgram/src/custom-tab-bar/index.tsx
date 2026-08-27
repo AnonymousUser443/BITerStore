@@ -18,7 +18,7 @@ export default function CustomTabBar() {
   return <View className='custom-tabbar'>{tabs.map(([url, icon, label, key]) => <Button
     id={`e2e-nav-${key}`}
     key={url}
-    className={`${route === url ? 'active' : ''} ${key === 'publish' ? 'publish' : ''}`}
+    className={`nav-item ${route === url ? 'active' : ''} ${key === 'publish' ? 'publish' : ''}`}
     onClick={() => Taro.switchTab({ url })}
   >
     <View className='nav-icon'><Glyph name={icon} /></View>
