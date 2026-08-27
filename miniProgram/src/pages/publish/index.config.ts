@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationStyle: 'custom', usingComponents: { 'custom-tab-bar': '../../custom-tab-bar/index' } })
+export default definePageConfig({ navigationBarTitleText: '发布闲置书籍' })

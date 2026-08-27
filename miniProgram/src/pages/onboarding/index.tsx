@@ -13,7 +13,7 @@ const steps = [
 export default function OnboardingPage() {
   const [index, setIndex] = useState(0)
   const step = steps[index]
-  const complete = async () => { await demoRepository.completeOnboarding(); await navigationAdapter.go('/pages/login/index') }
+  const complete = () => { void demoRepository.completeOnboarding(); void navigationAdapter.go('/pages/login/index') }
   const next = async () => { if (index < steps.length - 1) setIndex(index + 1); else await complete() }
   return <View className='phone-shell onboarding-page'>
     <View className='onboarding-preview'><View className='fake-brand'><Brand /></View><View className='fake-search' /><View className='fake-hero' /><View className='fake-cards'><Text /><Text /><Text /></View><View className='fake-nav' /></View><View className='onboarding-scrim' />

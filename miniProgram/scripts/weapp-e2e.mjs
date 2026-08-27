@@ -1,24 +1,26 @@
 import fs from 'node:fs'
+/* global globalThis */
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import automator from 'miniprogram-automator'
 import { assertLocalPaths, cliPath, commandArgs, root, windowsCliInvocation, wsEndpoint } from './weapp-env.mjs'
 
 const mode = process.argv.includes('--connect') ? 'connect' : 'launch'
+const requestedScenario = process.env.WEAPP_SCENARIO || ''
 const launchWaitMs = Number(process.env.WEAPP_LAUNCH_WAIT_MS || 1200)
 const artifactRoot = path.join(root, 'qa-artifacts', new Date().toISOString().replace(/[:.]/g, '-'))
 fs.mkdirSync(artifactRoot, { recursive: true })
-const consoleEvents = []; const exceptions = []; let app
+const consoleEvents = []; const observedConsoleEvents = []; const exceptions = []; let app
 const namespace = 'biterstore:taro:v1'
 const settledRoutes = new Set()
+const routeTimings = []
+let activeRouteProbe
 const write = (name, value) => fs.writeFileSync(path.join(artifactRoot, name), typeof value === 'string' ? value : JSON.stringify(value, null, 2))
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function required(page, selector) {
   const element = await page.$(selector)
   if (!element) throw new Error(`缺少稳定元素 ${selector} @ ${page.path}`)
-  // Coordinate-based taps can pierce through to WeChat's native custom tab bar.
-  // Triggering the bound tap handler is deterministic and exercises the same code.
-  return new Proxy(element, { get(target, property) { if (property === 'tap') return () => target.trigger('tap'); const value = Reflect.get(target, property); return typeof value === 'function' ? value.bind(target) : value } })
+  return element
 }
 async function shot(name) {
   let lastError
@@ -37,6 +39,7 @@ async function pageAt(pathname, timeout = 15000, expectedQuery = {}) {
       lastRoute = page?.path || ''
       const queryMatches = Object.entries(expectedQuery).every(([key, value]) => String(page?.query?.[key] ?? '') === String(value))
       if (lastRoute === pathname && queryMatches) {
+        if (activeRouteProbe?.pathname === pathname && activeRouteProbe.routeMs === undefined) activeRouteProbe.routeMs = Date.now() - activeRouteProbe.started
         // The automator reports the new route before DevTools emits onRouteDone.
         // Cold page chunks can need about 10 seconds in the simulator, so do not
         // let the next interaction overlap an unfinished route transition.
@@ -73,10 +76,17 @@ async function waitForBootstrap(timeout = 45000) {
   throw new Error(`等待小程序冷启动完成超时，当前路由 ${lastRoute || 'unknown'}`)
 }
 async function tapForRoute(element, pathname) {
-  try { await element.tap() } catch (error) {
+  const started = Date.now()
+  const cold = !settledRoutes.has(pathname)
+  activeRouteProbe = { pathname, started, routeMs: undefined }
+  const tap = Promise.resolve().then(() => element.tap()).catch((error) => {
     if (!String(error?.message || error).includes('rawPath')) throw error
-  }
-  return pageAt(pathname)
+  })
+  const page = await pageAt(pathname)
+  await tap
+  routeTimings.push({ pathname, cold, routeMs: activeRouteProbe.routeMs, stableMs: Date.now() - started })
+  activeRouteProbe = undefined
+  return page
 }
 async function tapForEffect(element) {
   try { await element.tap() } catch (error) {
@@ -94,13 +104,14 @@ async function snapshot(page) {
   try { return { route: page.path, query: page.query, data: await page.data() } } catch { return { route: page.path, query: page.query } }
 }
 async function scenario(name, run) {
+  if (requestedScenario && requestedScenario !== name) return { name, ok: true, skipped: true }
   try {
     await app.callWxMethod('clearStorage')
     await app.callWxMethod('setStorage', { key: `${namespace}:reset-notice`, data: true })
     consoleEvents.length = 0
     exceptions.length = 0
     await run()
-    const consoleErrors = consoleEvents.filter((event) => event?.type === 'error' && event.args?.some((arg) => typeof arg === 'string' ? arg.trim() : arg && Object.keys(arg).length > 0))
+    const consoleErrors = consoleEvents.filter((event) => event?.type === 'error')
     if (exceptions.length || consoleErrors.length) throw new Error(`检测到 ${exceptions.length} 个异常和 ${consoleErrors.length} 个 console error`)
     await shot(`${name}-passed`)
     return { name, ok: true }
@@ -124,9 +135,16 @@ try {
   const describe = (value) => {
     if (!value || typeof value !== 'object') return value
     const properties = Object.fromEntries(Object.getOwnPropertyNames(value).map((key) => [key, value[key]]))
-    return Object.keys(properties).length ? properties : { description: String(value) }
+    if (Object.keys(properties).length) return properties
+    const known = Object.fromEntries(['name', 'message', 'errMsg', 'errno', 'code', 'stack'].flatMap((key) => value[key] === undefined ? [] : [[key, value[key]]]))
+    return Object.keys(known).length ? known : { description: String(value), constructor: value.constructor?.name }
   }
-  app.on('console', (event) => consoleEvents.push({ ...event, args: event.args?.map(describe) })); app.on('exception', (event) => exceptions.push(describe(event)))
+  app.on('console', (event) => {
+    const entry = { ...event, args: event.args?.map(describe), route: 'unknown', time: new Date().toISOString() }
+    consoleEvents.push(entry)
+    observedConsoleEvents.push(entry)
+    void app.currentPage().then((page) => { entry.route = page?.path || 'unknown' }).catch(() => undefined)
+  }); app.on('exception', (event) => exceptions.push(describe(event)))
   await waitForBootstrap()
   const results = []
   results.push(await scenario('onboarding-guest-home', async () => { await app.reLaunch('/pages/welcome/index'); let page = await pageAt('pages/welcome/index'); await sleep(250); page = await tapForRoute(await required(page, '#e2e-welcome-start'), 'pages/onboarding/index'); await shot('visual-onboarding'); for (let i = 0; i < 3; i += 1) { const next = await required(page, '#e2e-onboarding-next'); if (i < 2) { await next.tap(); await sleep(180) } else page = await tapForRoute(next, 'pages/login/index') } page = await recoverBlankPage(page, '#e2e-guest-access', '/pages/login/index'); await shot('visual-login'); page = await tapForRoute(await required(page, '#e2e-guest-access'), 'pages/home/index'); await required(page, '#e2e-home-search-entry'); await shot('visual-home'); if (!await stored('onboarding')) throw new Error('引导完成状态未持久化'); if (await stored('authenticated-sid') !== 'guest') throw new Error('游客状态未持久化') }))
@@ -135,5 +153,7 @@ try {
   results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.switchTab('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(120); await (await required(page, '#e2e-message-image')).tap(); await sleep(120); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
   results.push(await scenario('favorites-profile-replay-reset', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await sleep(200); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(120); await app.navigateTo('/pages/favorites/index'); page = await pageAt('pages/favorites/index'); await required(page, '#e2e-listing-math-7'); await shot('visual-favorites'); await app.switchTab('/pages/profile/index'); page = await pageAt('pages/profile/index'); page = await recoverBlankPage(page, '#e2e-profile-reset', '/pages/profile/index'); await shot('visual-profile'); await tapForEffect(await required(page, '#e2e-profile-reset')); await sleep(900); if ((await stored('favorites'))?.length) throw new Error('重置后收藏数据仍然存在'); await app.navigateTo('/pages/my-listings/index'); page = await pageAt('pages/my-listings/index'); await required(page, '#e2e-my-listings-empty'); await shot('visual-my-listings-empty'); await app.reLaunch('/pages/onboarding/index'); page = await pageAt('pages/onboarding/index'); await required(page, '#e2e-onboarding-next') }))
   results.push(await scenario('all-states', async () => { for (const state of ['loading', 'searching', 'empty', 'no-results', 'network', 'maintenance', 'unavailable', 'success', 'not-found']) { await app.reLaunch(`/pages/states/index?type=${state}`); const page = await pageAt('pages/states/index', 15000, { type: state }); await required(page, `#e2e-state-${state}`) } }))
-  write('result.json', { mode, results }); const ok = results.every((x) => x.ok); console.log(JSON.stringify({ ok, artifactRoot, results }, null, 2)); if (!ok) process.exitCode = 1
+  const navigationMetrics = await app.evaluate(() => globalThis.__BITERSTORE_NAV_METRICS__ || []).catch(() => [])
+  const consoleSummary = { total: observedConsoleEvents.length, errors: observedConsoleEvents.filter((event) => event.type === 'error').length }
+  write('result.json', { mode, results, routeTimings, navigationMetrics, consoleSummary }); const ok = results.every((x) => x.ok); console.log(JSON.stringify({ ok, artifactRoot, results, routeTimings, navigationMetrics, consoleSummary }, null, 2)); if (!ok) process.exitCode = 1
 } catch (error) { write('launch-failure.json', { error: error.stack || error.message }); console.error(JSON.stringify({ ok: false, artifactRoot, error: error.message }, null, 2)); process.exitCode = 1 } finally { if (app) { try { if (mode === 'launch') await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }

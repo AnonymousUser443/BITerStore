@@ -5,25 +5,65 @@ import type { BitLoginChallenge } from '@/domain/bit-login'
 
 export const STORAGE_NAMESPACE = 'biterstore:taro:v1'
 const keyOf = (key: string) => `${STORAGE_NAMESPACE}:${key}`
-function isMissingStorageValue(cause: unknown) {
-  if (typeof cause === 'string') return /not found|data not found/i.test(cause)
-  if (cause && typeof cause === 'object') {
-    const message = 'errMsg' in cause ? String(cause.errMsg) : 'message' in cause ? String(cause.message) : ''
-    return /not found|data not found/i.test(message)
-  }
-  return false
-}
 export interface StorageAdapter { get<T>(key: string, fallback: T): Promise<T>; set<T>(key: string, value: T): Promise<void>; remove(key: string): Promise<void>; clearNamespace(): Promise<void> }
 export const storageAdapter: StorageAdapter = {
-  async get(key, fallback) { try { const value = await Taro.getStorage({ key: keyOf(key) }); return (value.data ?? fallback) as typeof fallback } catch (cause) { if (isMissingStorageValue(cause)) return fallback; throw new AppError('STORAGE_READ', `读取 ${key} 失败`, cause) } },
-  async set(key, value) { try { await Taro.setStorage({ key: keyOf(key), data: value }) } catch (cause) { throw new AppError('STORAGE_WRITE', `保存 ${key} 失败`, cause) } },
-  async remove(key) { try { await Taro.removeStorage({ key: keyOf(key) }) } catch { /* removing a missing key is idempotent */ } },
-  async clearNamespace() { const info = await Taro.getStorageInfo() as unknown as { keys: string[] }; await Promise.all(info.keys.filter((key) => key.startsWith(`${STORAGE_NAMESPACE}:`)).map((key) => Taro.removeStorage({ key }))) }
+  async get(key, fallback) {
+    try {
+      const value = Taro.getStorageSync(keyOf(key))
+      return (value === '' || value === undefined ? fallback : value) as typeof fallback
+    } catch (cause) { throw new AppError('STORAGE_READ', `读取 ${key} 失败`, cause) }
+  },
+  async set(key, value) { try { Taro.setStorageSync(keyOf(key), value) } catch (cause) { throw new AppError('STORAGE_WRITE', `保存 ${key} 失败`, cause) } },
+  async remove(key) { try { Taro.removeStorageSync(keyOf(key)) } catch { /* removing a missing key is idempotent */ } },
+  async clearNamespace() {
+    const info = Taro.getStorageInfoSync() as unknown as { keys: string[] }
+    info.keys.filter((key) => key.startsWith(`${STORAGE_NAMESPACE}:`)).forEach((key) => Taro.removeStorageSync(key))
+  }
 }
 
 export interface NavigationAdapter { go(url: string): Promise<void>; switchTab(url: string): Promise<void>; back(): Promise<void>; currentRoute(): string }
+type NavigationProbeGlobal = typeof globalThis & {
+  __BITERSTORE_NAV_PROBE__?: { target: string; startedAt: number; rendered?: boolean }
+  __BITERSTORE_NAV_METRICS__?: Array<{ target: string; phase: 'render' | 'api'; durationMs: number }>
+}
+let navigationPending = false
+function beginNavigation(url: string) {
+  const target = url.split('?')[0]
+  const hasNativeBar = !['/pages/startup/index', '/pages/welcome/index', '/pages/onboarding/index', '/pages/login/index', '/pages/states/index'].includes(target)
+  if (process.env.TARO_ENV === 'weapp' && hasNativeBar) {
+    navigationPending = true
+    void Taro.showNavigationBarLoading()
+    void Taro.showLoading({ title: '加载中', mask: false })
+  }
+  if (!__BITERSTORE_E2E__) return
+  const state = globalThis as NavigationProbeGlobal
+  state.__BITERSTORE_NAV_PROBE__ = { target: url.split('?')[0].replace(/^\//, ''), startedAt: Date.now() }
+}
+export function markNavigationReady() {
+  if (process.env.TARO_ENV === 'weapp' && navigationPending) {
+    navigationPending = false
+    void Taro.hideNavigationBarLoading()
+    void Taro.hideLoading()
+  }
+  if (!__BITERSTORE_E2E__) return
+  const state = globalThis as NavigationProbeGlobal
+  const probe = state.__BITERSTORE_NAV_PROBE__
+  if (!probe || probe.rendered) return
+  probe.rendered = true
+  const metric = { target: probe.target, phase: 'render' as const, durationMs: Date.now() - probe.startedAt }
+  state.__BITERSTORE_NAV_METRICS__ = [...(state.__BITERSTORE_NAV_METRICS__ || []), metric]
+}
+export function beginNavigationFeedback(url: string) { beginNavigation(url) }
+function markNavigationApiReady(url: string, startedAt: number) {
+  if (!__BITERSTORE_E2E__) return
+  const state = globalThis as NavigationProbeGlobal
+  const metric = { target: url.split('?')[0].replace(/^\//, ''), phase: 'api' as const, durationMs: Date.now() - startedAt }
+  state.__BITERSTORE_NAV_METRICS__ = [...(state.__BITERSTORE_NAV_METRICS__ || []), metric]
+  delete state.__BITERSTORE_NAV_PROBE__
+}
 export const navigationAdapter: NavigationAdapter = {
-  async go(url) { await Taro.navigateTo({ url }) }, async switchTab(url) { await Taro.switchTab({ url }) },
+  async go(url) { const startedAt = Date.now(); beginNavigation(url); await Taro.navigateTo({ url }); markNavigationApiReady(url, startedAt) },
+  async switchTab(url) { const startedAt = Date.now(); beginNavigation(url); await Taro.switchTab({ url }); markNavigationApiReady(url, startedAt) },
   async back() { await Taro.navigateBack() }, currentRoute() { return Taro.getCurrentInstance().router?.path || '' }
 }
 export interface FeedbackAdapter { toast(message: string): Promise<void>; confirm(title: string, content: string): Promise<boolean> }
@@ -115,13 +155,6 @@ export const mediaAdapter: MediaAdapter = {
 export interface CacheAdapter { prepare(version: string): Promise<boolean> }
 export const cacheAdapter: CacheAdapter = { async prepare(version) { const current = await storageAdapter.get('asset-version', ''); if (current === version) return false; await storageAdapter.set('asset-version', version); return true } }
 export const ASSET_VERSION = '2026.08.27.1'
-const criticalAssets = [
-  '/assets/paper-bg.webp',
-  '/assets/tobby-master-transparent.webp',
-  '/assets/tobby-hello.webp',
-  '/assets/tobby-search.webp',
-  '/assets/tobby-guide-publish.webp'
-] as const
 
 export function isAssetBundleReady() {
   try { return Taro.getStorageSync(keyOf('asset-version')) === ASSET_VERSION } catch { return false }
@@ -129,11 +162,10 @@ export function isAssetBundleReady() {
 
 export async function prepareAssetBundle(onProgress?: (progress: number) => void) {
   if (isAssetBundleReady()) { onProgress?.(100); return false }
-  onProgress?.(6)
-  for (let index = 0; index < criticalAssets.length; index += 1) {
-    await Taro.getImageInfo({ src: criticalAssets[index] }).catch(() => undefined)
-    onProgress?.(Math.round(12 + ((index + 1) / criticalAssets.length) * 80))
-  }
+  // WeApp assets are already part of the local package. Calling getImageInfo
+  // for each one adds five JSBridge round trips and emits console errors in
+  // DevTools without warming anything that page rendering can reuse.
+  onProgress?.(92)
   await storageAdapter.set('asset-version', ASSET_VERSION)
   onProgress?.(100)
   return true

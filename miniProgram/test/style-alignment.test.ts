@@ -22,7 +22,7 @@ describe('Golden Reference style alignment', () => {
   })
 
   it('所有原生页面静态类名都有样式或是明确的结构标记', () => {
-    const css = ['src/golden.css', 'src/app.css', 'src/custom-tab-bar/index.css'].map(read).join('\n')
+    const css = ['src/golden.css', 'src/app.css'].map(read).join('\n')
     const structuralMarkers = new Set(['h5-navigation', 'search-page'])
     const used = new Set<string>()
     for (const file of filesBelow(source, '.tsx')) {
@@ -40,11 +40,43 @@ describe('Golden Reference style alignment', () => {
     expect(wxss).not.toMatch(/[>+~]\s*:(?:first|last|nth|not)/)
   })
 
-  it('自定义 tabBar 的组件样式只用 class 选择器', () => {
-    const css = read('src/custom-tab-bar/index.css')
-    const withoutColors = css.replace(/#[0-9a-fA-F]{3,8}\b/g, '')
-    expect(css).not.toMatch(/\.custom-tabbar\s+(?:button|view|text|image)\b/)
-    expect(withoutColors).not.toMatch(/#[a-zA-Z_-]|\[[^\]]+\]/)
-    expect(css).toContain('.custom-tabbar .nav-item')
+  it('微信端使用原生 tabBar，页面主体继续复用 Golden Reference', () => {
+    const appConfig = read('src/app.config.ts')
+    expect(appConfig).not.toContain('custom: true')
+    expect(appConfig).not.toContain("window: { navigationStyle: 'custom'")
+    expect(appConfig).toContain("navigationBarBackgroundColor: '#fffdf8'")
+    expect(appConfig).toContain("backgroundColor: '#fffdf7'")
+    expect(appConfig).toContain("selectedColor: '#4f5940'")
+    expect(appConfig.match(/iconPath:/g)).toHaveLength(5)
+    expect(appConfig.match(/selectedIconPath:/g)).toHaveLength(5)
+    expect(filesBelow(path.join(source, 'pages'), '.config.ts').map((file) => fs.readFileSync(file, 'utf8')).join('\n')).not.toContain('custom-tab-bar')
+  })
+
+  it('微信页面使用原生居中标题，H5 底栏保留 Golden Reference 结构', () => {
+    const adapter = read('src/app.css')
+    const ui = read('src/components/ui.tsx')
+    expect(adapter).toContain('.page-title { grid-column: 2; justify-self: center;')
+    expect(adapter).toContain('.native-chrome .content-scroll')
+    expect(ui).toContain("['search', '分类', 'grid']")
+    expect(ui).toContain("process.env.TARO_ENV !== 'h5'")
+    expect(ui).toContain("process.env.TARO_ENV === 'weapp'")
+  })
+
+  it('injects the ignored local AppID into every WeApp build without committing it', () => {
+    const packageJson = read('package.json')
+    const syncScript = read('scripts/sync-weapp-project-config.mjs')
+    expect(packageJson.match(/node scripts\/sync-weapp-project-config\.mjs/g)).toHaveLength(2)
+    expect(syncScript).toContain('project.private.config.json')
+    expect(syncScript).toContain("dist', 'project.config.json")
+    expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
+  })
+
+  it('gives native navigation immediate feedback and keeps the card detail action wired', () => {
+    const platform = read('src/platform/index.ts')
+    const ui = read('src/components/ui.tsx')
+    expect(platform).toContain("Taro.showLoading({ title: '加载中', mask: false })")
+    expect(platform).toContain('Taro.hideLoading()')
+    expect(ui).toContain("onClick={href ? () => { void navigationAdapter.go(href) } : onTap}")
+    expect(ui.match(/beginNavigationFeedback\(href\)/g)).toHaveLength(3)
   })
 })
