@@ -1,38 +1,21 @@
 export default defineAppConfig({
+  entryPagePath: 'pages/welcome/index',
   pages: [
-    'pages/welcome/index',
-    'pages/onboarding/index',
-    'pages/home/index',
-    'pages/search/index',
-    'pages/book-detail/index',
-    'pages/publish/index',
-    'pages/messages/index',
-    'pages/notification-detail/index',
-    'pages/chat/index',
-    'pages/profile/index',
-    'pages/favorites/index',
-    'pages/my-listings/index',
-    'pages/states/index',
-    'pages/not-found/index',
+    'pages/welcome/index', 'pages/onboarding/index', 'pages/home/index',
+    'pages/search/index', 'pages/publish/index', 'pages/messages/index',
+    'pages/profile/index', 'pages/listing/detail', 'pages/notification/detail',
+    'pages/chat/index', 'pages/favorites/index', 'pages/my-listings/index',
+    'pages/states/index'
   ],
-  window: {
-    navigationStyle: 'custom',
-    backgroundColor: '#F7F4EA',
-    backgroundTextStyle: 'dark',
-  },
+  window: { navigationStyle: 'custom', backgroundColor: '#f7f4ea', backgroundTextStyle: 'dark' },
   tabBar: {
-    custom: true,
-    color: '#77766E',
-    selectedColor: '#4F5940',
-    backgroundColor: '#FFFDF8',
-    borderStyle: 'white',
+    custom: true, color: '#7f846f', selectedColor: '#4f5940', backgroundColor: '#fffdf7',
     list: [
       { pagePath: 'pages/home/index', text: '首页' },
-      { pagePath: 'pages/search/index', text: '搜索' },
+      { pagePath: 'pages/search/index', text: '分类' },
       { pagePath: 'pages/publish/index', text: '发布' },
       { pagePath: 'pages/messages/index', text: '消息' },
-      { pagePath: 'pages/profile/index', text: '我的' },
-    ],
-  },
-  lazyCodeLoading: 'requiredComponents',
+      { pagePath: 'pages/profile/index', text: '我的' }
+    ]
+  }
 })

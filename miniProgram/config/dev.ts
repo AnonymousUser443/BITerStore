@@ -1,8 +1,10 @@
-import type { UserConfigExport } from '@tarojs/cli'
+import type { UserConfigExport } from "@tarojs/cli"
 
 export default {
-  env: { NODE_ENV: '"development"' },
-  defineConstants: {},
+   logger: {
+    quiet: false,
+    stats: true
+  },
   mini: {},
-  h5: {},
+  h5: {}
 } satisfies UserConfigExport<'webpack5'>

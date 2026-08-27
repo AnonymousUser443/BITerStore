@@ -13,13 +13,17 @@ coverage/
 .env
 .env.*
 !.env.example
-!miniProgram/.env.weapp.example
 project.private.config.json
+**/project.private.config.json
+!miniProgram/.env.example
 
-# Local WeChat DevTools automation artifacts
+# WeChat automation local state and evidence
 qa-screenshots/weapp-actual/
 qa-screenshots/weapp-logs/
-miniProgram/automation-artifacts/
+qa-artifacts/
+**/qa-artifacts/
+weapp-automation.log
+**/weapp-automation.log
 
 # Taro/SWC compiler cache (platform-specific binaries)
 miniProgram/.swc/
@@ -42,6 +46,3 @@ ehthumbs.db
 *.log
 *.tmp
 tmp/
-
-# Superseded local dependency bootstrap (the formal client lives in miniProgram/)
-taro/

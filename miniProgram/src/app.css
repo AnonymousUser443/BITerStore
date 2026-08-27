@@ -1,0 +1,221 @@
+/* Taro compatibility only. Visual values live in golden.css, copied verbatim
+ * from web/app/globals.css so the original H5 remains the single design source. */
+:root, page {
+  --sage: #6f7956; --olive: #4f5940; --soft-sage: #aeb69a; --cream: #f7f4ea;
+  --paper: #fffdf8; --border: #d5c7a7; --text: #303229; --muted: #77766e;
+  --price: #c56e3b; --gold: #c8ae72; --aqua: #78d8c6;
+  --shadow: 0 14px 34px rgba(76,73,54,.11);
+  color: var(--text); background: #deddd6;
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+page, #app { min-height: 100%; }
+#app { min-height: 100dvh; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); }
+button, input, textarea { font: inherit; }
+button { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; line-height: normal; }
+button::after { border: 0; }
+taro-text-core, taro-button-core { font-size: inherit; line-height: inherit; }
+taro-image-core { display: block; }
+taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !important; transform: none !important; }
+
+/* Taro renders View/Text/Image as custom elements on H5 and native nodes on
+ * WeChat. These aliases preserve the original element-based selectors. */
+.brand-mark .brand-leaf { width: 15px; height: 24px; background: var(--olive); border-radius: 3px 8px 3px 4px; transform: skewY(9deg); box-shadow: inset -2px 0 rgba(255,255,255,.3); }
+.brand-mark .brand-leaf + .brand-leaf { transform: scaleX(-1) skewY(9deg); }
+.page-topbar .brand-label { display: inline; }
+.page-title { margin: 0; color: var(--text); font: 700 20px/1.2 "Noto Serif SC","Songti SC",serif; white-space: nowrap; }
+.phone-shell { font-size: 16px; line-height: normal; }
+.header-icon, .leaf-action, .round-button { font-size: 24px; line-height: 1; }
+.search-box > .glyph:first-child, .search-input > .glyph:first-child { font-size: 20px; }
+.notice-icon { font-size: 22px; }
+.detail-title > button { font-size: 24px; }
+.primary-button, .secondary-button { font-size: 16px; line-height: 1; }
+.avatar-image { width: 100%; height: 100%; object-fit: cover; }
+.avatar-image > img { width: 100%; height: 100%; object-fit: cover; }
+.image-avatar .avatar-image { width: 126%; height: 126%; object-fit: contain; transform: translate(-10%,7%); }
+.image-avatar .avatar-image > img { object-fit: contain; }
+.avatar-initial { font-size: 14px; }
+.hero-title { display: block; margin: 0; color: var(--olive); font: 700 27px/1.28 "Noto Serif SC","Songti SC",serif; letter-spacing: .03em; white-space: pre-line; }
+.hero-description { display: block; margin: 9px 0 15px; color: #6e7365; font-size: 13.5px; line-height: 1.6; }
+.home-page .search-box { width: fit-content; max-width: 100%; }
+.category-chips .chip { height: 40px; min-height: 40px; display: inline-flex; align-items: center; margin: 0; padding-top: 0; padding-bottom: 0; }
+.search-placeholder { color: #8b887e; font-size: 16px; }
+.search-box > .glyph:last-child { margin-left: auto; font-size: 18px; }
+.section-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: transparent; color: #8a877c; font-size: 12px; }
+.section-heading-text { display: block; color: var(--olive); font: 700 18px/1.2 "Noto Serif SC","Songti SC",serif; }
+.section-heading-text::before { content: '❧'; margin-right: 7px; color: var(--sage); }
+.section-note { color: #8a877c; font-size: 12px; }
+.tile-title { min-height: 38px; display: block; margin: 9px 1px 1px; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.tile-author { display: block; margin: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.book-meta .book-price { color: var(--price); font: 700 15px Georgia,serif; }
+.book-meta .book-campus { padding: 3px 6px; border-radius: 6px; background: #eef0e2; color: #687159; font-size: 11px; }
+.cover-title { position: relative; z-index: 1; font: 700 15px/1.35 "Noto Serif SC",serif; }
+.cover-caption { margin-top: 9px; font-size: 7px; letter-spacing: .08em; opacity: .75; }
+.book-cover.cream, .book-cover.paper { background: linear-gradient(145deg,#f3eee0,#c8ceb7); }
+.book-cover.warm { color: #504038; background: linear-gradient(145deg,#e7c9b8,#f3e4d8); }
+.book-cover.mint { background: linear-gradient(145deg,#bad0bc,#e5eee0); }
+.book-cover.night, .book-cover.ink { color: #eef0e5; background: linear-gradient(145deg,#596252,#9aa28a); }
+.book-cover.sand { background: linear-gradient(145deg,#d8c59d,#f1e6ce); }
+.book-cover.clay { color: #f8eee7; background: linear-gradient(145deg,#9b6655,#d7a78d); }
+.book-cover.earth { color: #f0eee5; background: linear-gradient(145deg,#655f50,#a49b82); }
+.listing-heading .listing-title { min-width: 0; flex: 1; display: block; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.more-glyph { flex: 0 0 auto; width: 20px; font-size: 18px; }
+.listing-author { display: block; margin: 4px 0 9px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.listing-price .price-current { color: var(--olive); font: 700 20px Georgia,serif; }
+.listing-price .price-original { color: #aaa69b; font-size: 9px; text-decoration: line-through; }
+.listing-price .condition { margin-left: auto; padding: 4px 7px; border: 1px solid #d7cfb2; border-radius: 8px; color: #697357; font-size: 9px; }
+.seller-avatar { width: 25px; height: 25px; border: 2px solid var(--paper); border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px var(--border); }
+.status-badge, .status-tag { position: absolute; z-index: 2; left: 5px; right: auto; top: 5px; width: auto; padding: 5px 8px; border-radius: 8px; background: rgba(93,110,75,.92); color: white; font-size: 9px; }
+.status-badge.sold, .status-badge.offline, .status-tag.sold, .status-tag.offline { background: rgba(112,108,99,.88); }
+.rank-copy, .rank-price { min-width: 0; }
+.rank-copy text, .rank-price text { display: block; }
+.rank-copy text:first-child { overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.rank-copy text:nth-child(2) { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.rank-copy text:last-child { margin-top: 5px; color: #7c826e; font-size: 9px; }
+.rank-price { text-align: right; }
+.rank-price text:first-child { color: var(--price); font: 700 13px Georgia,serif; }
+.rank-price text:last-child { margin-top: 5px; color: #8b8c80; font-size: 8px; }
+
+.welcome-greeting { display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 18px; background: rgba(255,253,248,.76); color: #656a59; font-size: 12px; }
+.welcome-title { display: block; margin: 13px 0 10px; color: #4e5248; font: 700 36px/1.25 "Noto Serif SC","Songti SC",serif; white-space: pre-line; }
+.welcome-accent { color: var(--sage); }
+.welcome-description { display: block; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.85; white-space: pre-line; }
+.welcome-page .welcome-tobby { width: 68%; height: 265px; object-fit: contain; }
+.welcome-steps .step-number { color: #a89b7b; font: 700 10px Georgia,serif; }
+.welcome-step { min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+.welcome-step:not(:last-child)::after { content: '→'; position: absolute; right: -7px; top: 12px; color: #c9bc9c; }
+.welcome-step > .glyph { width: 25px; height: 25px; margin: 6px 0; color: var(--sage); font-size: 22px; }
+.welcome-steps .step-title { font: 700 14px "Noto Serif SC",serif; }
+.welcome-steps .step-copy { margin-top: 3px; color: var(--muted); font-size: 8px; white-space: nowrap; }
+.welcome-footnote { margin: 7px 0 0; text-align: center; color: #8f8c80; font-size: 10px; }
+.welcome-actions .primary-button, .welcome-actions .secondary-button { min-height: 48px; font-size: 16px; line-height: 1; }
+.onboarding-tobby { width: 80%; height: 340px; flex: 0 1 340px; min-height: 0; margin: auto auto -17px; object-fit: contain; filter: drop-shadow(0 20px 18px rgba(0,0,0,.2)); }
+.onboarding-tobby > img { object-fit: contain; }
+.onboarding-heading > text { font: 700 24px "Noto Serif SC",serif; }
+.onboarding-heading > button { min-height: 42px; padding: 0 15px; font-size: 14px; }
+.guide-step { color: var(--gold); font: 700 10px Georgia,serif; letter-spacing: .16em; }
+.guide-title { display: block; margin: 7px 0; color: var(--olive); font: 700 24px "Noto Serif SC",serif; }
+.guide-copy { display: block; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.guide-pills > text { display: flex; align-items: center; gap: 3px; width: auto; padding: 5px 8px; border-radius: 999px; background: #eef0e2; color: #677056; font-size: 9px; line-height: 1; }
+.guide-pills .glyph { font-size: 12px; }
+.step-dots > text { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.45); }
+.step-dots > text.active { width: 22px; border-radius: 8px; background: white; }
+.search-tobby-hint .search-hint-image { width: 65px; height: 58px; object-fit: contain; filter: drop-shadow(0 5px 5px rgba(69,71,53,.1)); }
+.search-hint-copy { position: relative; max-width: 205px; padding: 8px 11px; border: 1px solid rgba(213,199,167,.78); border-radius: 14px 14px 14px 5px; background: rgba(255,253,248,.9); color: #74766a; font-size: 10.5px; line-height: 1.5; box-shadow: 0 5px 14px rgba(82,78,59,.05); }
+.search-hint-copy text { display: block; }
+.search-hint-copy text:first-child { color: var(--olive); font-size: 11.5px; font-weight: 700; }
+.results-heading > text:first-child { font: 700 17px "Noto Serif SC",serif; }
+.results-heading > text:first-child text { color: var(--price); }
+.results-heading > text:last-child { color: var(--muted); font-size: 9px; }
+.detail-heading { display: block; margin: 7px 0 3px; font: 700 21px/1.35 "Noto Serif SC",serif; }
+.detail-author { display: block; margin: 0; color: var(--muted); font-size: 12px; }
+.detail-current-price { color: var(--price); font: 700 27px Georgia,serif; }
+.detail-original-price { color: #a6a195; font-size: 12px; text-decoration: line-through; }
+.detail-condition { margin-left: auto; padding: 5px 8px; border: 1px solid #d8cfb5; border-radius: 8px; color: #657054; font-size: 10.5px; }
+.detail-facts > text { display: flex; align-items: center; gap: 5px; color: #6d7065; font-size: 10.5px; }
+.detail-facts > text:last-child { grid-column: 1 / -1; }
+.description-title { display: block; margin: 0; font: 700 15px "Noto Serif SC",serif; }
+.description-copy { display: block; margin: 1em 0; color: #62645c; font-size: 12px; line-height: 1.8; }
+.description-block view > text { padding: 5px 8px; border-radius: 999px; background: #f0eee3; color: #707364; font-size: 10.5px; }
+.seller-name { display: block; font-size: 14px; font-weight: 700; }
+.seller-campus { display: block; margin: 4px 0; color: var(--muted); font-size: 10.5px; }
+.seller-response { display: block; color: #79806b; font-size: 10px; }
+.stepper-item { position: relative; display: flex; flex-direction: column; align-items: center; color: #aaa69c; }
+.stepper-number { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #d9cfb9; border-radius: 50%; background: #fffdf8; font: 700 11px Georgia,serif; }
+.stepper .stepper-label { width: auto; height: auto; margin: 5px 0 0; padding: 0; border: 0; border-radius: 0; background: transparent; font: 400 10px/1.2 "Noto Sans SC","Microsoft YaHei",sans-serif; }
+.stepper .stepper-line { position: absolute; width: calc(100% - 38px); height: 1px; left: calc(50% + 19px); top: 14px; padding: 0; border: 0; border-radius: 0; background: #d9cfb9; }
+.stepper-item.active { color: var(--olive); }
+.stepper-item.active .stepper-number { border-color: var(--sage); background: var(--sage); color: white; box-shadow: 0 4px 10px rgba(79,89,64,.18),inset 0 0 0 2px rgba(255,255,255,.2); }
+.add-image .glyph { font-size: 25px; }
+.add-image-title { display: block; margin-top: 7px; font-size: 11px; font-weight: 700; }
+.add-image-copy { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+.tobby-tip image { width: 94px; height: 94px; object-fit: contain; }
+.tobby-tip > text { padding: 8px 11px; border: 1px solid var(--border); border-radius: 14px; background: #fffdf8; color: #6d705f; font-size: 9px; }
+.ai-title { display: block; color: var(--olive); font: 700 13px "Noto Serif SC",serif; }
+.ai-copy { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+.form-label { display: block; color: #65685e; font-size: 10px; font-weight: 700; }
+.form-field input, .form-field textarea, .select-control { width: 100%; margin-top: 6px; padding: 11px; border: 1px solid #ddd2ba; border-radius: 12px; background: #fffefa; color: var(--text); font-size: 12px; }
+.form-field textarea { min-height: 105px; }
+.notice-title { display: block; font: 700 15px "Noto Serif SC",serif; }
+.notice-subtitle { display: block; margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.notice-link { display: block; margin-top: 6px; color: var(--sage); font-size: 10px; font-weight: 700; }
+.notice-count { position: absolute; right: 8px; top: 8px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #e69a4f; color: white; font-size: 9px; }
+.message-title { margin: 18px 2px 9px; }
+.all-read { display: flex; align-items: center; gap: 3px; color: #838479; font-size: 9px; }
+.thread-copy { min-width: 0; text-align: left; }
+.thread-name { display: block; font-size: 13px; font-weight: 700; }
+.thread-campus { margin-left: 5px; color: #7b806e; font-size: 8px; font-weight: 400; }
+.thread-message { display: block; margin-top: 6px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.thread-time { align-self: start; color: #9b988e; font-size: 8px; }
+.thread-unread { position: absolute; right: 10px; bottom: 10px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #e5924b; color: white; font-size: 10px; }
+.tobby-banner .tobby-banner-image { position: absolute; width: 96px; height: 96px; object-fit: contain; left: -4px; bottom: -3px; }
+.tobby-banner-copy { color: #6b6f61; font-size: 10.5px; line-height: 1.6; }
+.tobby-banner-copy > text { color: var(--olive); font-weight: 700; }
+.profile-name { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font: 700 20px "Noto Serif SC",serif; }
+.profile-badges > text { font-size: 11px; }
+.profile-campus { display: block; margin: 7px 0 4px; color: #6e735f; font-size: 11px; }
+.profile-bio { display: block; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-stat-value { color: var(--olive); font: 700 19px Georgia,serif; }
+.profile-stat-label { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.profile-reminder .profile-reminder-image { width: 86px; height: 86px; object-fit: contain; align-self: end; margin-bottom: -10px; }
+.profile-reminder-copy { margin: 0; color: #6f7265; font-size: 11px; line-height: 1.55; }
+.profile-reminder-copy > text { color: var(--olive); font-weight: 700; }
+.menu-title { display: block; margin: 0 0 7px; color: var(--olive); font: 700 14px "Noto Serif SC",serif; }
+.profile-menu .menu-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: #eef0e4; color: var(--sage); }
+.menu-label, .menu-detail { display: block; }
+.menu-label { font-size: 13px; font-weight: 700; }
+.menu-detail { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.profile-menu button.danger .menu-icon { background: #fff0ec; color: #b75f54; }
+.message-content { max-width: 72%; }
+.message-bubble { display: block; margin: 0; padding: 10px 12px; border: 1px solid #ded4be; border-radius: 6px 16px 16px 16px; background: rgba(255,253,248,.91); font-size: 11px; line-height: 1.6; }
+.message-row.mine .message-bubble { border-color: #cbd1b5; border-radius: 16px 6px 16px 16px; background: #e8ecdc; }
+.message-time { display: block; margin-top: 4px; color: #99968d; font-size: 8px; }
+.message-row.mine .message-time { text-align: right; }
+.shared-title, .shared-author, .shared-price { display: block; }
+.shared-title { font-size: 10px; font-weight: 700; }
+.shared-author { margin: 5px 0; color: var(--muted); font-size: 8px; }
+.shared-price { color: var(--price); font: 700 13px Georgia,serif; }
+.inline-state > image, .inline-state > taro-image-core { width: 190px; height: 190px; object-fit: contain; }
+.inline-state > taro-image-core > img { object-fit: contain; }
+.inline-title { display: block; margin-top: -8px; color: var(--olive); font: 700 16px "Noto Serif SC",serif; }
+.inline-copy { display: block; margin: 7px 0 14px; color: var(--muted); font-size: 10px; }
+.state-card-title { position: relative; z-index: 1; font: 700 11px "Noto Serif SC",serif; }
+.full-state .state-image { position: relative; width: 260px; height: 260px; object-fit: contain; filter: drop-shadow(0 18px 18px rgba(70,72,56,.12)); }
+.full-state .state-image > img { object-fit: contain; }
+.state-title { position: relative; display: block; margin: -12px 0 8px; color: var(--olive); font: 700 25px "Noto Serif SC",serif; }
+.state-copy { position: relative; display: block; max-width: 290px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.state-footnote { position: absolute; bottom: 25px; color: #9b978c; font-size: 8px; }
+.notification-kicker { display: block; margin: 0; color: var(--gold); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.notification-title { display: block; margin: 3px 0 4px; color: var(--olive); font: 700 21px "Noto Serif SC",serif; }
+.notification-subtitle { display: block; color: var(--muted); font-size: 12px; }
+.notification-unread { align-self: start; position: relative; z-index: 1; padding: 5px 8px; border-radius: 999px; background: var(--sage); color: white; font-size: 9px; }
+.feed-source { display: block; font-size: 14px; font-weight: 700; }
+.feed-copy { display: block; margin: 5px 0; color: #686b60; font-size: 12px; line-height: 1.6; }
+.feed-time { display: block; color: #96948a; font-size: 10px; }
+
+.glyph { display: inline-flex; align-items: center; justify-content: center; font-family: Georgia,serif; }
+.glyph svg { width: 1em; height: 1em; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.grow { flex: 1; }
+.empty { padding: 36px 18px; text-align: center; color: var(--muted); }
+.inline-toast { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fffdf8; color: var(--olive); font-size: 12px; }
+.modal-mask, .drawer-mask { position: fixed; z-index: 100; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(40,42,36,.45); }
+.modal-card, .filter-drawer { width: min(100%,430px); padding: 22px; border-radius: 24px 24px 0 0; background: var(--paper); box-shadow: 0 -16px 40px rgba(40,42,36,.2); }
+.modal-card > button { width: 100%; margin-top: 16px; }
+.filter-drawer { max-height: 80vh; overflow-y: auto; }
+.sheet-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.menu-row { min-height: 50px; display: flex; align-items: center; border-bottom: 1px dashed #ddd2b9; }
+
+/* Element-selector equivalents required by Taro H5 custom elements. */
+.hero-tobby > img, .search-hint-image > img, .tobby-banner-image > img,
+.profile-reminder-image > img, .state-image > img { object-fit: contain; }
+.state-grid taro-image-core { position: absolute; width: 115px; height: 115px; right: -12px; top: -9px; opacity: .88; }
+.state-grid taro-image-core > img { object-fit: contain; }
+.state-grid .state-card-title { position: relative; z-index: 1; font: 700 12px "Noto Serif SC",serif; }
+.detail-gallery > .book-cover { min-width: 100%; height: 275px; flex: 0 0 100%; }
+.chat-composer { font-size: 16px; }
+.chat-composer .send-button { min-width: 58px; min-height: 42px; padding: 0 13px; border-radius: 13px; background: var(--sage); color: white; font-size: 14px; font-weight: 700; }
+.chat-composer taro-input-core { min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #dfd4bd; border-radius: 13px; background: #fbf9f2; font-size: 12px; }
+.chat-composer taro-input-core input { height: 100%; font-size: 12px; }
+
+@media (max-width: 370px) { .hero-title { font-size: 24px; } }
+@media (min-width: 700px) { #app { padding: 0; } .taro_page { box-sizing: border-box; padding: 16px; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); } .hero-title { font-size: 34px; } .welcome-title { font-size: 44px; } }
+@media (min-width: 1024px) { .taro_page { padding: 24px; place-items: center; } .onboarding-tobby { width: 440px; max-height: 44vh; object-fit: contain; } }

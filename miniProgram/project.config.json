@@ -1,42 +1,15 @@
 {
-  "appid": "touristappid",
-  "compileType": "miniprogram",
-  "projectname": "BITerStore",
   "miniprogramRoot": "dist/",
-  "srcMiniprogramRoot": "dist/",
-  "libVersion": "trial",
-  "packOptions": {
-    "ignore": [],
-    "include": []
-  },
+  "projectname": "BITerStore Taro",
+  "description": "BITerStore",
+  "appid": "touristappid",
   "setting": {
-    "coverView": true,
+    "urlCheck": true,
     "es6": true,
-    "postcss": true,
-    "minified": true,
     "enhance": true,
-    "showShadowRootInWxmlPanel": true,
-    "packNpmRelationList": [],
-    "babelSetting": {
-      "ignore": [],
-      "disablePlugins": [],
-      "outputPath": ""
-    },
-    "uglifyFileName": false,
-    "uploadWithSourceMap": true,
-    "packNpmManually": false,
-    "minifyWXSS": true,
-    "localPlugins": false,
-    "condition": false,
-    "compileWorklet": false,
-    "disableUseStrict": false,
-    "minifyWXML": true,
-    "useCompilerPlugins": false
+    "compileHotReLoad": true,
+    "postcss": true,
+    "minified": false
   },
-  "condition": {},
-  "editorSetting": {
-    "tabIndent": "auto",
-    "tabSize": 2
-  },
-  "simulatorPluginLibVersion": {}
+  "compileType": "miniprogram"
 }

@@ -52,25 +52,55 @@
 - [x] 完成公开前敏感信息审计，并重制含品牌封面、真机画廊、交互/架构图与快速开始的精美 README
 - [x] 在 README 结尾加入 StudentOP Aiden（前端）与 Smal_Young（后端）头像署名
 - [x] 添加标准 Apache License 2.0，并同步 README 许可徽章与说明
+- [x] 调研 BIT101 前端、Go 后端、BIT-Login 及公开 API 的校园认证实现与许可证边界
+- [x] 完成小程序/H5 技术选型、后端架构、认证、治理及 8 周里程碑整体计划（`docs/整体实施计划.md`）
+- [x] 完成早期 Taro 迁移成本验证；该次“停止迁移”结论已被 2026-08-26 的正式双端迁移决策覆盖
+- [x] 创建 `refactor/taro-migration` 并保留 `h5-prototype-v0.1` Golden Reference
+- [x] 建立 Taro 4.2.1 + React 18.3.1 + TypeScript 5.4.5 + Webpack 5 双端工程
+- [x] 建立 Listing 领域模型、DemoRepository 与 Storage/Media/Navigation/Share/Feedback/Cache 适配器
+- [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
+- [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
+- [x] 合并云端 Taro 骨架，收敛并重命名为唯一 `miniProgram/` 客户端，移除临时原生 `miniapp/`
+- [x] 以 `web/app/components/mobile-app.tsx` 和 `web/app/globals.css` 为唯一 Golden Reference；Taro H5 直接使用原组件和原 CSS，微信端只保留必要的平台组件映射，并将空白页/运行时异常纳入 H5 视觉门禁
 
 ## 进行中
 
-- [ ] Taro Phase 1：完成 `miniProgram/` Taro React 双端骨架、品牌 App Shell 与页面路由
-- [ ] Taro Phase 2：迁移 Domain、DemoRepository、Storage/Media/Navigation 等平台适配器
-- [ ] Taro Phase 3：迁移欢迎、引导、首页、搜索和商品详情
-- [ ] Taro Phase 4：迁移图片、草稿、Tobby 一键成文、预览与发布闭环
-- [ ] Taro Phase 5：迁移通知、消息列表、聊天和未读状态
-- [ ] Taro Phase 6：迁移个人中心、收藏、发布管理和演示重置
-- [ ] Taro Phase 7：迁移完整状态页与 404
-- [ ] Taro Phase 8：完成 H5 / 微信小程序视觉、行为、自动化和真机验收
-- [ ] 建立微信开发者工具 CLI + `miniprogram-automator` + 受限 MCP 本地闭环
-- [ ] 建立 Taro H5 所有者私有 Sites 预览，验收后再决定是否替换现网
+### Taro 双端迁移 Phase 0–8
+
+- [ ] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
+- [x] Phase 1：Taro 骨架、双端构建、公共 touristappid 配置和版本锁定
+- [x] Phase 2：Listing Domain、Repository、平台适配器和独立存储命名空间
+- [x] Phase 3：首页、搜索、详情、发布、消息与个人中心核心流程
+- [x] Phase 4：状态页、旧 H5 路由转写和手机/平板/桌面响应式样式
+- [x] Phase 5：doctor、open、connect/launch E2E 和 qa 命令
+- [ ] Phase 6：在微信开发者工具运行核心 E2E，检查 route、结构、异常和截图
+- [ ] Phase 7：已完成 360/390/430/820/1280 精确视口 H5 视觉回归；待至少一台微信真机冒烟
+- [ ] Phase 8：用户确认后创建 owner-only Taro H5 私有预览；不替换正式 H5
+
+### 已知依赖风险
+
+- [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
+- [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
 
 ## 待完成
 
-- [ ] 微信开发者工具中确认账号登录并开启安全设置里的服务端口
-- [ ] 在 `miniProgram/project.private.config.json` 中保留真实 AppID，本文件不入 Git
-- [ ] 合并前完成常见手机尺寸、小程序 Safe Area、键盘、媒体选择与返回栈真机验收
+### 生产化第 0 阶段：立项与关键验证
+
+- [ ] 联系 BIT-Login/BIT101 维护团队，确认许可证或书面自托管许可、注册 JWT 配置和维护责任
+- [ ] 确认微信小程序主体、服务类目、备案 HTTPS 域名和隐私指引要求
+- [ ] 使用现有原型访谈/测试 10–20 名学生，验证找书、发布、联系和安全需求
+- [ ] 冻结 MVP 范围、数据字典、商品状态机、验收指标与团队负责人
+- [x] 完成 Taro React 迁移成本验证并正式重启双端迁移；旧 H5 保留为 Golden Reference
+- [ ] 部署加固后的 BIT-Login 专用实例，只开放认证路由并收紧 CORS、网关与限流
+- [ ] 完成一次不写业务数据库的 challenge → registration JWT → BITerStore 后端验签技术验证
+- [ ] 完成原 H5 在 360–430px 真机上的视觉、分享、图片选择和返回栈验收
+- [ ] 部署原 H5 到正式 HTTPS 域名；若仍需微信小程序入口，再评估合规的 `web-view` 壳与业务域名配置
+
+### 生产化实施（第 0 阶段通过后启动）
+
+- [ ] 初始化小程序客户端、共享 contracts、服务端、管理后台和 CI/CD
+- [ ] 实现微信会话、校园认证、商品、图片、搜索、收藏、聊天、举报和治理闭环
+- [ ] 完成隐私合规、安全测试、备份恢复、封闭灰度和小程序提审
 
 ## 固定要求
 
@@ -81,3 +111,4 @@
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
 - Taro 迁移期间保留现有 `web/`，不得删除、重命名或用 Taro 中间状态覆盖其部署。
 - 微信端禁止自动上传、提审、发布、修改 AppID 或配置 `miniprogram-ci`。
+- 正式双端客户端目录唯一为 `miniProgram/`；不得再次引入并行的 `taro/` 或原生 `miniapp/` 工程。

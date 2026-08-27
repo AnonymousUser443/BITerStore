@@ -1,0 +1,11 @@
+/* Taro's router wrappers sit outside the Golden Reference app. Keep them
+ * layout-neutral so the original H5 DOM and CSS remain authoritative. */
+#app, .taro_router, .taro_page {
+  min-height: 100%;
+  font-size: 16px;
+  line-height: normal;
+}
+
+[hidden] {
+  display: none !important;
+}

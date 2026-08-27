@@ -1,33 +1,7 @@
-import { View } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { useEffect, useState } from 'react'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { Button, Text, View } from '@tarojs/components'
+import { useState } from 'react'
+import './index.css'
 
-import { navItems } from '../components/BottomNav'
-import { Glyph } from '../components/Glyph'
-
-export default function CustomTabBar() {
-  const [active, setActive] = useState(0)
-
-  useEffect(() => {
-    const route = Taro.getCurrentPages().at(-1)?.route
-    const index = navItems.findIndex((item) => item.route.slice(1) === route)
-    if (index >= 0) setActive(index)
-  }, [])
-
-  return (
-    <View className='weapp-tab-shell'>
-      <View className='bottom-nav weapp-bottom-nav'>
-        {navItems.map((item, index) => (
-          <View
-            id={`e2e-nav-${item.key}`}
-            className={`nav-item ${active === index ? 'active' : ''} ${item.primary ? 'publish' : ''}`}
-            onClick={() => Taro.switchTab({ url: item.route })}
-            key={item.key}
-          >
-            <Glyph name={item.glyph} /><View>{item.label}</View>
-          </View>
-        ))}
-      </View>
-    </View>
-  )
-}
+const tabs = [['/pages/home/index', 'home', '首页', 'home'], ['/pages/search/index', 'grid', '分类', 'search'], ['/pages/publish/index', 'send', '发布', 'publish'], ['/pages/messages/index', 'chat', '消息', 'messages'], ['/pages/profile/index', 'user', '我的', 'profile']] as const
+export default function CustomTabBar() { const [route, setRoute] = useState(''); useDidShow(() => setRoute(`/${Taro.getCurrentInstance().router?.path || ''}`)); return <View className='custom-tabbar'>{tabs.map(([url, icon, label, key]) => <Button id={`e2e-nav-${key}`} key={url} className={`${route === url ? 'active' : ''} ${key === 'publish' ? 'publish' : ''}`} onClick={() => Taro.switchTab({ url })}><View className={`nav-icon ${icon}`} /><Text>{label}</Text></Button>)}</View> }
