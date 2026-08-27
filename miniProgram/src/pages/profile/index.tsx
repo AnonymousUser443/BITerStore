@@ -12,7 +12,7 @@ export default function ProfilePage() {
   const [counts, setCounts] = useState([0, 0, 0])
   const load = useCallback(() => Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads()]).then(([profile, favorites, listings, threads]) => { setUser(profile); setCounts([favorites.length, listings.length, threads.length]) }), [])
   useDidShow(() => { void load() })
-  const reset = async () => { if (await feedbackAdapter.confirm('重置演示数据', '将清理 Taro 新版中的收藏、草稿、消息和图片，不影响旧 H5。')) { await demoRepository.resetDemoData(); await feedbackAdapter.toast('演示数据已重置'); await load() } }
+  const reset = async () => { if (__BITERSTORE_E2E__ || await feedbackAdapter.confirm('重置演示数据', '将清理 Taro 新版中的收藏、草稿、消息和图片，不影响旧 H5。')) { await demoRepository.resetDemoData(); await feedbackAdapter.toast('演示数据已重置'); await load() } }
   if (!user) return <AppShell active='profile'><View className='empty'>托比正在准备个人主页…</View></AppShell>
 
   return <AppShell title='我的' active='profile' className='profile-page'>

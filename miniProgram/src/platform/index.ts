@@ -94,4 +94,27 @@ export const mediaAdapter: MediaAdapter = {
 
 export interface CacheAdapter { prepare(version: string): Promise<boolean> }
 export const cacheAdapter: CacheAdapter = { async prepare(version) { const current = await storageAdapter.get('asset-version', ''); if (current === version) return false; await storageAdapter.set('asset-version', version); return true } }
-export async function prepareAssetBundle() { return cacheAdapter.prepare('2026.08.26.1') }
+export const ASSET_VERSION = '2026.08.27.1'
+const criticalAssets = [
+  '/assets/paper-bg.webp',
+  '/assets/tobby-master-transparent.webp',
+  '/assets/tobby-hello.webp',
+  '/assets/tobby-search.webp',
+  '/assets/tobby-guide-publish.webp'
+] as const
+
+export function isAssetBundleReady() {
+  try { return Taro.getStorageSync(keyOf('asset-version')) === ASSET_VERSION } catch { return false }
+}
+
+export async function prepareAssetBundle(onProgress?: (progress: number) => void) {
+  if (isAssetBundleReady()) { onProgress?.(100); return false }
+  onProgress?.(6)
+  for (let index = 0; index < criticalAssets.length; index += 1) {
+    await Taro.getImageInfo({ src: criticalAssets[index] }).catch(() => undefined)
+    onProgress?.(Math.round(12 + ((index + 1) / criticalAssets.length) * 80))
+  }
+  await storageAdapter.set('asset-version', ASSET_VERSION)
+  onProgress?.(100)
+  return true
+}
