@@ -10,12 +10,7 @@ export default function StartupPage() {
   useLoad(() => {
     void (async () => {
       const cached = isAssetBundleReady()
-      if (!cached) {
-        const startedAt = Date.now()
-        await prepareAssetBundle(setProgress)
-        const remaining = 650 - (Date.now() - startedAt)
-        if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
-      }
+      if (!cached) await prepareAssetBundle(setProgress)
       const onboarded = await demoRepository.isOnboardingComplete()
       if (onboarded) await Taro.switchTab({ url: '/pages/home/index' })
       else await Taro.reLaunch({ url: '/pages/welcome/index' })

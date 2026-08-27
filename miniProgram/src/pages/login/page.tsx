@@ -13,8 +13,8 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<BitLoginChallenge>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const finish = async () => { await demoRepository.markAuthenticated(sid.trim()); setPassword(''); await navigationAdapter.switchTab('/pages/home/index') }
-  const continueAsGuest = async () => { await demoRepository.markAuthenticated('guest'); setPassword(''); await navigationAdapter.switchTab('/pages/home/index') }
+  const finish = () => { void demoRepository.markAuthenticated(sid.trim()); setPassword(''); void navigationAdapter.switchTab('/pages/home/index') }
+  const continueAsGuest = () => { void demoRepository.markAuthenticated('guest'); setPassword(''); void navigationAdapter.switchTab('/pages/home/index') }
   const login = async () => {
     if (!/^\d{8,12}$/.test(sid.trim())) return setError('请输入正确的北理工学号')
     if (!password) return setError('请输入统一身份认证密码')

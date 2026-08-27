@@ -9,7 +9,7 @@ import { navigationAdapter } from '@/platform'
 
 export default function ListingDetailPage() {
   const id = Taro.getCurrentInstance().router?.params.id || 'math-7'
-  const [item, setItem] = useState<Listing>()
+  const [item, setItem] = useState<Listing | undefined>(() => demoRepository.peekListing(id))
   const [favorite, setFavorite] = useState(false)
   useEffect(() => { void demoRepository.getListing(id).then(setItem).catch(() => navigationAdapter.go('/pages/states/index?type=not-found')) }, [id])
   if (!item) return <AppShell title='商品详情' back><View className='empty'>正在翻找这本书…</View></AppShell>
