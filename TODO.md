@@ -1,6 +1,6 @@
 # BITerStore 开发进度
 
-最后更新：2026-08-26
+最后更新：2026-08-27
 
 ## 已完成
 
@@ -59,28 +59,36 @@
 - [x] 建立 Taro 4.2.1 + React 18.3.1 + TypeScript 5.4.5 + Webpack 5 双端工程
 - [x] 建立 Listing 领域模型、DemoRepository 与 Storage/Media/Navigation/Share/Feedback/Cache 适配器
 - [x] 迁移欢迎、引导、首页、搜索、详情、发布、消息、聊天、我的、收藏、我的发布和状态页
-- [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
+- [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 16 项客户端单测
 - [x] 合并云端 Taro 骨架，收敛并重命名为唯一 `miniProgram/` 客户端，移除临时原生 `miniapp/`
 - [x] 以 `web/app/components/mobile-app.tsx` 和 `web/app/globals.css` 为唯一 Golden Reference；Taro H5 直接使用原组件和原 CSS，微信端只保留必要的平台组件映射，并将空白页/运行时异常纳入 H5 视觉门禁
+- [x] 修复双端底栏与搜索页标题回退为“分类”的差异，重新统一为“首页 / 搜索 / 发布 / 消息 / 我的”
+- [x] 将 H5 视觉验收改为自带本地 SPA 预览服务，并完成 17 个路由/视口的布局、资源、控制台和运行时异常回归
+- [x] 将 H5 浏览器 profile 与双端 QA 工件移出微信项目监听目录，修复 QA 截图/缓存触发 DevTools 连续重编译和 `appLaunch timeout`
+- [x] 为 Taro H5 图片适配层加入首屏优先级、异步解码与非首屏懒加载，并建立 400 KiB 首屏、384 KiB 单资源、3 MiB 总静态资源性能门槛
+- [x] 完成微信开发者工具 6 条核心流程自动化验收；route、稳定 `e2e-*` 元素、持久化、结构、截图、console 与 exception 全部通过
+- [x] 修复微信独立验收的陈旧通道冲突：`launch` 发现旧通道时使用 CLI `quit → auto` 刷新并等待模拟器，再由官方 `miniprogram-automator.connect` 完成测试并在结束时关闭；`connect` 仅用于人工 watch 会话
+- [x] 重新验证未修改的 `web/` Golden Reference：ESLint、6 项单测与生产构建全部通过
 
 ## 进行中
 
 ### Taro 双端迁移 Phase 0–8
 
-- [ ] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
+- [x] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
 - [x] Phase 1：Taro 骨架、双端构建、公共 touristappid 配置和版本锁定
 - [x] Phase 2：Listing Domain、Repository、平台适配器和独立存储命名空间
 - [x] Phase 3：首页、搜索、详情、发布、消息与个人中心核心流程
 - [x] Phase 4：状态页、旧 H5 路由转写和手机/平板/桌面响应式样式
 - [x] Phase 5：doctor、open、connect/launch E2E 和 qa 命令
-- [ ] Phase 6：在微信开发者工具运行核心 E2E，检查 route、结构、异常和截图
-- [ ] Phase 7：已完成 360/390/430/820/1280 精确视口 H5 视觉回归；待至少一台微信真机冒烟
+- [x] Phase 6：在微信开发者工具完成 6/6 核心 E2E，检查 route、结构、稳定元素、数据变化、异常和截图
+- [ ] Phase 7：已完成 360/390/430/820/1280 共 17 项 H5 精确视口回归及微信模拟器 6/6 功能回归；待至少一台实体微信真机冒烟
 - [ ] Phase 8：用户确认后创建 owner-only Taro H5 私有预览；不替换正式 H5
 
 ### 已知依赖风险
 
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
-- [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
+- [x] 直接复用 Golden Reference 后的 H5 生产入口为 368.3 KiB，已建立可执行的 400 KiB 首屏及 3 MiB 总静态资源门槛；正式上线前仍可继续拆分非首屏组件。
+- [ ] 当前本机为 Node 25.2.1，而仓库锁定并要求 Node 22.13.x；本轮构建和自动化均已通过，但团队日常开发和最终真机验收应切换到锁定版本，避免 `miniprogram-automator` 的非受支持运行时风险。
 
 ## 待完成
 

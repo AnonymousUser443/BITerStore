@@ -1,12 +1,22 @@
 import fs from 'node:fs/promises'
+import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { root } from './weapp-env.mjs'
 
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
-const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
-const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
+const ownsPreview = !process.env.BITERSTORE_H5_URL
+const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.resolve(root, '..', 'qa-artifacts', 'h5-actual')
+const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'biterstore-h5-cdp-'))
+const distDir = path.join(root, 'dist')
+const browserCandidates = [
+  process.env.CHROME_PATH,
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+].filter(Boolean)
 const targets = [
   ['welcome-390', 390, 900, '/'],
   ['onboarding-390', 390, 900, '/onboarding'],
@@ -28,6 +38,52 @@ const targets = [
 ]
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+async function findBrowserExecutable() {
+  for (const candidate of browserCandidates) {
+    try { await fs.access(candidate); return candidate } catch { /* try the next Chromium browser */ }
+  }
+  throw new Error(`未找到 Chrome/Edge；已检查: ${browserCandidates.join(', ')}`)
+}
+const mimeTypes = new Map([
+  ['.css', 'text/css; charset=utf-8'], ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'], ['.json', 'application/json; charset=utf-8'],
+  ['.png', 'image/png'], ['.svg', 'image/svg+xml'], ['.webp', 'image/webp']
+])
+async function startPreviewServer() {
+  const url = new URL(preview)
+  if (!['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error(`默认视觉服务必须绑定本机地址: ${preview}`)
+  const indexPath = path.join(distDir, 'index.html')
+  await fs.access(indexPath)
+  const server = http.createServer(async (request, response) => {
+    try {
+      const requestPath = decodeURIComponent(new URL(request.url || '/', preview).pathname)
+      const relativePath = requestPath.replace(/^\/+/, '')
+      const candidate = path.resolve(distDir, relativePath || 'index.html')
+      const insideDist = candidate === distDir || candidate.startsWith(`${distDir}${path.sep}`)
+      let target = insideDist ? candidate : indexPath
+      const stat = await fs.stat(target).catch(() => null)
+      if (!stat?.isFile()) target = indexPath
+      const body = await fs.readFile(target)
+      response.writeHead(200, { 'Content-Type': mimeTypes.get(path.extname(target)) || 'application/octet-stream', 'Cache-Control': 'no-store' })
+      response.end(body)
+    } catch (error) {
+      response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
+      response.end(error instanceof Error ? error.message : String(error))
+    }
+  })
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(Number(url.port || 80), url.hostname, resolve)
+  })
+  return server
+}
+async function waitForPreview() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try { const response = await fetch(preview); if (response.ok && (await response.text()).toLowerCase().includes('<!doctype html>')) return } catch { /* preview is still starting */ }
+    await delay(100)
+  }
+  throw new Error(`H5 preview unavailable: ${preview}`)
+}
 async function waitForEndpoint(url) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try { const response = await fetch(url); if (response.ok) return response } catch { /* Chrome is starting */ }
@@ -68,7 +124,10 @@ class CdpClient {
 
 await fs.mkdir(artifactDir, { recursive: true })
 await fs.mkdir(profileDir, { recursive: true })
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browserExecutable = await findBrowserExecutable()
+const previewServer = ownsPreview ? await startPreviewServer() : undefined
+await waitForPreview()
+const browser = spawn(browserExecutable, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
 const pages = []
@@ -104,6 +163,13 @@ try {
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`), pages, diagnostics }))
   if (diagnostics.length) process.exitCode = 1
 } finally {
+  try { await client?.send('Browser.close') } catch { /* browser may already be closing */ }
   client?.close()
-  browser.kill()
+  if (!browser.killed) browser.kill()
+  await Promise.race([
+    new Promise((resolve) => browser.once('exit', resolve)),
+    delay(2000)
+  ])
+  if (previewServer) await new Promise((resolve) => previewServer.close(resolve))
+  await fs.rm(profileDir, { recursive: true, force: true })
 }

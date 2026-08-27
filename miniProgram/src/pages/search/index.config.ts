@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '分类' })
+export default definePageConfig({ navigationBarTitleText: '搜索' })

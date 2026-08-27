@@ -57,7 +57,7 @@ describe('Golden Reference style alignment', () => {
     const ui = read('src/components/ui.tsx')
     expect(adapter).toContain('.page-title { grid-column: 2; justify-self: center;')
     expect(adapter).toContain('.native-chrome .content-scroll')
-    expect(ui).toContain("['search', '分类', 'grid']")
+    expect(ui).toContain("['search', '搜索', 'grid']")
     expect(ui).toContain("process.env.TARO_ENV !== 'h5'")
     expect(ui).toContain("process.env.TARO_ENV === 'weapp'")
   })

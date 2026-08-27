@@ -5,7 +5,8 @@ import devConfig from './dev'
 import prodConfig from './prod'
 
 const assetPerformanceBudget = 384 * 1024
-const entrypointPerformanceBudget = 640 * 1024
+const h5EntrypointPerformanceBudget = 400 * 1024
+const miniEntrypointPerformanceBudget = 640 * 1024
 
 export default defineConfig<'webpack5'>(async (merge) => {
   const baseConfig: UserConfigExport<'webpack5'> = {
@@ -24,7 +25,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
       webpackChain(chain) {
         chain.performance
           .maxAssetSize(assetPerformanceBudget)
-          .maxEntrypointSize(entrypointPerformanceBudget)
+          .maxEntrypointSize(miniEntrypointPerformanceBudget)
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
       }
     },
@@ -46,7 +47,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
       webpackChain(chain) {
         chain.performance
           .maxAssetSize(assetPerformanceBudget)
-          .maxEntrypointSize(entrypointPerformanceBudget)
+          .maxEntrypointSize(h5EntrypointPerformanceBudget)
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
         chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))
         chain.resolve.alias

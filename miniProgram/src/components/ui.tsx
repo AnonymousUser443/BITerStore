@@ -24,7 +24,7 @@ export function Avatar({ user, size = 42 }: { user: ReturnType<typeof getUser>; 
   return <View className={`avatar avatar-${user.avatarTone || 'sage'} ${user.id === CURRENT_USER_ID ? 'image-avatar' : ''}`} style={{ width: `${size}px`, height: `${size}px` }}>{source ? <Image className='avatar-image' src={source} mode={user.id === CURRENT_USER_ID ? 'aspectFit' : 'aspectFill'} /> : <Text className='avatar-initial'>{user.name.slice(0, 1)}</Text>}</View>
 }
 
-const appTabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '分类', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
+const appTabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '搜索', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
 function AppNavigation({ active }: { active?: string }) {
   if (process.env.TARO_ENV !== 'h5') return null
   return <View className='bottom-nav h5-navigation'>{appTabs.map(([route, label, icon]) => <Button key={route} id={`e2e-nav-${route}`} className={`nav-item ${active === route ? 'active' : ''} ${route === 'publish' ? 'publish' : ''}`} onClick={() => navigationAdapter.switchTab(`/pages/${route}/index`)}><View className={`nav-icon ${icon}`} /><Text>{label}</Text></Button>)}</View>
