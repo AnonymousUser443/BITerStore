@@ -8,7 +8,7 @@ import { navigationAdapter } from '@/platform'
 export default function WelcomePage() {
   const [notice, setNotice] = useState(false)
   useEffect(() => { void demoRepository.shouldShowResetNotice().then(setNotice) }, [])
-  const start = async () => { const done = await demoRepository.isOnboardingComplete(); await (done ? navigationAdapter.switchTab('/pages/home/index') : navigationAdapter.go('/pages/onboarding/index')) }
+  const start = async () => { const done = await demoRepository.isOnboardingComplete(); if (!done) return navigationAdapter.go('/pages/onboarding/index'); await ((await demoRepository.getAuthenticatedSid()) ? navigationAdapter.switchTab('/pages/home/index') : navigationAdapter.go('/pages/login/index')) }
   return <View className='phone-shell welcome-page'>
     <View className='welcome-decoration' />
     <View className='welcome-brand'><Brand /><Text className='leaf-seal'><Glyph name='leaf' /></Text></View>

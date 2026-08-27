@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
-import './weapp.css'
+import './golden.css'
+import './app.css'
 
 export default function App({ children }: PropsWithChildren) {
   useLaunch(() => {

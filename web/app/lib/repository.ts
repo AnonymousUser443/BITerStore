@@ -5,6 +5,7 @@ import type { Book, BookFilters, ChatThread, ListingStatus, Message, PublishDraf
 const KEYS = {
   books: 'biterstore:v1:books', favorites: 'biterstore:v1:favorites', threads: 'biterstore:v1:threads',
   draft: 'biterstore:v1:draft', onboarding: 'biterstore:v1:onboarding', filters: 'biterstore:v1:filters',
+  authenticatedSid: 'biterstore:v1:authenticated-sid',
 };
 
 const wait = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,6 +57,9 @@ export interface DemoRepository {
   getProfile(): Promise<User>;
   isOnboardingComplete(): boolean;
   completeOnboarding(): void;
+  getAuthenticatedSid(): string;
+  markAuthenticated(sid: string): void;
+  clearAuthentication(): void;
   resetDemoData(): Promise<void>;
 }
 
@@ -79,6 +83,9 @@ export const demoRepository: DemoRepository = {
   async getProfile() { await wait(80); return users.find((user) => user.id === CURRENT_USER_ID)!; },
   isOnboardingComplete() { return read(KEYS.onboarding, false); },
   completeOnboarding() { write(KEYS.onboarding, true); },
+  getAuthenticatedSid() { return read(KEYS.authenticatedSid, ''); },
+  markAuthenticated(sid) { write(KEYS.authenticatedSid, sid); },
+  clearAuthentication() { localStorage.removeItem(KEYS.authenticatedSid); },
   async resetDemoData() { Object.values(KEYS).forEach((key) => localStorage.removeItem(key)); await clearImages(); await wait(160); },
 };
 

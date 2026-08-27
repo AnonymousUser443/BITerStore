@@ -4,7 +4,7 @@ import { defaultFilters, filterListings } from './filters'
 import type { ChatThread, Listing, ListingFilters, ListingStatus, Message, Notification, PublishDraft, User } from './types'
 import { AppError } from './types'
 
-const KEYS = { listings: 'listings', favorites: 'favorites', threads: 'threads', draft: 'draft', onboarding: 'onboarding', filters: 'filters', notifications: 'notifications', resetNotice: 'reset-notice' }
+const KEYS = { listings: 'listings', favorites: 'favorites', threads: 'threads', draft: 'draft', onboarding: 'onboarding', filters: 'filters', notifications: 'notifications', resetNotice: 'reset-notice', authenticatedSid: 'authenticated-sid' }
 const wait = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms))
 export interface DemoRepository {
   listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string): Promise<Listing>;
@@ -13,6 +13,7 @@ export interface DemoRepository {
   updateListingStatus(id: string, status: ListingStatus): Promise<void>; listMyListings(): Promise<Listing[]>;
   listThreads(): Promise<ChatThread[]>; getThread(id: string): Promise<ChatThread>; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
   listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
 }
@@ -36,6 +37,7 @@ export const demoRepository: DemoRepository = {
   async listNotifications() { return storageAdapter.get(KEYS.notifications, seedNotifications) }, async getProfile() { return users.find((x) => x.id === CURRENT_USER_ID)! },
   async getFilters() { return storageAdapter.get(KEYS.filters, defaultFilters) }, async saveFilters(filters) { await storageAdapter.set(KEYS.filters, filters) },
   async isOnboardingComplete() { return storageAdapter.get(KEYS.onboarding, false) }, async completeOnboarding() { await storageAdapter.set(KEYS.onboarding, true) },
+  async getAuthenticatedSid() { return storageAdapter.get(KEYS.authenticatedSid, '') }, async markAuthenticated(sid) { await storageAdapter.set(KEYS.authenticatedSid, sid) }, async clearAuthentication() { await storageAdapter.remove(KEYS.authenticatedSid) },
   async shouldShowResetNotice() { return !(await storageAdapter.get(KEYS.resetNotice, false)) }, async acknowledgeResetNotice() { await storageAdapter.set(KEYS.resetNotice, true) },
   async resetDemoData() { const media = await mediaAdapter.list(); await mediaAdapter.remove(media.map((x) => x.id)); await storageAdapter.clearNamespace() }
 }

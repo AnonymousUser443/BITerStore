@@ -229,6 +229,37 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .guide-actions { display: flex; gap: 10px; }
 .guide-actions button { flex: 1; }
 
+/* School identity login */
+.login-page { overflow-y: auto; padding: 24px 22px 30px; background: linear-gradient(180deg, #f3f1e4 0%, var(--cream) 48%, #eee9d9 100%); }
+.login-brand { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.login-brand > span { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: rgba(255,253,248,.72); color: var(--sage); }
+.login-hero { position: relative; z-index: 1; min-height: 190px; display: flex; align-items: center; margin-top: 12px; }
+.login-hero > img { width: 42%; height: auto; margin-left: -12px; object-fit: contain; filter: drop-shadow(0 12px 12px rgba(73,75,57,.12)); }
+.login-hero > div { flex: 1; margin-left: -3px; }
+.login-hero h1 { margin: 4px 0 8px; color: var(--olive); font: 700 27px/1.3 "Noto Serif SC", serif; }
+.login-hero > div > p:last-child { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.login-hero strong { color: var(--olive); }
+.login-card { position: relative; z-index: 2; display: grid; gap: 15px; padding: 22px; border: 1px solid rgba(213,199,167,.8); border-radius: 24px; background: rgba(255,253,248,.94); box-shadow: var(--shadow); }
+.login-card label > span { display: block; margin-bottom: 7px; color: #64685c; font-size: 12px; font-weight: 700; }
+.login-card input { width: 100%; min-height: 50px; padding: 0 14px; border: 1px solid #ddd2ba; border-radius: 14px; outline: none; background: #fffefa; color: var(--text); }
+.login-card input:focus { border-color: var(--sage); box-shadow: 0 0 0 3px rgba(111,121,86,.12); }
+.login-card .primary-button { width: 100%; margin-top: 2px; }
+.login-error { display: flex; align-items: flex-start; gap: 7px; padding: 10px 12px; border-radius: 12px; background: #fff0ec; color: #a95249; font-size: 11px; line-height: 1.5; }
+.login-error svg { width: 16px; flex: 0 0 16px; }
+.login-link, .login-guide { border: 0; background: transparent; color: var(--sage); font-size: 12px; }
+.login-security { position: relative; z-index: 1; display: flex; gap: 10px; margin: 16px 5px 0; color: var(--sage); }
+.login-security > svg { width: 18px; flex: 0 0 18px; }
+.login-security p { margin: 0; }
+.login-security strong, .login-security span { display: block; }
+.login-security strong { color: var(--olive); font-size: 11px; }
+.login-security span { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.6; }
+.login-guide { position: relative; z-index: 1; display: block; margin: 18px auto 0; color: #858276; }
+.guest-divider { display: flex; align-items: center; gap: 10px; color: #a09b8e; font-size: 10px; }
+.guest-divider::before, .guest-divider::after { content: ''; height: 1px; flex: 1; background: linear-gradient(90deg, transparent, #ddd2ba); }
+.guest-divider::after { transform: scaleX(-1); }
+.guest-button { width: 100%; }
+.guest-note { margin: -7px 0 0; text-align: center; color: var(--muted); font-size: 10px; line-height: 1.5; }
+
 /* Search and listings */
 .search-input { min-height: 54px; display: flex; align-items: center; gap: 11px; padding: 0 14px; border: 1px solid rgba(181,163,126,.75); border-radius: 18px; background: rgba(255,253,248,.92); box-shadow: 0 5px 14px rgba(91,80,59,.06); }
 .search-input svg { color: var(--olive); }
@@ -781,6 +812,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .route-view { width: 100%; max-width: 920px; height: calc(100dvh - 32px); }
   .route-view > .phone-shell,
   .phone-shell { width: 100%; height: 100%; min-height: 100%; border-radius: 28px; }
+  .route-view > .login-page { width: min(100%, 430px); margin-inline: auto; }
   .topbar { height: 82px; padding: 17px 30px 11px; }
   .content-scroll { height: calc(100% - 82px); padding: 12px 30px 116px; }
   .bottom-nav { left: 26px; right: 26px; }
