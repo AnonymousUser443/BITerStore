@@ -21,6 +21,21 @@ export async function compressImage(file: File, maxDimension = 900, quality = .7
   return canvas.toDataURL('image/jpeg', quality);
 }
 
+type BarcodeDetectorLike = { detect(source: ImageBitmap): Promise<Array<{ rawValue: string }>> };
+type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike;
+
+export async function scanIsbnBarcode(image: string): Promise<string> {
+  const Detector = (globalThis as typeof globalThis & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
+  if (!Detector) throw new Error('当前浏览器不支持图片条码识别，请手动填写 ISBN');
+  const blob = await fetch(image).then((response) => response.blob());
+  const bitmap = await createImageBitmap(blob);
+  const values = await new Detector({ formats: ['ean_13', 'ean_8'] }).detect(bitmap);
+  bitmap.close();
+  const isbn = String(values[0]?.rawValue || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (!/^\d{13}$/.test(isbn)) throw new Error('ISBN 页中没有识别到清晰条码，请重新拍摄或手动填写');
+  return isbn;
+}
+
 export async function saveImages(key: string, images: string[]): Promise<void> {
   const db = await openDatabase();
   await new Promise<void>((resolve, reject) => {

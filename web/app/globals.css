@@ -382,6 +382,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .add-image svg { width: 28px; }
 .add-image strong { font-size: 11px; }
 .add-image span { color: var(--muted); font-size: 8px; }
+.upload-heading { display: block; color: var(--olive); font-size: 13px; }
+.upload-instruction { display: block; margin: 4px 0 11px; color: var(--muted); font-size: 9px; }
+.required-image-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.required-image, .required-image-button { min-width: 0; aspect-ratio: 1.28; }
+.required-image-button { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--border); border-radius: 14px; background: #fbf9f2; color: var(--olive); }
+.required-image-button svg { width: 24px; }
+.required-image-button strong { margin-top: 5px; font-size: 11px; }
+.required-image-button span { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.required-image .upload-preview { width: 100%; height: 100%; aspect-ratio: 1.28; }
+.image-role { position: absolute; left: 5px; bottom: 5px; padding: 3px 6px; border-radius: 8px; background: rgba(69,79,55,.84); color: white; font-size: 8px; }
+.optional-images { margin-top: 12px; }
+.optional-images > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; }
+.optional-images .image-grid { grid-template-columns: repeat(4, 1fr); }
 .tobby-tip { min-height: 74px; display: flex; align-items: center; gap: 5px; margin-top: 8px; }
 .tobby-tip img { width: 92px; height: 80px; object-fit: contain; align-self: end; }
 .tobby-tip span { padding: 9px 12px; border: 1px solid #ded2b6; border-radius: 16px 16px 16px 4px; color: #6b6d62; font-size: 10px; background: white; }

@@ -116,12 +116,14 @@ function draftPayload(draft: PublishDraft, imageIds: string[]) {
 async function uploadDraftImages(draft: PublishDraft) {
   const images = await getImages(draft.imageStoreKey);
   const uploaded: string[] = [];
-  for (const dataUrl of images) {
+  for (const [index, dataUrl] of images.entries()) {
+    if (!dataUrl) continue;
     const blob = await fetch(dataUrl).then((response) => response.blob());
-    const ticket = await h5ApiRequest<{ id: string; uploadUrl: string }>('/uploads/presign', {
-      method: 'POST', body: JSON.stringify({ mime: blob.type || 'image/jpeg', size: blob.size }),
+    const role = index === 0 ? 'COVER' : index === 1 ? 'ISBN' : 'GALLERY';
+    const ticket = await h5ApiRequest<{ id: string; uploadUrl: string; authRequired?: boolean }>('/uploads/presign', {
+      method: 'POST', body: JSON.stringify({ mime: blob.type || 'image/jpeg', size: blob.size, role }),
     });
-    const response = await fetch(ticket.uploadUrl, { method: 'PUT', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+    const response = await fetch(ticket.uploadUrl, { method: 'PUT', credentials: ticket.authRequired ? 'include' : 'same-origin', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
     if (!response.ok) throw new Error(`图片上传失败（${response.status}）`);
     await h5ApiRequest(`/uploads/${ticket.id}/complete`, { method: 'POST', body: '{}' });
     uploaded.push(ticket.id);
