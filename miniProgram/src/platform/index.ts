@@ -88,7 +88,9 @@ async function bitLoginRequest(path: string, method: 'GET' | 'POST', data?: obje
   return response.data as BitLoginChallenge
 }
 export const bitLoginTransport = {
-  start(username: string, password: string) { return bitLoginRequest('/api/auth/start', 'POST', { username, password, services: ['webvpn'], wait_seconds: 1 }) },
+  // BIT-Login runs on the campus network, where the WebVPN endpoint is not
+  // resolvable. The jwb service uses the campus CAS callback directly.
+  start(username: string, password: string) { return bitLoginRequest('/api/auth/start', 'POST', { username, password, services: ['jwb'], wait_seconds: 1 }) },
   status(challengeId: string, token: string) { return bitLoginRequest(`/api/auth/${challengeId}`, 'GET', undefined, token) },
   sms(challengeId: string, token: string, code: string) { return bitLoginRequest(`/api/auth/${challengeId}/sms`, 'POST', { code }, token) },
   async registration(challengeId: string, token: string) {
