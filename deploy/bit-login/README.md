@@ -2,7 +2,9 @@
 
 BITerStore pins `BIT101-dev/BIT-Login-Python` at commit
 `5d537ca6123b405666b82eabc2328b8f4c70b6ca`. The local Dockerfile clones that
-exact commit and applies `cors-env.patch` during the image build.
+exact commit and replaces its fixed CORS allow-list during the image build.
+The build fails closed if the pinned source no longer contains the expected
+allow-list block.
 
 Required environment:
 
