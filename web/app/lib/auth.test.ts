@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { destroyBitLoginChallenge, getBitLoginRegistrationToken, type BitLoginChallenge } from './bit-login';
+import { destroyBitLoginChallenge, getBitLoginRegistrationToken, startBitLogin, type BitLoginChallenge } from './bit-login';
 import { loginWithCampusCookie, restoreH5Session } from './h5-auth';
 
 const challenge: BitLoginChallenge = {
   challenge_id: 'challenge-1', access_token: 'challenge-secret', status: 'authenticated',
-  requested_services: ['webvpn'], ready_services: ['webvpn'], expires_in: 300,
+  requested_services: ['jwb'], ready_services: ['jwb'], expires_in: 300,
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -13,6 +13,17 @@ function jsonResponse(body: unknown, status = 200) {
 
 describe('Golden H5 authentication', () => {
   beforeEach(() => { vi.stubGlobal('fetch', vi.fn()); });
+
+  it('starts authentication through the direct campus CAS service', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(challenge));
+
+    await expect(startBitLogin('student', 'password')).resolves.toEqual(challenge);
+
+    expect(fetch).toHaveBeenCalledWith('https://login.example.test/api/auth/start', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ username: 'student', password: 'password', services: ['jwb'], wait_seconds: 1 }),
+    }));
+  });
 
   it('requests a biterstore registration token and destroys the challenge', async () => {
     vi.mocked(fetch)

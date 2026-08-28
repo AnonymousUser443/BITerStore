@@ -55,7 +55,9 @@ async function pollChallenge(challenge: BitLoginChallenge): Promise<BitLoginChal
 export async function startBitLogin(username: string, password: string): Promise<BitLoginChallenge> {
   const challenge = await request('/api/auth/start', {
     method: 'POST',
-    body: JSON.stringify({ username, password, services: ['webvpn'], wait_seconds: 1 }),
+    // BIT-Login is deployed on the campus network, so use the direct campus
+    // CAS callback instead of the unavailable WebVPN endpoint.
+    body: JSON.stringify({ username, password, services: ['jwb'], wait_seconds: 1 }),
   });
   if (!challenge.access_token) throw new Error('登录服务未返回 access token');
   return pollChallenge(challenge);
