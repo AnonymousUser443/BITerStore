@@ -35,3 +35,6 @@ chmod 600 deploy/secrets/bit-login-registration-*.pem
 Back up the existing checkout, service configuration, and challenge SQLite
 database before replacing the service. Existing challenges should be allowed
 to expire; only challenges created after the upgrade have a usable subject.
+
+After startup, validate the pinned registration endpoint and production CORS
+policy with `verify_runtime.py <base-url> <origin>`.
