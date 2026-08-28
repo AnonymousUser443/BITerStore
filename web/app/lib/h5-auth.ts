@@ -8,6 +8,16 @@ export interface H5SessionUser {
   campusStatus: string;
 }
 
+export interface H5Profile extends H5SessionUser {
+  nickname: string;
+  avatarUrl: string | null;
+  campus: string | null;
+  bio: string;
+  status: string;
+  createdAt: string;
+  wechatBound: boolean;
+}
+
 type H5Session = { expiresIn: number; user: H5SessionUser };
 
 function messageOf(body: unknown, fallback: string) {
@@ -48,10 +58,17 @@ export async function loginWithCampusCookie(registrationToken: string): Promise<
   }, false);
 }
 
-export async function restoreH5Session(): Promise<H5SessionUser | null> {
+export function getH5Profile(): Promise<H5Profile> {
+  return request<H5Profile>('/me');
+}
+
+export function updateH5Profile(profile: { nickname: string; avatarUrl: string | null; campus: string | null; bio: string }): Promise<H5Profile> {
+  return request<H5Profile>('/me', { method: 'PATCH', body: JSON.stringify(profile) });
+}
+
+export async function restoreH5Session(): Promise<H5Profile | null> {
   try {
-    const profile = await request<{ id: string; role: string; campusStatus: string }>('/users/me');
-    return { id: profile.id, role: profile.role, campusStatus: profile.campusStatus };
+    return await getH5Profile();
   } catch {
     return null;
   }

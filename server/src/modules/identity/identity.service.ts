@@ -6,9 +6,12 @@ import { PrismaService } from '../../infra/prisma.service.js'
 type CampusClaims = {
   provider: string
   subjectHash: string
+  defaultNickname: string
   jti: string
   expiresAt: Date | null
 }
+
+const legacyDefaultNicknames = new Set(['北理同学', '新书友'])
 
 @Injectable()
 export class IdentityService {
@@ -44,9 +47,11 @@ export class IdentityService {
       }
     }
     if (!payload.sub || !payload.jti || payload.purpose !== 'registration') throw new BadRequestException('校园认证凭证声明不完整')
+    const subject = String(payload.sub).trim()
     return {
       provider: process.env.BIT_LOGIN_ISSUER || 'bit-login',
-      subjectHash: createHash('sha256').update(String(payload.sub)).digest('hex'),
+      subjectHash: createHash('sha256').update(subject).digest('hex'),
+      defaultNickname: `BITer${subject}`.slice(0, 24),
       jti: String(payload.jti),
       expiresAt: payload.identity_expires_at ? new Date(Number(payload.identity_expires_at) * 1000) : null
     }
@@ -56,9 +61,18 @@ export class IdentityService {
     const claims = await this.verify(token)
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
-      const user = existing
-        ? await tx.user.update({ where: { id: existing.userId }, data: { campusStatus: 'VERIFIED' } })
-        : await tx.user.create({ data: { nickname: '北理同学', campusStatus: 'VERIFIED' } })
+      const currentUser = existing
+        ? await tx.user.findUniqueOrThrow({ where: { id: existing.userId } })
+        : null
+      const user = currentUser
+        ? await tx.user.update({
+            where: { id: currentUser.id },
+            data: {
+              campusStatus: 'VERIFIED',
+              ...(legacyDefaultNicknames.has(currentUser.nickname) ? { nickname: claims.defaultNickname } : {})
+            }
+          })
+        : await tx.user.create({ data: { nickname: claims.defaultNickname, campusStatus: 'VERIFIED' } })
 
       await tx.usedAuthToken.create({ data: { jti: claims.jti, userId: user.id } })
       await tx.campusIdentity.upsert({

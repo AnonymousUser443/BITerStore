@@ -10,7 +10,7 @@ import {
   Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Star, Trash2,
   UserRound, WandSparkles, X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CURRENT_USER_ID, notifications, seedBooks } from '../lib/demo-data';
 import {
   destroyBitLoginChallenge,
@@ -19,7 +19,7 @@ import {
   submitBitLoginSms,
   type BitLoginChallenge,
 } from '../lib/bit-login';
-import { loginWithCampusCookie, logoutH5Session, restoreH5Session } from '../lib/h5-auth';
+import { getH5Profile, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
@@ -47,6 +47,21 @@ const UI_ASSETS = [
   '/assets/tobby-question.webp', '/assets/tobby-sad.webp', '/assets/tobby-search.webp',
   '/assets/tobby-unavailable.webp',
 ] as const;
+
+const CurrentUserContext = createContext<User | undefined>(undefined);
+
+function profileToUser(profile: H5Profile): User {
+  return {
+    id: profile.id,
+    name: profile.nickname,
+    campus: (profile.campus || '未设置') as User['campus'],
+    verified: profile.campusStatus === 'VERIFIED',
+    bio: profile.bio || '还没有填写个人简介。',
+    responseTime: '通常很快回复',
+    avatar: profile.avatarUrl || undefined,
+    avatarTone: 'sage',
+  };
+}
 
 const notificationDetails: Record<Notification['type'], Array<{ source: string; text: string; time: string; route: string }>> = {
   like: [
@@ -146,11 +161,12 @@ function BottomNav({ active, navigate }: { active: string; navigate: (to: string
 }
 
 function Topbar({ title, back, navigate }: { title?: string; back?: boolean; navigate: (to: string) => void }) {
+  const currentUser = useContext(CurrentUserContext);
   return (
     <header className={`topbar ${title ? 'page-topbar' : ''}`}>
       {back ? <button className="round-button" onClick={() => history.back()} aria-label="返回"><ArrowLeft /></button> : <button className="brand-button" onClick={() => navigate('/home')} aria-label="返回首页"><Brand /></button>}
       {title && <h1>{title}</h1>}
-      <div className="top-actions"><button className="icon-button" aria-label="通知"><Bell size={24} /><i className="notification-dot" /></button>{!title && <Avatar user={getUser(CURRENT_USER_ID)} size={38} />}{title && <button className={`icon-button ${back ? '' : 'leaf-action'}`} aria-label={back ? '更多' : '品牌快捷入口'}>{back ? <MoreHorizontal /> : <Leaf />}</button>}</div>
+      <div className="top-actions"><button className="icon-button" aria-label="通知"><Bell size={24} /><i className="notification-dot" /></button>{!title && <Avatar user={currentUser || getUser(CURRENT_USER_ID)} size={38} />}{title && <button className={`icon-button ${back ? '' : 'leaf-action'}`} aria-label={back ? '更多' : '品牌快捷入口'}>{back ? <MoreHorizontal /> : <Leaf />}</button>}</div>
     </header>
   );
 }
@@ -246,7 +262,7 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
   );
 }
 
-function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: string) => void; onAuthenticated: () => void; onGuest: () => void }) {
+function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: string) => void; onAuthenticated: (profile: H5Profile) => void; onGuest: () => void }) {
   const [sid, setSid] = useState('');
   const [password, setPassword] = useState('');
   const [smsCode, setSmsCode] = useState('');
@@ -257,8 +273,9 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
     try {
       const registrationToken = await getBitLoginRegistrationToken(value);
       const session = await loginWithCampusCookie(registrationToken);
+      const profile = await getH5Profile();
       demoRepository.markAuthenticated(session.user.id);
-      onAuthenticated();
+      onAuthenticated(profile);
       navigate('/home');
     } finally {
       setPassword('');
@@ -391,22 +408,62 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
   return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus}校区 · 在线</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === CURRENT_USER_ID; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && <Avatar user={getUser(CURRENT_USER_ID)} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片发送为纯前端演示')}><ImagePlus /></button><button onClick={() => notify('商品链接已准备分享')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
 }
 
-function ProfilePage({ navigate, notify, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; onLogout: () => void }) {
-  const [profile, setProfile] = useState<User>(); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
-  useEffect(() => { Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings()]).then(([user, favoriteBooks, myBooks]) => { setProfile(user); setFavorites(favoriteBooks.length); setListings(myBooks.length); }); }, []);
+function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
+  const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
+  const [editing, setEditing] = useState(false); const [draft, setDraft] = useState<User>(); const [saving, setSaving] = useState(false); const avatarInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    Promise.all([getH5Profile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
+      .then(([student, favoriteBooks, myBooks]) => {
+        const user = profileToUser(student);
+        setProfile(user); onProfileUpdated(user); setFavorites(favoriteBooks.length); setListings(myBooks.length);
+      })
+      .catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+  }, [notify, onProfileUpdated]);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
   const reset = async () => { await demoRepository.resetDemoData(); notify('演示数据已重置'); navigate('/'); };
+  const selectAvatar = async (file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return notify('请选择不超过 5MB 的 JPEG、PNG 或 WebP 图片');
+    try {
+      const avatar = await compressImage(file, 320, .78);
+      if (avatar.length > 350_000) return notify('头像压缩后仍然过大，请换一张图片');
+      setDraft((value) => value ? { ...value, avatar } : value);
+    } catch { notify('头像处理失败，请换一张图片重试'); }
+  };
+  const saveProfile = async () => {
+    if (!draft) return;
+    const nickname = draft.name.trim();
+    if (nickname.length < 2 || nickname.length > 24) return notify('昵称长度应为 2–24 个字符');
+    setSaving(true);
+    try {
+      const saved = profileToUser(await updateH5Profile({ nickname, avatarUrl: draft.avatar || null, campus: draft.campus === '未设置' ? null : draft.campus, bio: draft.bio === '还没有填写个人简介。' ? '' : draft.bio }));
+      setProfile(saved); onProfileUpdated(saved); setEditing(false); notify('个人资料已保存');
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '个人资料保存失败'); }
+    finally { setSaving(false); }
+  };
   return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
     <section className="profile-hero">
       <Avatar user={profile} size={86} />
-      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>LV.12 · 书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus}校区 · 北京理工大学</p><small>{profile.bio}</small></div>
-      <button aria-label="设置"><Settings /></button>
+      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
+      <button aria-label="编辑个人资料" onClick={() => { setDraft({ ...profile }); setEditing(true); }}><Settings /></button>
     </section>
     <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong>12</strong><span>校园信用</span></button></div>
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
     <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section>
     <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
+    {editing && draft && <div className="sheet-layer profile-edit-layer">
+      <button className="sheet-scrim" onClick={() => !saving && setEditing(false)} aria-label="关闭个人资料编辑" />
+      <section className="filter-sheet profile-editor" aria-label="编辑个人资料">
+        <div className="sheet-handle" />
+        <div className="sheet-title"><h2>编辑个人资料</h2><span /><button onClick={() => !saving && setEditing(false)} aria-label="关闭"><X /></button></div>
+        <div className="profile-avatar-editor"><Avatar user={draft} size={82} /><div><button className="secondary-button" onClick={() => avatarInput.current?.click()}><Camera />更换头像</button>{draft.avatar && <button className="profile-avatar-clear" onClick={() => setDraft({ ...draft, avatar: undefined })}>移除头像</button>}</div><input ref={avatarInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void selectAvatar(event.target.files?.[0]); event.target.value = ''; }} /></div>
+        <label className="profile-edit-field"><span>昵称</span><input maxLength={24} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <label className="profile-edit-field"><span>校区</span><select value={draft.campus} onChange={(event) => setDraft({ ...draft, campus: event.target.value as User['campus'] })}><option value="未设置">暂不设置</option>{campuses.slice(1).map((campus) => <option value={campus} key={campus}>{campus}</option>)}</select></label>
+        <label className="profile-edit-field"><span>个人简介</span><textarea rows={3} maxLength={160} value={draft.bio === '还没有填写个人简介。' ? '' : draft.bio} onChange={(event) => setDraft({ ...draft, bio: event.target.value })} placeholder="介绍一下自己吧" /></label>
+        <button className="primary-button profile-save" disabled={saving} onClick={saveProfile}>{saving ? <><RefreshCw className="spin" />保存中</> : '保存个人资料'}</button>
+      </section>
+    </div>}
   </AppShell>;
 }
 
@@ -444,7 +501,7 @@ function StatePage({ type, navigate }: { type: string; navigate: (to: string) =>
 
 export function MobileApp({ initialPath }: { initialPath: string }) {
   const hasCurrentAssetBundle = () => window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
-  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'checking' | 'authenticated' | 'guest' | 'anonymous'>('checking');
+  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'checking' | 'authenticated' | 'guest' | 'anonymous'>('checking'); const [currentUser, setCurrentUser] = useState<User>();
   const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
   useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
@@ -470,8 +527,9 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
       if (!active) return;
       if (user?.campusStatus === 'VERIFIED') {
         demoRepository.markAuthenticated(user.id);
+        setCurrentUser(profileToUser(user));
         setAuthMode('authenticated');
-      } else setAuthMode(demoRepository.getAuthenticatedSid() === 'guest' ? 'guest' : 'anonymous');
+      } else { setCurrentUser(undefined); setAuthMode(demoRepository.getAuthenticatedSid() === 'guest' ? 'guest' : 'anonymous'); }
     });
     return () => { active = false; };
   }, []);
@@ -485,7 +543,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   let page: React.ReactNode;
   if (effectivePath === '/') page = <WelcomePage navigate={navigate} />;
   else if (effectivePath === '/onboarding') page = <OnboardingPage navigate={navigate} />;
-  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} onAuthenticated={() => setAuthMode('authenticated')} onGuest={() => setAuthMode('guest')} />;
+  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} onAuthenticated={(profile) => { setCurrentUser(profileToUser(profile)); setAuthMode('authenticated'); }} onGuest={() => { setCurrentUser(undefined); setAuthMode('guest'); }} />;
   else if (effectivePath === '/home') page = <HomePage navigate={navigate} />;
   else if (effectivePath === '/category') page = <CategoryPage navigate={navigate} notify={notify} />;
   else if (effectivePath.startsWith('/books/')) page = <BookDetailPage id={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
@@ -493,11 +551,11 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/messages') page = <MessagesPage navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/notifications/')) page = <NotificationDetailPage type={effectivePath.split('/')[3]} navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
-  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} onLogout={() => setAuthMode('anonymous')} />;
+  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={setCurrentUser} onLogout={() => { setCurrentUser(undefined); setAuthMode('anonymous'); }} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/my-listings') page = <MyListingsPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;
   else if (effectivePath.startsWith('/states/')) page = <StatePage type={effectivePath.split('/')[2]} navigate={navigate} />;
   else page = <StatePage type="404" navigate={navigate} />;
-  return <main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className="toast" role="status"><Leaf size={17} />{toast}</div>}</main>;
+  return <CurrentUserContext.Provider value={currentUser}><main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className="toast" role="status"><Leaf size={17} />{toast}</div>}</main></CurrentUserContext.Provider>;
 }

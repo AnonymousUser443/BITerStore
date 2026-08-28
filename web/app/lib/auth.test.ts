@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { destroyBitLoginChallenge, getBitLoginRegistrationToken, startBitLogin, type BitLoginChallenge } from './bit-login';
-import { loginWithCampusCookie, restoreH5Session } from './h5-auth';
+import { loginWithCampusCookie, restoreH5Session, updateH5Profile } from './h5-auth';
 
 const challenge: BitLoginChallenge = {
   challenge_id: 'challenge-1', access_token: 'challenge-secret', status: 'authenticated',
@@ -55,15 +55,28 @@ describe('Golden H5 authentication', () => {
   });
 
   it('refreshes an expired access cookie once before restoring the profile', async () => {
+    const profile = { id: 'student-1', nickname: 'BITer1120230000', avatarUrl: null, campus: null, bio: '', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED', createdAt: '2026-08-28', wechatBound: false };
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
       .mockResolvedValueOnce(jsonResponse({ expiresIn: 900, user: { id: 'student-1', role: 'USER', campusStatus: 'VERIFIED' } }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'student-1', role: 'USER', campusStatus: 'VERIFIED' }));
+      .mockResolvedValueOnce(jsonResponse(profile));
 
-    await expect(restoreH5Session()).resolves.toMatchObject({ id: 'student-1', campusStatus: 'VERIFIED' });
+    await expect(restoreH5Session()).resolves.toMatchObject({ id: 'student-1', nickname: 'BITer1120230000' });
     expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/me', expect.objectContaining({ credentials: 'include' }));
     expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/auth/refresh', expect.objectContaining({
       body: JSON.stringify({ sessionTransport: 'cookie' })
+    }));
+  });
+
+  it('updates nickname, avatar, campus and bio through the real profile API', async () => {
+    const input = { nickname: 'New BITer', avatarUrl: 'data:image/jpeg;base64,YQ==', campus: '良乡', bio: 'Hello' };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ id: 'student-1', ...input }));
+
+    await updateH5Profile(input);
+
+    expect(fetch).toHaveBeenCalledWith('/api/v1/me', expect.objectContaining({
+      method: 'PATCH', credentials: 'include', body: JSON.stringify(input)
     }));
   });
 });
