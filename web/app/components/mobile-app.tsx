@@ -368,7 +368,13 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
     setAiLoading(true);
     let isbn = '';
     try {
-      isbn = await scanIsbnBarcode(images[1]);
+      try {
+        isbn = await scanIsbnBarcode(images[1]);
+      } catch {
+        const image = await fetch(images[1]).then((response) => response.blob());
+        const recognized = await h5ApiRequest<{ isbn: string }>('/books/isbn/recognize', { method: 'POST', headers: { 'Content-Type': image.type || 'image/jpeg' }, body: image });
+        isbn = recognized.isbn;
+      }
       setDraft((current) => ({ ...current, isbn }));
       const metadata = await h5ApiRequest<{ isbn: string; title: string; author: string; subjects: string[] }>(`/books/isbn/${isbn}`);
       setDraft((current) => ({ ...current, isbn: metadata.isbn, title: metadata.title, author: metadata.author || current.author, category: metadata.subjects.some((value) => /文学|小说|fiction/i.test(value)) ? '文学小说' : '教材教辅', course: current.course || metadata.title, description: current.description || `${metadata.title}${metadata.author ? `，${metadata.author}著` : ''}。${current.condition}，支持校内当面验书。`, tags: Array.from(new Set([...current.tags, ...metadata.subjects.slice(0, 2)])) }));

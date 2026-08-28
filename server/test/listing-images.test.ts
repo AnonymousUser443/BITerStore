@@ -8,6 +8,15 @@ const body = {
 }
 
 describe('listing required images', () => {
+  it('excludes the private ISBN page from public listing image queries', async () => {
+    const prisma = { listing: { findMany: vi.fn().mockResolvedValue([]) } }
+    const service = new ListingsService(prisma as never)
+    await expect(service.list({})).resolves.toEqual({ items: [], nextCursor: null })
+    expect(prisma.listing.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ images: expect.objectContaining({ where: { uploadedAt: { not: null }, role: { not: 'ISBN' } } }) })
+    }))
+  })
+
   it('requires completed cover and ISBN images for publication', async () => {
     const prisma = {
       listingImage: { findMany: vi.fn().mockResolvedValue([{ id: 'cover-id', role: 'COVER' }, { id: 'isbn-id', role: 'ISBN' }]) },

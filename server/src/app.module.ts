@@ -12,11 +12,11 @@ import { UploadsModule } from './modules/uploads/uploads.module.js'
 import { AdminModule } from './modules/admin/admin.module.js'
 import { HealthController } from './health.controller.js'
 import { InfraModule } from './infra/infra.module.js'
-import { BooksController } from './modules/books/books.controller.js'
+import { BooksModule } from './modules/books/books.module.js'
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), InfraModule, AuthModule, IdentityModule, UsersModule, ListingsModule, ConversationsModule, ModerationModule, UploadsModule, AdminModule],
-  controllers: [HealthController, BooksController],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), InfraModule, AuthModule, IdentityModule, UsersModule, ListingsModule, ConversationsModule, ModerationModule, UploadsModule, AdminModule, BooksModule],
+  controllers: [HealthController],
   providers: []
 })
 export class AppModule {}

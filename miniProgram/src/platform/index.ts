@@ -204,7 +204,7 @@ type BarcodeDetectorLike = { detect(source: ImageBitmap): Promise<Array<{ rawVal
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike
 export const isbnRecognitionAdapter = {
   async scan(imageUri?: string): Promise<string> {
-    if (__BITERSTORE_E2E__) return '9787560894937'
+    if (__BITERSTORE_E2E__) return '9787115428028'
     if (process.env.TARO_ENV === 'weapp') {
       const result = await Taro.scanCode({ scanType: ['barCode'] })
       const isbn = String(result.result || '').replace(/[^0-9Xx]/g, '').toUpperCase()
