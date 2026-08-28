@@ -168,6 +168,28 @@ export const mediaAdapter: MediaAdapter = {
   async list() { const items = await storageAdapter.get<StoredMedia[]>(MEDIA_KEY, []); return process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined' ? listH5Media(items) : items }
 }
 
+export const avatarAdapter = {
+  async pickDataUrl() {
+    const result = await Taro.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] })
+    const selected = result.tempFiles[0]
+    if (!selected) throw new AppError('MEDIA_PICK', '没有选择头像')
+    const compressed = await Taro.compressImage({ src: selected.tempFilePath, quality: 68 }).catch(() => ({ tempFilePath: selected.tempFilePath }))
+    const path = compressed.tempFilePath
+    let base64: string
+    if (process.env.TARO_ENV === 'h5') {
+      const bytes = new Uint8Array(await fetch(path).then((response) => response.arrayBuffer()))
+      let binary = ''
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+      base64 = globalThis.btoa(binary)
+    } else {
+      base64 = await new Promise<string>((resolve, reject) => Taro.getFileSystemManager().readFile({ filePath: path, encoding: 'base64', success: (value) => resolve(value.data as string), fail: reject }))
+    }
+    const dataUrl = `data:image/jpeg;base64,${base64}`
+    if (dataUrl.length > 350_000) throw new AppError('VALIDATION', '头像压缩后仍然过大，请换一张图片')
+    return dataUrl
+  }
+}
+
 export const uploadAdapter = {
   async put(url: string, item: StoredMedia) {
     let data: ArrayBuffer

@@ -7,8 +7,8 @@ const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
 const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
 const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
-const targets = [
-  ['welcome-390', 390, 900, '/'],
+const allTargets = [
+  ['welcome-390', 390, 900, '/welcome'],
   ['onboarding-390', 390, 900, '/onboarding'],
   ['login-390', 390, 900, '/login'],
   ['login-1280', 1280, 900, '/login'],
@@ -16,16 +16,18 @@ const targets = [
   ['search-390', 390, 900, '/search'],
   ['publish-430', 430, 900, '/publish'],
   ['messages-390', 390, 900, '/messages'],
-  ['notification-390', 390, 900, '/messages/notifications/comment'],
-  ['chat-390', 390, 900, '/messages/thread-lin'],
-  ['detail-390', 390, 900, '/books/math-7'],
+  ['notification-390', 390, 900, '/notifications?type=comment'],
+  ['chat-390', 390, 900, '/chat?id=thread-lin'],
+  ['detail-390', 390, 900, '/books?id=math-7'],
   ['favorites-390', 390, 900, '/favorites'],
   ['my-listings-390', 390, 900, '/my-listings'],
   ['states-390', 390, 900, '/states'],
-  ['unavailable-390', 390, 900, '/states/unavailable'],
+  ['unavailable-390', 390, 900, '/states?type=unavailable'],
   ['home-820', 820, 1000, '/home'],
   ['profile-1280', 1280, 900, '/profile']
 ]
+const requestedTargets = new Set((process.env.BITERSTORE_H5_TARGETS || '').split(',').map((value) => value.trim()).filter(Boolean))
+const targets = requestedTargets.size ? allTargets.filter(([name]) => requestedTargets.has(name)) : allTargets
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function waitForEndpoint(url) {
@@ -95,7 +97,7 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-modal-close')?.click()` })
       await delay(250)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero h1','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), fontSize: style.fontSize, lineHeight: style.lineHeight, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero','.login-hero > taro-image-core','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.upload-card','.image-grid','.add-image','.tobby-tip','.tobby-tip > taro-image-core','.ai-card','.publish-actions','.notification-grid','.notification-grid > taro-button-core','.notice-copy','.notice-title','.notice-subtitle','.notice-link','.notice-chevron','.notification-feed > taro-button-core','.thread-list > taro-button-core','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), minHeight: style.minHeight, boxSizing: style.boxSizing, display: style.display, fontSize: style.fontSize, lineHeight: style.lineHeight, margin: style.margin, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
     pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics })
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })

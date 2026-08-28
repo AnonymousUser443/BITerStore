@@ -1,12 +1,12 @@
 import { bitLoginTransport } from '@/platform'
 
-export type BitLoginStatus = 'running' | 'waiting_sms' | 'processing' | 'authenticated' | 'failed' | 'expired'
+export type BitLoginStatus = 'running' | 'waiting_sms' | 'processing' | 'authenticated' | 'failed' | 'expired' | 'cancelled'
 export interface BitLoginChallenge {
   challenge_id: string; access_token: string; status: BitLoginStatus; requested_services: string[]; ready_services: string[];
   expires_in: number; masked_phone?: string; error?: string
 }
 
-const terminal: BitLoginStatus[] = ['waiting_sms', 'authenticated', 'failed', 'expired']
+const terminal: BitLoginStatus[] = ['waiting_sms', 'authenticated', 'failed', 'expired', 'cancelled']
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function poll(challenge: BitLoginChallenge) {
@@ -17,7 +17,7 @@ async function poll(challenge: BitLoginChallenge) {
     current = { ...(await bitLoginTransport.status(challenge.challenge_id, challenge.access_token)), access_token: challenge.access_token }
   }
   if (!terminal.includes(current.status)) throw new Error('统一身份认证等待超时，请重试')
-  if (current.status === 'failed' || current.status === 'expired') throw new Error(current.error || '统一身份认证已失效，请重试')
+  if (current.status === 'failed' || current.status === 'expired' || current.status === 'cancelled') throw new Error(current.error || '统一身份认证已失效，请重试')
   return current
 }
 

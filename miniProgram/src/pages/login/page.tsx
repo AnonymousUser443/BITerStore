@@ -108,10 +108,10 @@ export default function LoginPage() {
       <Image src='/assets/tobby-hello.webp' mode='aspectFit' />
       <View>
         <Text className='eyebrow'>BIT CAMPUS ACCOUNT</Text>
-        <Text className='login-title'>{challenge ? '确认是你本人' : '学号登录 BITerStore'}</Text>
+        <Text className='login-title'>{challenge ? '确认是你本人' : '北理同学，你好'}</Text>
         <Text className='login-description'>{challenge
           ? `验证码已发送至 ${challenge.masked_phone || '绑定手机'}`
-          : '学号是主要账号。登录后可以发布、联系卖家，并可在“我的”中选择绑定微信。'}</Text>
+          : '使用学校统一身份认证登录，完成校园身份验证。'}</Text>
       </View>
     </View>
 
@@ -123,9 +123,10 @@ export default function LoginPage() {
         <View className='login-field'><Text>学号</Text><Input type='number' value={sid} onInput={(event) => setSid(event.detail.value.replace(/\D/g, ''))} placeholder='请输入北理工学号' /></View>
         <View className='login-field'><Text>统一身份认证密码</Text><Input password value={password} onInput={(event) => setPassword(event.detail.value)} placeholder='请输入密码' /></View>
         <Button id='e2e-login-submit' className='primary-button' disabled={loading} onClick={campusLogin}>{loading ? '正在安全验证…' : '学号登录'}</Button>
-        <View className='guest-divider'><Text>其他方式</Text></View>
-        <Button className='secondary-button' disabled={loading} onClick={wechatLogin}>微信快捷登录（需已绑定）</Button>
+        <View className='guest-divider'><Text>或</Text></View>
         <Button id='e2e-guest-access' className='secondary-button guest-button' disabled={loading} onClick={guest}>游客浏览</Button>
+        <Text className='guest-note'>游客只能浏览商品，可随时返回登录。</Text>
+        <Button className='login-link' disabled={loading} onClick={wechatLogin}>已绑定微信？快捷登录</Button>
       </>}
       {error && <View className='login-error'><Glyph name='warning' />{error}</View>}
       {__BITERSTORE_E2E__ && <Button id='e2e-login-bypass' className='login-link' onClick={e2eLogin}>自动化测试登录</Button>}

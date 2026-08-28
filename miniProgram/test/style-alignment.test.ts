@@ -14,6 +14,21 @@ function filesBelow(directory: string, extension: string): string[] {
 }
 
 describe('Golden Reference style alignment', () => {
+  it('H5 直接复用 Golden Reference 组件和原始样式', () => {
+    const pages = filesBelow(path.join(source, 'pages'), '.tsx')
+    const config = read('config/index.ts')
+    const h5Pages = pages.filter((file) => file.endsWith('.h5.tsx'))
+    expect(h5Pages).toHaveLength(14)
+    expect(h5Pages.every((file) => fs.readFileSync(file, 'utf8').includes("from '@/h5/GoldenRoute'"))).toBe(true)
+    expect(read('src/h5/GoldenRoute.tsx')).toContain("from '../../../web/app/components/mobile-app'")
+    expect(config).toContain("path.resolve(__dirname, '../../web/app')")
+    expect(config).toContain(".set('lucide-react$'")
+    expect(config).toContain(".set('next/image'")
+    expect(read('src/app.ts')).toContain("import '../../web/app/globals.css'")
+    expect(read('src/app.ts')).not.toContain("import './app.css'")
+    expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
+  })
+
   it('微信入口复用 Golden 样式并只追加原生节点适配', () => {
     const entry = read('src/app.weapp.ts')
     expect(entry).toContain("import './golden.css'")
