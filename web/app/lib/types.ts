@@ -4,6 +4,7 @@ export type Condition = '全新' | '九成新' | '八成新' | '七成新及以�
 
 export interface User {
   id: string;
+  studentNumber?: string;
   name: string;
   campus: Campus | '未设置';
   verified: boolean;

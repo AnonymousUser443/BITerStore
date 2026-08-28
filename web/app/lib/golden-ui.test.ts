@@ -18,4 +18,10 @@ describe('authenticated Golden H5', () => {
     expect(profilePage).not.toContain('重置演示数据');
     expect(profilePage).not.toContain('演示与状态');
   });
+
+  it('shows the authenticated student number above the nickname', () => {
+    const profilePage = mobileApp.slice(mobileApp.indexOf('function ProfilePage'), mobileApp.indexOf('function ProfileEditPage'));
+    expect(profilePage).toContain('profile-student-number');
+    expect(profilePage.indexOf('profile-student-number')).toBeLessThan(profilePage.indexOf('<h1>{profile.name}'));
+  });
 });

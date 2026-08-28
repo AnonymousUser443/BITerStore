@@ -604,6 +604,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .stepper .active span { box-shadow: 0 4px 10px rgba(79,89,64,.18), inset 0 0 0 2px rgba(255,255,255,.2); }
 
 .profile-copy { min-width: 0; }
+.profile-copy .profile-student-number { display: block; margin-bottom: 3px; color: #77766e; font-size: 9px; font-weight: 600; letter-spacing: .04em; }
 .profile-copy h1 { margin-bottom: 6px; }
 .profile-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .profile-badges span { display: inline-flex; align-items: center; gap: 3px; padding: 4px 7px; border-radius: 999px; background: #e5ead6; color: var(--olive); font-size: 8px; font-weight: 700; }

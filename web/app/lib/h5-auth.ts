@@ -9,6 +9,7 @@ export interface H5SessionUser {
 }
 
 export interface H5Profile extends H5SessionUser {
+  studentNumber: string | null;
   nickname: string;
   avatarUrl: string | null;
   campus: string | null;

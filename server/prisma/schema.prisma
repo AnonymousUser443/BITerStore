@@ -53,6 +53,7 @@ enum ReportStatus {
 
 model User {
   id String @id @default(uuid())
+  studentNumber String? @unique
   nickname String @default("新书友")
   avatarUrl String?
   campus String?

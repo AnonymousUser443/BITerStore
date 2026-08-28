@@ -53,6 +53,7 @@ const CurrentUserContext = createContext<User | undefined>(undefined);
 function profileToUser(profile: H5Profile): User {
   return {
     id: profile.id,
+    studentNumber: profile.studentNumber || undefined,
     name: profile.nickname,
     campus: (profile.campus || '未设置') as User['campus'],
     verified: profile.campusStatus === 'VERIFIED',
@@ -407,7 +408,7 @@ function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout
   return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
     <section className="profile-hero">
       <Avatar user={profile} size={86} />
-      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
+      <div className="profile-copy"><span className="profile-student-number">学号 {profile.studentNumber || '待同步'}</span><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
       <button aria-label="编辑个人资料" onClick={() => navigate('/profile/edit')}><Settings /></button>
     </section>
     <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong className="verified-stat">已认证</strong><span>校园身份</span></button></div>

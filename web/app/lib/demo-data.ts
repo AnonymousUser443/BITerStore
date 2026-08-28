@@ -3,7 +3,7 @@ import type { Book, ChatThread, Notification, User } from './types';
 export const CURRENT_USER_ID = 'user-tobby';
 
 export const users: User[] = [
-  { id: CURRENT_USER_ID, name: '北理小书童', campus: '良乡', verified: true, bio: '愿每一本书都能遇见新的读者。', responseTime: '通常 10 分钟内回复', avatarTone: 'sage' },
+  { id: CURRENT_USER_ID, studentNumber: '1120230000', name: '北理小书童', campus: '良乡', verified: true, bio: '愿每一本书都能遇见新的读者。', responseTime: '通常 10 分钟内回复', avatarTone: 'sage' },
   { id: 'user-lin', name: '林小暖', campus: '中关村', verified: true, bio: '数学与生活都要慢慢理解。', responseTime: '30 分钟内回复', avatarTone: 'peach', avatar: '/assets/avatar-lin.webp' },
   { id: 'user-zhou', name: 'Oliver_周', campus: '良乡', verified: true, bio: '计院同学，教材循环利用中。', responseTime: '1 小时内回复', avatarTone: 'blue', avatar: '/assets/avatar-zhou.webp' },
   { id: 'user-jian', name: '简一一', campus: '珠海', verified: true, bio: '喜欢文学，也喜欢把书分享出去。', responseTime: '当天回复', avatarTone: 'gold', avatar: '/assets/avatar-jian.webp' },
