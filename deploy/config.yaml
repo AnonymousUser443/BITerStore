@@ -44,6 +44,7 @@ services:
   api:
     build: ../server
     restart: unless-stopped
+    dns: ["1.1.1.1"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql://biterstore:${POSTGRES_PASSWORD}@postgres:5432/biterstore
