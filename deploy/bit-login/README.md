@@ -6,6 +6,10 @@ exact commit and replaces its fixed CORS allow-list during the image build.
 The build fails closed if the pinned source no longer contains the expected
 allow-list block.
 
+Python dependencies default to the Tsinghua PyPI mirror for reliable builds
+from the production host. Override the `PIP_INDEX_URL` build argument when a
+different trusted index is required.
+
 Required environment:
 
 ```dotenv

@@ -7,6 +7,7 @@ RUN git clone https://github.com/BIT101-dev/BIT-Login-Python.git /source \
 FROM python:3.10-slim
 
 ARG INSTALL_DDDDOCR=1
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -14,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=source /source/server/requirements.txt ./requirements.txt
 RUN if [ "$INSTALL_DDDDOCR" = "0" ]; then sed -i '/ddddocr/d' requirements.txt; fi \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --timeout 120 --index-url "$PIP_INDEX_URL" -r requirements.txt
 
 COPY --from=source /source/bit_login/ bit_login/
 COPY --from=source /source/server/ server/
@@ -24,7 +25,7 @@ RUN mkdir -p /app/data \
     && chmod 700 /app/data \
     && python /tmp/configure_cors.py /app/server/server.py \
     && rm /tmp/configure_cors.py \
-    && pip install --no-cache-dir . \
+    && pip install --no-cache-dir --timeout 120 --index-url "$PIP_INDEX_URL" . \
     && chmod +x server/start.sh
 
 EXPOSE 16384
