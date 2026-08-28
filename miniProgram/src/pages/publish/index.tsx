@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { useDidShow } from '@tarojs/taro'
 import { Button, Image, Input, Picker, Text, Textarea, View } from '@tarojs/components'
 import { AppShell, BookCover } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { listingAssistant } from '@/domain/assistant'
 import { demoRepository } from '@/domain/repository'
+import { requireAccount } from '@/domain/access'
 import type { Campus, Condition, PublishDraft } from '@/domain/types'
 import { feedbackAdapter, mediaAdapter, navigationAdapter } from '@/platform'
 
@@ -17,6 +19,7 @@ export default function PublishPage() {
   const [draft, setDraft] = useState(emptyDraft)
   const [aiLoading, setAiLoading] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+  useDidShow(() => { void requireAccount('请先使用学号登录后发布商品') })
   useEffect(() => { void demoRepository.getDraft().then((saved) => saved && setDraft(saved)) }, [])
   const patch = (next: Partial<PublishDraft>) => setDraft((current) => ({ ...current, ...next }))
   const pick = async () => { const selected = await mediaAdapter.pick(); const saved = await mediaAdapter.persist(selected); patch({ mediaIds: [...draft.mediaIds, ...saved.map((item) => item.id)].slice(0, 6) }) }

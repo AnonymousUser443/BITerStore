@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+enum UserStatus {
+  ACTIVE
+  MUTED
+  BANNED
+  DELETED
+}
+enum CampusStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  EXPIRED
+  REVOKED
+}
+enum WechatAppType {
+  MINI_PROGRAM
+  WEB
+}
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  RESERVED
+  SOLD
+  OFF_SHELF
+  BLOCKED
+}
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+enum ReportStatus {
+  OPEN
+  PROCESSING
+  RESOLVED
+  REJECTED
+}
+
+model User {
+  id String @id @default(uuid())
+  nickname String @default("新书友")
+  avatarUrl String?
+  campus String?
+  bio String @default("")
+  role Role @default(USER)
+  status UserStatus @default(ACTIVE)
+  campusStatus CampusStatus @default(UNVERIFIED)
+  adminTotpSecret String?
+  adminTotpEnabled Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  wechatAccounts WechatAccount[]
+  campusIdentities CampusIdentity[]
+  sessions Session[]
+  listings Listing[]
+  favorites Favorite[]
+  messages Message[]
+  reports Report[] @relation("Reporter")
+  blocks Block[] @relation("BlockOwner")
+  blockedBy Block[] @relation("BlockedUser")
+  conversationMembers ConversationMember[]
+  notifications Notification[]
+  moderationActions ModerationAction[]
+  auditLogs AuditLog[]
+}
+
+model WechatAccount {
+  id String @id @default(uuid())
+  userId String
+  appType WechatAppType
+  appId String
+  openid String
+  unionid String?
+  createdAt DateTime @default(now())
+  lastLoginAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([appId, openid])
+  @@index([unionid])
+}
+
+model CampusIdentity {
+  id String @id @default(uuid())
+  userId String
+  provider String
+  externalSubjectHash String
+  verifiedAt DateTime
+  expiresAt DateTime?
+  revokedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, externalSubjectHash])
+}
+
+model UsedAuthToken {
+  jti    String   @id
+  usedAt DateTime @default(now())
+  userId String
+}
+
+model Session {
+  id String @id @default(uuid())
+  userId String
+  refreshTokenHash String @unique
+  platform String
+  device String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, revokedAt])
+}
+
+model Listing {
+  id String @id @default(uuid())
+  sellerId String
+  title String
+  author String
+  isbn String @default("")
+  category String
+  course String @default("")
+  condition String
+  priceCents Int
+  originalPriceCents Int?
+  campus String
+  description String
+  status ListingStatus @default(PENDING_REVIEW)
+  tags String[]
+  version Int @default(1)
+  viewCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  seller User @relation(fields: [sellerId], references: [id])
+  images ListingImage[]
+  favorites Favorite[]
+  conversations Conversation[]
+  @@index([status, createdAt(sort: Desc)])
+  @@index([sellerId, status])
+}
+
+model ListingImage {
+  id String @id @default(uuid())
+  listingId String?
+  ownerId String
+  objectKey String @unique
+  mime String
+  size Int
+  width Int?
+  height Int?
+  sortOrder Int @default(0)
+  moderationStatus ModerationStatus @default(PENDING)
+  uploadedAt DateTime?
+  createdAt DateTime @default(now())
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@index([ownerId, uploadedAt])
+}
+
+model Favorite {
+  userId String
+  listingId String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@id([userId, listingId])
+}
+
+model Conversation {
+  id String @id @default(uuid())
+  listingId String
+  buyerId String
+  sellerId String
+  lastMessageAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  listing Listing @relation(fields: [listingId], references: [id])
+  members ConversationMember[]
+  messages Message[]
+  @@unique([listingId, buyerId, sellerId])
+  @@index([lastMessageAt(sort: Desc)])
+}
+
+model ConversationMember {
+  conversationId String
+  userId String
+  lastReadMessageId BigInt?
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id BigInt @id @default(autoincrement())
+  conversationId String
+  senderId String
+  content String
+  createdAt DateTime @default(now())
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id])
+  @@index([conversationId, id])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  userId String
+  type String
+  title String
+  body String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Report {
+  id String @id @default(uuid())
+  reporterId String
+  targetType String
+  targetId String
+  reason String
+  evidence String?
+  status ReportStatus @default(OPEN)
+  assigneeId String?
+  resolution String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reporter User @relation("Reporter", fields: [reporterId], references: [id])
+  @@index([status, createdAt])
+}
+
+model Block {
+  userId String
+  blockedUserId String
+  createdAt DateTime @default(now())
+  user User @relation("BlockOwner", fields: [userId], references: [id], onDelete: Cascade)
+  blockedUser User @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  @@id([userId, blockedUserId])
+}
+
+model ModerationAction {
+  id String @id @default(uuid())
+  operatorId String
+  targetType String
+  targetId String
+  action String
+  reason String
+  createdAt DateTime @default(now())
+  operator User @relation(fields: [operatorId], references: [id])
+}
+
+model AuditLog {
+  id BigInt @id @default(autoincrement())
+  actorId String?
+  action String
+  resourceType String
+  resourceId String?
+  requestId String
+  metadata Json?
+  ip String?
+  createdAt DateTime @default(now())
+  actor User? @relation(fields: [actorId], references: [id])
+  @@index([createdAt(sort: Desc)])
+}
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

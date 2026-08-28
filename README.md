@@ -162,6 +162,9 @@ BITerStore/
 ├─ docs/avatars/           # 开发团队头像素材
 ├─ qa-screenshots/         # 360 / 390 / 430px 浏览器验收截图
 ├─ miniProgram/            # Taro 4.2.1 微信小程序与 H5 双端客户端
+├─ server/                 # NestJS / Fastify / Prisma 业务后端
+├─ admin/                  # 平台治理管理后台
+├─ deploy/                 # PostgreSQL、Redis、Nginx 与隧道部署编排
 ├─ web/
 │  ├─ app/
 │  │  ├─ components/       # 页面与通用移动组件
@@ -176,7 +179,9 @@ BITerStore/
 
 ## 🧪 当前边界
 
-BITerStore 目前是纯前端高保真交互原型，默认用户已经完成北理校园身份认证。项目暂不连接真实后端、支付、短信、地图、内容审核或 AI 服务；所有外部能力都通过可替换的异步接口进行本地模拟。
+`miniProgram/` 现已支持 Demo 与真实 API 两种 Repository：未配置 `BITERSTORE_API_URL` 时保留确定性的离线演示；配置后连接 `server/`。正式账号以学号和 BIT-Login 一次性注册凭证登录，微信仅作为登录后的可选绑定与快捷登录方式；游客无需登录即可浏览和搜索，但不能收藏、发布、私聊或进入个人数据页面。后端提供 PostgreSQL 持久化、Redis 会话辅助、R2 图片上传、文本会话、举报治理、审计和管理接口。
+
+本地部署及环境变量见 [`deploy/README.md`](./deploy/README.md)。真实微信、BIT-Login、R2 和 Cloudflare Tunnel 联调需要部署者自己的应用资质、域名与密钥。平台仍不提供在线支付、物流、评价、复杂推荐或音视频聊天。
 
 ## 📄 开源许可
 

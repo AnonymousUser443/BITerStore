@@ -1,6 +1,7 @@
 /// <reference types="@tarojs/taro" />
 declare const __BITERSTORE_E2E__: boolean
 declare const __BIT_LOGIN_URL__: string
+declare const __API_URL__: string
 
 declare module '*.png';
 declare module '*.gif';

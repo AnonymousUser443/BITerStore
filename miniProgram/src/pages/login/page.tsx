@@ -1,10 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import Taro from '@tarojs/taro'
 import { Button, Image, Input, Text, View } from '@tarojs/components'
 import { Brand } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
-import { startBitLogin, submitBitLoginSms, type BitLoginChallenge } from '@/domain/bit-login'
+import {
+  destroyBitLoginChallenge,
+  getRegistrationToken,
+  startBitLogin,
+  submitBitLoginSms,
+  type BitLoginChallenge
+} from '@/domain/bit-login'
+import { continueAsGuest, loginWithCampus, loginWithWechat, pollWebLogin } from '@/domain/auth'
 import { demoRepository } from '@/domain/repository'
-import { navigationAdapter } from '@/platform'
+import { externalNavigationAdapter, navigationAdapter } from '@/platform'
 
 export default function LoginPage() {
   const [sid, setSid] = useState('')
@@ -13,22 +21,117 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<BitLoginChallenge>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const finish = () => { void demoRepository.markAuthenticated(sid.trim()); setPassword(''); void navigationAdapter.switchTab('/pages/home/index') }
-  const continueAsGuest = () => { void demoRepository.markAuthenticated('guest'); setPassword(''); void navigationAdapter.switchTab('/pages/home/index') }
-  const login = async () => {
+
+  useEffect(() => {
+    if (process.env.TARO_ENV !== 'h5') return
+    const state = Taro.getStorageSync('biterstore:web-login-state')
+    if (!state || Taro.getCurrentInstance().router?.params.wechat !== 'complete') return
+    setLoading(true)
+    void pollWebLogin(state)
+      .then(() => navigationAdapter.switchTab('/pages/home/index'))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : '微信登录确认失败'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const finishCampus = async (value: BitLoginChallenge) => {
+    try {
+      const registrationToken = await getRegistrationToken(value)
+      await loginWithCampus(registrationToken)
+      await destroyBitLoginChallenge(value)
+      setPassword('')
+      await navigationAdapter.switchTab('/pages/home/index')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '学号登录失败')
+    }
+  }
+
+  const campusLogin = async () => {
     if (!/^\d{8,12}$/.test(sid.trim())) return setError('请输入正确的北理工学号')
     if (!password) return setError('请输入统一身份认证密码')
-    setLoading(true); setError('')
-    try { const result = await startBitLogin(sid.trim(), password); if (result.status === 'waiting_sms') { setPassword(''); setChallenge(result) } else await finish() }
-    catch (cause) { setError(cause instanceof Error ? cause.message : '统一身份认证失败') }
-    finally { setLoading(false) }
+    setLoading(true)
+    setError('')
+    try {
+      const result = await startBitLogin(sid.trim(), password)
+      if (result.status === 'waiting_sms') {
+        setPassword('')
+        setChallenge(result)
+      } else await finishCampus(result)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '统一身份认证失败')
+    } finally {
+      setLoading(false)
+    }
   }
+
   const verifySms = async () => {
     if (!challenge || !/^\d{4,8}$/.test(smsCode.trim())) return setError('请输入 4 至 8 位短信验证码')
-    setLoading(true); setError('')
-    try { const result = await submitBitLoginSms(challenge, smsCode.trim()); if (result.status === 'authenticated') await finish() }
-    catch (cause) { setError(cause instanceof Error ? cause.message : '短信验证失败') }
-    finally { setLoading(false) }
+    setLoading(true)
+    setError('')
+    try {
+      const result = await submitBitLoginSms(challenge, smsCode.trim())
+      if (result.status === 'authenticated') await finishCampus(result)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '短信验证失败')
+    } finally {
+      setLoading(false)
+    }
   }
-  return <View className='phone-shell login-page'><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' /><View className='login-brand'><Brand /><Text><Glyph name='shield' /></Text></View><View className='login-hero'><Image src='/assets/tobby-hello.webp' mode='aspectFit' /><View><Text className='eyebrow'>BIT CAMPUS IDENTITY</Text><Text className='login-title'>{challenge ? '确认是你本人' : '北理同学，你好'}</Text><Text className='login-description'>{challenge ? `验证码已发送至 ${challenge.masked_phone || '绑定手机'}` : '使用学校统一身份认证登录，完成校园身份验证。'}</Text></View></View><View className='login-card'>{challenge ? <><View className='login-field'><Text>短信验证码</Text><Input type='number' maxlength={8} value={smsCode} onInput={(event) => setSmsCode(event.detail.value.replace(/\D/g, ''))} placeholder='请输入验证码' focus /></View><Button id='e2e-login-submit' className='primary-button' disabled={loading} onClick={verifySms}>{loading ? '正在验证…' : '继续验证'}</Button><Button className='login-link' disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError('') }}>返回重新登录</Button></> : <><View className='login-field'><Text>学号</Text><Input type='number' value={sid} onInput={(event) => setSid(event.detail.value.replace(/\D/g, ''))} placeholder='请输入北理工学号' focus /></View><View className='login-field'><Text>统一身份认证密码</Text><Input password value={password} onInput={(event) => setPassword(event.detail.value)} placeholder='请输入密码' /></View><Button id='e2e-login-submit' className='primary-button' disabled={loading} onClick={login}>{loading ? '正在安全验证…' : '登录 BITerStore'}</Button><View className='guest-divider'><Text>或</Text></View><Button id='e2e-guest-access' className='secondary-button guest-button' disabled={loading} onClick={continueAsGuest}>游客访问</Button><Text className='guest-note'>先逛逛校园书架，之后可在“我的”页面重新登录。</Text></>}{error && <View className='login-error'><Glyph name='warning' />{error}</View>}{__BITERSTORE_E2E__ && <Button id='e2e-login-bypass' className='login-link' onClick={() => { setSid('1120230000'); void demoRepository.markAuthenticated('1120230000').then(() => navigationAdapter.switchTab('/pages/home/index')) }}>自动化测试登录</Button>}</View><View className='login-security'><Glyph name='shield' /><View><Text>凭据安全说明</Text><Text>密码仅用于本次学校统一身份认证，不会保存在 BITerStore 本地。</Text></View></View><Button className='login-guide' onClick={() => navigationAdapter.go('/pages/onboarding/index')}>返回新手指引</Button></View>
+
+  const wechatLogin = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await loginWithWechat()
+      if ('accessToken' in result) await navigationAdapter.switchTab('/pages/home/index')
+      else if (result.authorizeUrl) await externalNavigationAdapter.open(result.authorizeUrl)
+      else setError('微信网站登录尚未配置，请先使用学号登录')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '微信登录失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const guest = async () => {
+    await continueAsGuest()
+    await demoRepository.markAuthenticated('guest')
+    await navigationAdapter.switchTab('/pages/home/index')
+  }
+  const e2eLogin = () => {
+    void demoRepository.markAuthenticated('1120230000').then(() => navigationAdapter.switchTab('/pages/home/index'))
+  }
+
+  return <View className='phone-shell login-page'>
+    <Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />
+    <View className='login-brand'><Brand /><Text><Glyph name='shield' /></Text></View>
+    <View className='login-hero'>
+      <Image src='/assets/tobby-hello.webp' mode='aspectFit' />
+      <View>
+        <Text className='eyebrow'>BIT CAMPUS ACCOUNT</Text>
+        <Text className='login-title'>{challenge ? '确认是你本人' : '学号登录 BITerStore'}</Text>
+        <Text className='login-description'>{challenge
+          ? `验证码已发送至 ${challenge.masked_phone || '绑定手机'}`
+          : '学号是主要账号。登录后可以发布、联系卖家，并可在“我的”中选择绑定微信。'}</Text>
+      </View>
+    </View>
+
+    <View className='login-card'>
+      {challenge ? <>
+        <View className='login-field'><Text>短信验证码</Text><Input type='number' maxlength={8} value={smsCode} onInput={(event) => setSmsCode(event.detail.value.replace(/\D/g, ''))} placeholder='请输入验证码' focus /></View>
+        <Button id='e2e-login-submit' className='primary-button' disabled={loading} onClick={verifySms}>{loading ? '正在验证…' : '继续登录'}</Button>
+      </> : <>
+        <View className='login-field'><Text>学号</Text><Input type='number' value={sid} onInput={(event) => setSid(event.detail.value.replace(/\D/g, ''))} placeholder='请输入北理工学号' /></View>
+        <View className='login-field'><Text>统一身份认证密码</Text><Input password value={password} onInput={(event) => setPassword(event.detail.value)} placeholder='请输入密码' /></View>
+        <Button id='e2e-login-submit' className='primary-button' disabled={loading} onClick={campusLogin}>{loading ? '正在安全验证…' : '学号登录'}</Button>
+        <View className='guest-divider'><Text>其他方式</Text></View>
+        <Button className='secondary-button' disabled={loading} onClick={wechatLogin}>微信快捷登录（需已绑定）</Button>
+        <Button id='e2e-guest-access' className='secondary-button guest-button' disabled={loading} onClick={guest}>游客浏览</Button>
+      </>}
+      {error && <View className='login-error'><Glyph name='warning' />{error}</View>}
+      {__BITERSTORE_E2E__ && <Button id='e2e-login-bypass' className='login-link' onClick={e2eLogin}>自动化测试登录</Button>}
+    </View>
+
+    <View className='login-security'><Glyph name='shield' /><View><Text>隐私说明</Text><Text>校园密码只发送到认证服务；BITerStore 只接收一次性登录凭证，不保存密码、短信验证码或教务 Cookie。</Text></View></View>
+    <Button className='login-guide' onClick={() => navigationAdapter.back()}>返回</Button>
+  </View>
 }

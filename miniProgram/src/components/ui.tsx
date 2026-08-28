@@ -52,7 +52,7 @@ export function BookTile({ listing, href, onTap }: { listing: Listing; href?: st
 }
 
 export function ListingCard({ listing, href, onTap, favorite = false, onFavorite, onContact }: { listing: Listing; href?: string; onTap?: () => void; favorite?: boolean; onFavorite?: () => void; onContact?: () => void }) {
-  const seller = getUser(listing.sellerId)
+  const seller = listing.seller || getUser(listing.sellerId)
   const main = <><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Glyph name='more' className='more-glyph' /></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Text className='seller-rating'>★ 4.9分</Text></View></View></>
   return <View className={`listing-card ${listing.status !== 'available' ? 'unavailable-card' : ''}`}>
     {href ? <Navigator id={`e2e-listing-${listing.id}`} className='listing-main' url={href} onClick={() => beginNavigationFeedback(href)}>{main}</Navigator> : <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}>{main}</Button>}

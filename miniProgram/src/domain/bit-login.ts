@@ -31,3 +31,12 @@ export async function submitBitLoginSms(challenge: BitLoginChallenge, code: stri
   const snapshot = await bitLoginTransport.sms(challenge.challenge_id, challenge.access_token, code)
   return poll({ ...snapshot, access_token: challenge.access_token })
 }
+
+export async function getRegistrationToken(challenge: BitLoginChallenge) {
+  if (challenge.status !== 'authenticated') throw new Error('校园身份尚未认证成功')
+  return bitLoginTransport.registration(challenge.challenge_id, challenge.access_token)
+}
+
+export async function destroyBitLoginChallenge(challenge: BitLoginChallenge) {
+  await bitLoginTransport.destroy(challenge.challenge_id, challenge.access_token)
+}
