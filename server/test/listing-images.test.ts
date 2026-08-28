@@ -8,6 +8,18 @@ const body = {
 }
 
 describe('listing required images', () => {
+  it('returns controlled media URLs based on opaque image ids', async () => {
+    const previous = process.env.PUBLIC_API_URL
+    process.env.PUBLIC_API_URL = 'https://store.example.test'
+    const prisma = { listing: { findFirst: vi.fn().mockResolvedValue({ id: 'listing-id', images: [{ id: 'cover-id', objectKey: 'pending/user/private-name.jpg' }] }) } }
+    try {
+      await expect(new ListingsService(prisma as never).get('listing-id')).resolves.toMatchObject({ images: [{ url: 'https://store.example.test/api/v1/media/cover-id' }] })
+    } finally {
+      if (previous === undefined) delete process.env.PUBLIC_API_URL
+      else process.env.PUBLIC_API_URL = previous
+    }
+  })
+
   it('excludes the private ISBN page from public listing image queries', async () => {
     const prisma = { listing: { findMany: vi.fn().mockResolvedValue([]) } }
     const service = new ListingsService(prisma as never)

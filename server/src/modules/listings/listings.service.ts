@@ -8,11 +8,9 @@ export const allowedTransitions: Record<ListingStatus, ListingStatus[]> = {
 @Injectable()
 export class ListingsService {
   constructor(private readonly prisma: PrismaService) {}
-  private present<T extends { images?: Array<{ objectKey: string }> }>(item: T) {
-    const publicBase = process.env.UPLOAD_STORAGE === 'r2'
-      ? process.env.R2_PUBLIC_URL?.replace(/\/$/, '')
-      : `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/media`
-    return { ...item, images: item.images?.map((image) => ({ ...image, url: publicBase ? `${publicBase}/${image.objectKey.split('/').map(encodeURIComponent).join('/')}` : undefined })) }
+  private present<T extends { images?: Array<{ id: string }> }>(item: T) {
+    const publicBase = `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/media`
+    return { ...item, images: item.images?.map((image) => ({ ...image, url: `${publicBase}/${encodeURIComponent(image.id)}` })) }
   }
   list(query: { q?: string; campus?: string; category?: string; cursor?: string; limit?: string; mine?: string }, userId?: string) {
     const take = Math.min(Math.max(Number(query.limit) || 20, 1), 50)

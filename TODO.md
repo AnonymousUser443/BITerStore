@@ -66,9 +66,9 @@
 - [x] 发布流程强制区分并上传 `COVER` 封面与 `ISBN` 页，客户端和服务端双重校验，支持最多 4 张补充实拍图
 - [x] 接入微信 ISBN 条码扫描、H5 BarcodeDetector 图片识别与 Open Library 免费书目回填，失败时允许手工填写
 - [x] 补充服务端 ZXing-C++ WASM 条码兜底、ISBN 校验位验证与真实条码运行验证
-- [x] 增加受限 Cloudflare Worker 书目代理模板、Redis 正负缓存，并从公开商品图片中排除 ISBN 页
+- [x] 增加受限 Cloudflare Worker 书目代理模板、Redis 正负缓存，并通过受控媒体接口从公开访问中排除 ISBN 页
 - [ ] 部署书目代理并填写生产 `BOOK_METADATA_PROXY_URL` / `BOOK_METADATA_PROXY_TOKEN`
-- [ ] 验证 R2 Bucket CORS 与公开图片域名后，将生产 `UPLOAD_STORAGE` 从 `local` 切换为 `r2`
+- [ ] 验证私有 R2 Bucket 的凭据与直传 CORS 后，将生产 `UPLOAD_STORAGE` 从 `local` 切换为 `r2`
 
 ## 进行中
 
