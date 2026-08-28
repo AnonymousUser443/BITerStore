@@ -51,6 +51,7 @@ services:
       NODE_ENV: production
       ALLOW_DEV_AUTH: "false"
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    volumes: [api-uploads:/app/uploads]
     deploy: { resources: { limits: { cpus: "4", memory: 4G } } }
   h5:
     build:
@@ -90,4 +91,4 @@ services:
         done
     volumes: [./backups:/backups]
     depends_on: { postgres: { condition: service_healthy } }
-volumes: { postgres-data: {}, redis-data: {}, bit-login-data: {} }
+volumes: { postgres-data: {}, redis-data: {}, bit-login-data: {}, api-uploads: {} }

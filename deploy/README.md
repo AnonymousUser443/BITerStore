@@ -1,6 +1,6 @@
 # 本地测试部署
 
-1. 复制 `.env.example` 为 `.env`，填写数据库、微信、BIT-Login 和 R2 配置。
+1. 复制 `.env.example` 为 `.env`，填写数据库、微信与 BIT-Login 配置。图片默认写入持久化卷 `api-uploads`；如需 R2，将 `UPLOAD_STORAGE` 改为 `r2` 并填写 R2 配置。
 2. 在 `miniProgram` 中以 `BITERSTORE_API_URL=https://api.example.com/api/v1` 构建 H5/WeApp，在 `admin` 中以 `VITE_API_URL=https://api.example.com/api/v1` 构建后台。
 3. 执行 `docker compose -f config.yaml up -d --build`，默认仅监听远端回环地址 `127.0.0.1:18081`。
 4. PostgreSQL 与 Redis 不映射宿主机公网端口；外部入口仅为 Nginx。
@@ -8,4 +8,4 @@
 
 安装 k6 后执行 `k6 run -e API_URL=http://localhost:8080/api/v1 loadtest.js`，脚本模拟 100 名同时在线用户持续访问 30 分钟。
 
-`backup` 容器保留本地数据库备份。R2 异地上传需要在宿主机上使用 `rclone` 对 `deploy/backups` 建立加密同步任务，凭据不得写入仓库。
+`backup` 容器保留本地数据库备份。本机图片位于 `api-uploads` 卷，应与数据库一同纳入备份；R2 异地上传或数据库备份同步可在宿主机使用 `rclone`，凭据不得写入仓库。

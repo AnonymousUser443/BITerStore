@@ -17,7 +17,7 @@ export const apiRepository: DemoRepository = {
   async listFavorites() { const items = (await apiRequest<any[]>('/listings/favorites/mine')).map(listing); items.forEach((item) => favoriteIds.add(item.id)); return items },
   async reportListing(id, reason) { await apiRequest('/reports', { method: 'POST', data: { targetType: 'LISTING', targetId: id, reason } }) },
   async saveDraft(draft) { await storageAdapter.set('api-draft', draft) }, async getDraft() { return storageAdapter.get<PublishDraft | null>('api-draft', null) },
-  async publishListing(draft) { const imageIds = await uploadImages(draft.mediaIds); const result = listing(await apiRequest('/listings', { method: 'POST', data: { ...draftPayload(draft, false), imageIds } })); await storageAdapter.remove('api-draft'); return result },
+  async publishListing(draft) { const imageIds = await uploadImages(draft); const result = listing(await apiRequest('/listings', { method: 'POST', data: { ...draftPayload(draft, false), imageIds } })); await storageAdapter.remove('api-draft'); return result },
   async updateListingStatus(id, status) { const current: any = await apiRequest(`/listings/${id}`); await apiRequest(`/listings/${id}/status`, { method: 'POST', data: { status: statusToApi(status), version: current.version } }) },
   async listMyListings() { const data = await apiRequest<{ items: any[] }>('/listings/mine/all' + apiQuery({ limit: 50 })); return data.items.map(listing) },
   async listThreads() { const current = await sessionStore.get(); return (await apiRequest<any[]>('/conversations')).map((value) => thread(value, current?.user.id)) },
@@ -35,12 +35,14 @@ function draftPayload(draft: PublishDraft, draftOnly: boolean) { return { title:
 function message(value: any): Message { return { id: String(value.id), senderId: value.senderId, text: value.content, createdAt: value.createdAt, kind: 'text' } }
 function thread(value: any, currentUserId?: string): ChatThread { const other = (value.members || []).find((member: any) => member.userId !== currentUserId) || (value.members || [])[0]; return { id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? profile(other.user) : undefined, listingId: value.listingId, unread: Number(value.unread || 0), updatedAt: value.lastMessageAt, messages: (value.messages || []).map(message) } }
 const favoriteIds = new Set<string>()
-async function uploadImages(ids: string[]) {
-  const items = (await mediaAdapter.list()).filter((item) => ids.includes(item.id))
+async function uploadImages(draft: PublishDraft) {
+  const items = (await mediaAdapter.list()).filter((item) => draft.mediaIds.includes(item.id))
   const uploaded: string[] = []
   for (const item of items) {
-    const ticket = await apiRequest<{ id: string; uploadUrl: string }>('/uploads/presign', { method: 'POST', data: { mime: item.mime, size: item.size } })
-    await uploadAdapter.put(ticket.uploadUrl, item)
+    const role = item.id === draft.coverMediaId ? 'COVER' : item.id === draft.isbnMediaId ? 'ISBN' : 'GALLERY'
+    const ticket = await apiRequest<{ id: string; uploadUrl: string; authRequired?: boolean }>('/uploads/presign', { method: 'POST', data: { mime: item.mime, size: item.size, role } })
+    const session = ticket.authRequired ? await sessionStore.get() : null
+    await uploadAdapter.put(ticket.uploadUrl, item, session?.accessToken)
     await apiRequest(`/uploads/${ticket.id}/complete`, { method: 'POST' })
     uploaded.push(ticket.id)
   }

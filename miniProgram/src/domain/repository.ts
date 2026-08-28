@@ -30,6 +30,7 @@ const localRepository: DemoRepository = {
   async saveDraft(draft) { await storageAdapter.set(KEYS.draft, draft) }, async getDraft() { return storageAdapter.get<PublishDraft | null>(KEYS.draft, null) },
   async publishListing(draft) {
     if (!draft.title.trim() || !draft.price || Number(draft.price) <= 0) throw new AppError('VALIDATION', '请填写标题和有效价格')
+    if (!draft.coverMediaId || !draft.isbnMediaId) throw new AppError('VALIDATION', '发布前必须上传封面和 ISBN 页')
     const item: Listing = { id: `listing-${Date.now()}`, title: draft.title.trim(), author: draft.author.trim(), isbn: draft.isbn.trim(), category: draft.category, course: draft.course.trim(), price: Number(draft.price), originalPrice: Number(draft.originalPrice || draft.price), condition: draft.condition, campus: draft.campus, description: draft.description.trim(), status: 'available', sellerId: CURRENT_USER_ID, createdAt: new Date().toISOString(), tags: draft.tags, tone: 'sage', mediaIds: draft.mediaIds }
     listingCache = [item, ...(await storageAdapter.get(KEYS.listings, seedListings))]; await storageAdapter.set(KEYS.listings, listingCache); await storageAdapter.remove(KEYS.draft); return item
   },

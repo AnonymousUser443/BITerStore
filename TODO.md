@@ -1,6 +1,6 @@
 # BITerStore 开发进度
 
-最后更新：2026-08-26
+最后更新：2026-08-28
 
 ## 已完成
 
@@ -62,6 +62,9 @@
 - [x] 完成 Taro H5 与微信小程序生产构建、TypeScript、ESLint 和 6 项单测
 - [x] 合并云端 Taro 骨架，收敛并重命名为唯一 `miniProgram/` 客户端，移除临时原生 `miniapp/`
 - [x] 以 `web/app/components/mobile-app.tsx` 和 `web/app/globals.css` 为唯一 Golden Reference；Taro H5 直接使用原组件和原 CSS，微信端只保留必要的平台组件映射，并将空白页/运行时异常纳入 H5 视觉门禁
+- [x] 完成图片上传 MVP：默认本机持久化卷、可切换 R2、5MB/格式校验与鉴权上传
+- [x] 发布流程强制区分并上传 `COVER` 封面与 `ISBN` 页，客户端和服务端双重校验，支持最多 4 张补充实拍图
+- [x] 接入微信 ISBN 条码扫描、H5 BarcodeDetector 图片识别与 Open Library 免费书目回填，失败时允许手工填写
 
 ## 进行中
 
@@ -81,6 +84,8 @@
 
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
 - [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
+- [ ] Open Library 对中文教材覆盖率有限；灰度期需统计命中率，再决定是否增加国家图书馆数据源或部署本地 OCR/条码识别兜底。
+- [ ] 本机图片存储卷需要纳入备份与过期孤儿文件清理；生产规模增长后建议切换 R2。
 
 ## 待完成
 

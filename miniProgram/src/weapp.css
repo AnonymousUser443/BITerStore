@@ -386,6 +386,20 @@ button::after { border: 0; }
 .add-image .glyph { font-size: 25px; }
 .add-image-title { display: block; margin-top: 7px; font-size: 11px; font-weight: 700; }
 .add-image-copy { display: block; margin-top: 3px; color: #77766e; font-size: 9px; }
+.upload-heading { display: block; color: #4f5940; font-size: 13px; font-weight: 700; }
+.upload-instruction { display: block; margin: 4px 0 11px; color: #77766e; font-size: 9px; }
+.required-image-grid { display: flex; }
+.required-image { width: 48%; height: 118px; margin-right: 2%; }
+.required-image-button { width: 100%; height: 118px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #cbbd9f; border-radius: 14px; background: #fbf9f2; color: #4f5940; }
+.required-image-button .glyph { font-size: 24px; }
+.required-image-button > text { display: block; margin-top: 4px; font-size: 11px; font-weight: 700; }
+.required-image-button > text:last-child { color: #77766e; font-size: 8px; font-weight: 400; }
+.required-image .upload-preview { width: 100%; height: 118px; }
+.required-image .upload-preview image { width: 100%; height: 100%; }
+.image-role { position: absolute; left: 5px; bottom: 5px; padding: 3px 6px; border-radius: 8px; background: rgba(69,79,55,.84); color: #fff; font-size: 8px; }
+.optional-images { margin-top: 12px; }
+.optional-images > text { display: block; margin-bottom: 7px; color: #77766e; font-size: 9px; }
+.ai-card button[disabled] { opacity: .48; }
 .tobby-tip { min-height: 108px; display: flex; align-items: center; margin-top: 7px; }
 .tobby-tip image { width: 123px; height: 108px; margin-left: -6px; }
 .tobby-tip > text { margin-left: -8px; padding: 10px 13px; border: 1px solid #d5c7a7; border-radius: 16px 16px 16px 4px; background: #fffdf8; color: #6b6d62; font-size: 10px; }

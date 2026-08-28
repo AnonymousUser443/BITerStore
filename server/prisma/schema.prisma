@@ -44,6 +44,11 @@ enum ModerationStatus {
   APPROVED
   REJECTED
 }
+enum ListingImageRole {
+  COVER
+  ISBN
+  GALLERY
+}
 enum ReportStatus {
   OPEN
   PROCESSING
@@ -161,6 +166,7 @@ model ListingImage {
   objectKey String @unique
   mime String
   size Int
+  role ListingImageRole @default(GALLERY)
   width Int?
   height Int?
   sortOrder Int @default(0)

@@ -18,8 +18,9 @@ export interface ListingFilters {
 export interface PublishDraft {
   title: string; author: string; isbn: string; category: string; course: string;
   price: string; originalPrice: string; condition: Condition; campus: Campus;
-  description: string; tags: string[]; mediaIds: string[]
+  description: string; tags: string[]; mediaIds: string[]; coverMediaId?: string; isbnMediaId?: string
 }
+export interface BookMetadata { isbn: string; title: string; author: string; publisher: string; publishDate: string; coverUrl: string; subjects: string[] }
 export interface ListingAIDraft { title: string; description: string; tags: string[] }
 export interface Message { id: string; senderId: string; text: string; createdAt: string; kind: 'text' | 'listing' | 'image'; listingId?: string; mediaId?: string }
 export interface ChatThread { id: string; participantId: string; participant?: User; listingId: string; unread: number; updatedAt: string; messages: Message[] }

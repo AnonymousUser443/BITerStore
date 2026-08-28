@@ -136,12 +136,12 @@ async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
   const resolved = await Promise.all(items.map((item) => new Promise<StoredMedia>((resolve) => { if (!item.uri.startsWith('idb:')) return resolve(item); const request = db.transaction('files').objectStore('files').get(item.id); request.onsuccess = () => resolve(request.result?.blob ? { ...item, uri: globalThis.URL.createObjectURL(request.result.blob) } : item); request.onerror = () => resolve(item) })))
   db.close(); return resolved
 }
-export interface MediaAdapter { pick(): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]> }
+export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]> }
 export const mediaAdapter: MediaAdapter = {
-  async pick() {
-    if (__BITERSTORE_E2E__) return [{ id: 'fixture-book', uri: '/assets/tobby-guide-publish.webp', mime: 'image/webp', size: 1024 }]
+  async pick(options = {}) {
+    if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: '/assets/tobby-guide-publish.webp', mime: 'image/webp', size: 1024 }]
     try {
-      const result = await Taro.chooseMedia({ count: 6, mediaType: ['image'], sourceType: ['album', 'camera'] })
+      const result = await Taro.chooseMedia({ count: options.count || 6, mediaType: ['image'], sourceType: options.cameraOnly ? ['camera'] : ['album', 'camera'] })
       return result.tempFiles.map((file, index) => ({ id: `media-${Date.now()}-${index}`, uri: file.tempFilePath, mime: 'image/jpeg', size: file.size || 0 }))
     } catch (cause) { throw new AppError('MEDIA_PICK', '选择图片失败', cause) }
   },
@@ -191,12 +191,35 @@ export const avatarAdapter = {
 }
 
 export const uploadAdapter = {
-  async put(url: string, item: StoredMedia) {
+  async put(url: string, item: StoredMedia, accessToken?: string) {
     let data: ArrayBuffer
     if (process.env.TARO_ENV === 'h5') data = await fetch(item.uri).then((response) => response.arrayBuffer())
     else data = await new Promise<ArrayBuffer>((resolve, reject) => Taro.getFileSystemManager().readFile({ filePath: item.uri, success: (result) => resolve(result.data as ArrayBuffer), fail: reject }))
-    const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime } })
+    const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime, ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) } })
     if (response.statusCode < 200 || response.statusCode >= 300) throw new AppError('MEDIA_PERSIST', `图片上传失败（${response.statusCode}）`)
+  }
+}
+
+type BarcodeDetectorLike = { detect(source: ImageBitmap): Promise<Array<{ rawValue: string }>> }
+type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike
+export const isbnRecognitionAdapter = {
+  async scan(imageUri?: string): Promise<string> {
+    if (__BITERSTORE_E2E__) return '9787560894937'
+    if (process.env.TARO_ENV === 'weapp') {
+      const result = await Taro.scanCode({ scanType: ['barCode'] })
+      const isbn = String(result.result || '').replace(/[^0-9Xx]/g, '').toUpperCase()
+      if (!/^\d{9}[\dX]$|^\d{13}$/.test(isbn)) throw new AppError('VALIDATION', '没有识别到有效 ISBN 条码')
+      return isbn
+    }
+    const Detector = (globalThis as typeof globalThis & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
+    if (!Detector || !imageUri) throw new AppError('VALIDATION', '当前浏览器不支持图片条码识别，请在下一步手动填写 ISBN')
+    const blob = await fetch(imageUri).then((response) => response.blob())
+    const bitmap = await createImageBitmap(blob)
+    const values = await new Detector({ formats: ['ean_13', 'ean_8'] }).detect(bitmap)
+    bitmap.close()
+    const isbn = String(values[0]?.rawValue || '').replace(/[^0-9Xx]/g, '').toUpperCase()
+    if (!/^\d{13}$/.test(isbn)) throw new AppError('VALIDATION', 'ISBN 页中没有识别到清晰条码，请重新拍摄或手动填写')
+    return isbn
   }
 }
 
