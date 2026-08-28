@@ -63,7 +63,7 @@ function markNavigationApiReady(url: string, startedAt: number) {
 }
 export const navigationAdapter: NavigationAdapter = {
   async go(url) { const startedAt = Date.now(); beginNavigation(url); await Taro.navigateTo({ url }); markNavigationApiReady(url, startedAt) },
-  async switchTab(url) { const startedAt = Date.now(); beginNavigation(url); await Taro.switchTab({ url }); markNavigationApiReady(url, startedAt) },
+  async switchTab(url) { const startedAt = Date.now(); beginNavigation(url); if (process.env.TARO_ENV === 'h5') await Taro.redirectTo({ url }); else await Taro.switchTab({ url }); markNavigationApiReady(url, startedAt) },
   async back() { await Taro.navigateBack() }, currentRoute() { return Taro.getCurrentInstance().router?.path || '' }
 }
 export interface FeedbackAdapter { toast(message: string): Promise<void>; confirm(title: string, content: string): Promise<boolean> }
@@ -90,7 +90,21 @@ async function bitLoginRequest(path: string, method: 'GET' | 'POST', data?: obje
 export const bitLoginTransport = {
   start(username: string, password: string) { return bitLoginRequest('/api/auth/start', 'POST', { username, password, services: ['jwb'], wait_seconds: 1 }) },
   status(challengeId: string, token: string) { return bitLoginRequest(`/api/auth/${challengeId}`, 'GET', undefined, token) },
-  sms(challengeId: string, token: string, code: string) { return bitLoginRequest(`/api/auth/${challengeId}/sms`, 'POST', { code }, token) }
+  sms(challengeId: string, token: string, code: string) { return bitLoginRequest(`/api/auth/${challengeId}/sms`, 'POST', { code }, token) },
+  async registration(challengeId: string, token: string) {
+    const response = await Taro.request<{ registration_token?: string; detail?: string }>({ url: `${__BIT_LOGIN_URL__}/api/auth/${challengeId}/registration-token`, method: 'POST', data: { audience: 'biterstore' }, header: { 'Content-Type': 'application/json', 'X-Challenge-Token': token } })
+    if (response.statusCode < 200 || response.statusCode >= 300 || !response.data.registration_token) throw new AppError('BIT_LOGIN', response.data.detail || '认证服务未签发注册凭证')
+    return response.data.registration_token
+  },
+  async destroy(challengeId: string, token: string) { await Taro.request({ url: `${__BIT_LOGIN_URL__}/api/auth/${challengeId}`, method: 'DELETE', header: { 'X-Challenge-Token': token } }).catch(() => undefined) }
+}
+
+export const externalNavigationAdapter = {
+  open(url: string) {
+    if (process.env.TARO_ENV !== 'h5') return feedbackAdapter.toast('请在 H5 中打开该登录地址')
+    globalThis.location.assign(url)
+    return Promise.resolve()
+  }
 }
 
 const MEDIA_KEY = 'media'
@@ -150,6 +164,16 @@ export const mediaAdapter: MediaAdapter = {
     await storageAdapter.set(MEDIA_KEY, existing.filter((item) => !ids.includes(item.id)))
   },
   async list() { const items = await storageAdapter.get<StoredMedia[]>(MEDIA_KEY, []); return process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined' ? listH5Media(items) : items }
+}
+
+export const uploadAdapter = {
+  async put(url: string, item: StoredMedia) {
+    let data: ArrayBuffer
+    if (process.env.TARO_ENV === 'h5') data = await fetch(item.uri).then((response) => response.arrayBuffer())
+    else data = await new Promise<ArrayBuffer>((resolve, reject) => Taro.getFileSystemManager().readFile({ filePath: item.uri, success: (result) => resolve(result.data as ArrayBuffer), fail: reject }))
+    const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime } })
+    if (response.statusCode < 200 || response.statusCode >= 300) throw new AppError('MEDIA_PERSIST', `图片上传失败（${response.statusCode}）`)
+  }
 }
 
 export interface CacheAdapter { prepare(version: string): Promise<boolean> }

@@ -27,6 +27,7 @@ weapp-automation.log
 
 # Taro/SWC compiler cache (platform-specific binaries)
 miniProgram/.swc/
+miniProgram/dist-weapp-auth/
 
 # Superseded local dependency bootstrap (the formal client lives in miniProgram/)
 taro/

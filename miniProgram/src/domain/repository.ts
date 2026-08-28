@@ -1,6 +1,7 @@
 import { mediaAdapter, storageAdapter } from '@/platform'
 import { CURRENT_USER_ID, seedListings, seedNotifications, seedThreads, users } from './seed'
 import { defaultFilters, filterListings } from './filters'
+import { apiRepository } from './api-repository'
 import type { ChatThread, Listing, ListingFilters, ListingStatus, Message, Notification, PublishDraft, User } from './types'
 import { AppError } from './types'
 
@@ -18,7 +19,7 @@ export interface DemoRepository {
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
 }
-export const demoRepository: DemoRepository = {
+const localRepository: DemoRepository = {
   async listListings(filters = defaultFilters) { listingCache = await storageAdapter.get(KEYS.listings, seedListings); return filterListings(listingCache, filters) },
   async getListing(id) { listingCache = await storageAdapter.get(KEYS.listings, seedListings); const item = listingCache.find((x) => x.id === id); if (!item) throw new AppError('NOT_FOUND', '商品不存在'); return item },
   peekListing(id) { return listingCache.find((item) => item.id === id) },
@@ -54,3 +55,5 @@ export const demoRepository: DemoRepository = {
   async resetDemoData() { const media = await mediaAdapter.list(); await mediaAdapter.remove(media.map((x) => x.id)); await storageAdapter.clearNamespace(); filterCache = undefined; listingCache = seedListings }
 }
 export function getUser(id: string) { return users.find((x) => x.id === id) ?? users[0] }
+
+export const demoRepository: DemoRepository = typeof __API_URL__ !== 'undefined' && Boolean(__API_URL__) && !__BITERSTORE_E2E__ ? apiRepository : localRepository

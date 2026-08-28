@@ -16,6 +16,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
     cache: { enable: true },
     defineConstants: {
       __BITERSTORE_E2E__: JSON.stringify(process.env.BITERSTORE_E2E === '1'),
+      __API_URL__: JSON.stringify((process.env.BITERSTORE_API_URL || '').replace(/\/$/, '')),
       __BIT_LOGIN_URL__: JSON.stringify((process.env.BIT_LOGIN_URL || 'https://login.bit101.flwfdd.xyz').replace(/\/$/, ''))
     },
     copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
@@ -41,12 +42,21 @@ export default defineConfig<'webpack5'>(async (merge) => {
           '/pages/my-listings/index': '/my-listings', '/pages/states/index': '/states'
         }
       },
-      miniCssExtractPluginOption: { ignoreOrder: true },
+      miniCssExtractPluginOption: {
+        ignoreOrder: true,
+        filename: process.env.NODE_ENV === 'production' ? 'css/[name].[contenthash:8].css' : 'css/[name].css',
+        chunkFilename: process.env.NODE_ENV === 'production' ? 'css/[id].[contenthash:8].css' : 'css/[id].css'
+      },
       postcss: { htmltransform: { enable: false }, pxtransform: { enable: false, config: {} }, autoprefixer: { enable: true, config: {} }, cssModules: { enable: false } },
       webpackChain(chain) {
         chain.performance
           .maxAssetSize(assetPerformanceBudget)
           .maxEntrypointSize(entrypointPerformanceBudget)
+        if (process.env.NODE_ENV === 'production') {
+          chain.output
+            .filename('js/[name].[contenthash:8].js')
+            .chunkFilename('chunk/[name].[contenthash:8].js')
+        }
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
         chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))
         chain.resolve.alias
