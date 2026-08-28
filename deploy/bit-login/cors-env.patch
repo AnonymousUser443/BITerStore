@@ -1,0 +1,19 @@
+diff --git a/server/server.py b/server/server.py
+index f4dd4c4..54e3216 100644
+--- a/server/server.py
++++ b/server/server.py
+@@ -67,7 +67,10 @@
+ # 允许的域名列表
++DEFAULT_ALLOWED_ORIGINS = (
++    "https://bit101.cn,http://bit101.cn,"
++    "http://127.0.0.1:3000,http://localhost:3000"
++)
+ ALLOWED_ORIGINS = [
+-    "https://bit101.cn",
+-    "http://bit101.cn",
+-    "http://127.0.0.1:3000",
+-    "http://localhost:3000",
++    origin.strip()
++    for origin in os.getenv("ALLOWED_CORS_ORIGINS", DEFAULT_ALLOWED_ORIGINS).split(",")
++    if origin.strip()
+ ]

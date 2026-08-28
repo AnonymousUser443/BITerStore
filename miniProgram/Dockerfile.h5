@@ -6,7 +6,10 @@ RUN npm install --no-save @tarojs/binding-linux-x64-musl@4.2.1
 COPY miniProgram/ ./
 COPY web/ /workspace/web/
 ENV NODE_ENV=production
-ENV BITERSTORE_API_URL=/api/v1
+ARG BITERSTORE_API_URL=/api/v1
+ARG BIT_LOGIN_URL=https://login.bit101.flwfdd.xyz
+ENV BITERSTORE_API_URL=$BITERSTORE_API_URL
+ENV BIT_LOGIN_URL=$BIT_LOGIN_URL
 RUN npm run build:h5
 FROM nginx:1.27-alpine
 COPY --from=build /workspace/miniProgram/dist /usr/share/nginx/html

@@ -24,7 +24,11 @@ export class IdentityService {
     else {
       if (!pem) throw new ServiceUnavailableException('校园认证公钥尚未配置')
       const key = await importSPKI(pem, 'EdDSA')
-      const verified = await jwtVerify(token, key, { issuer: process.env.BIT_LOGIN_ISSUER || 'bit-login', audience: process.env.BIT_LOGIN_AUDIENCE || 'biterstore' })
+      const verified = await jwtVerify(token, key, {
+        algorithms: ['EdDSA'],
+        issuer: process.env.BIT_LOGIN_ISSUER || 'bit-login',
+        audience: process.env.BIT_LOGIN_AUDIENCE || 'biterstore'
+      })
       payload = verified.payload
     }
     if (!payload.sub || !payload.jti || payload.purpose !== 'registration') throw new BadRequestException('校园认证凭证声明不完整')

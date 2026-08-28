@@ -12,7 +12,14 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CURRENT_USER_ID, notifications, seedBooks } from '../lib/demo-data';
-import { startBitLogin, submitBitLoginSms, type BitLoginChallenge } from '../lib/bit-login';
+import {
+  destroyBitLoginChallenge,
+  getBitLoginRegistrationToken,
+  startBitLogin,
+  submitBitLoginSms,
+  type BitLoginChallenge,
+} from '../lib/bit-login';
+import { loginWithCampusCookie, logoutH5Session, restoreH5Session } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
@@ -239,29 +246,52 @@ function OnboardingPage({ navigate }: { navigate: (to: string) => void }) {
   );
 }
 
-function LoginPage({ navigate }: { navigate: (to: string) => void }) {
+function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: string) => void; onAuthenticated: () => void; onGuest: () => void }) {
   const [sid, setSid] = useState('');
   const [password, setPassword] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [challenge, setChallenge] = useState<BitLoginChallenge>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const finish = () => { demoRepository.markAuthenticated(sid.trim()); setPassword(''); navigate('/home'); };
-  const continueAsGuest = () => { demoRepository.markAuthenticated('guest'); setPassword(''); navigate('/home'); };
+  const finish = async (value: BitLoginChallenge) => {
+    try {
+      const registrationToken = await getBitLoginRegistrationToken(value);
+      const session = await loginWithCampusCookie(registrationToken);
+      demoRepository.markAuthenticated(session.user.id);
+      onAuthenticated();
+      navigate('/home');
+    } finally {
+      setPassword('');
+      setSmsCode('');
+      setChallenge(undefined);
+      await destroyBitLoginChallenge(value);
+    }
+  };
+  const continueAsGuest = async () => {
+    setLoading(true); setError(''); setPassword('');
+    try {
+      await logoutH5Session();
+      demoRepository.markAuthenticated('guest');
+      onGuest();
+      navigate('/home');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '暂时无法进入游客模式'); }
+    finally { setLoading(false); }
+  };
   const login = async () => {
     if (!/^\d{8,12}$/.test(sid.trim())) return setError('请输入正确的北理工学号');
     if (!password) return setError('请输入统一身份认证密码');
     setLoading(true); setError('');
     try {
       const result = await startBitLogin(sid.trim(), password);
-      if (result.status === 'waiting_sms') { setPassword(''); setChallenge(result); } else finish();
+      if (result.status === 'waiting_sms') setChallenge(result);
+      else await finish(result);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '统一身份认证失败'); }
-    finally { setLoading(false); }
+    finally { setPassword(''); setLoading(false); }
   };
   const verifySms = async () => {
     if (!challenge || !/^\d{4,8}$/.test(smsCode.trim())) return setError('请输入 4 至 8 位短信验证码');
     setLoading(true); setError('');
-    try { const result = await submitBitLoginSms(challenge, smsCode.trim()); if (result.status === 'authenticated') finish(); }
+    try { const result = await submitBitLoginSms(challenge, smsCode.trim()); if (result.status === 'authenticated') await finish(result); }
     catch (cause) { setError(cause instanceof Error ? cause.message : '短信验证失败'); }
     finally { setLoading(false); }
   };
@@ -361,7 +391,7 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
   return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus}校区 · 在线</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === CURRENT_USER_ID; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && <Avatar user={getUser(CURRENT_USER_ID)} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片发送为纯前端演示')}><ImagePlus /></button><button onClick={() => notify('商品链接已准备分享')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
 }
 
-function ProfilePage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
+function ProfilePage({ navigate, notify, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; onLogout: () => void }) {
   const [profile, setProfile] = useState<User>(); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
   useEffect(() => { Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings()]).then(([user, favoriteBooks, myBooks]) => { setProfile(user); setFavorites(favoriteBooks.length); setListings(myBooks.length); }); }, []);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
@@ -376,7 +406,7 @@ function ProfilePage({ navigate, notify }: { navigate: (to: string) => void; not
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
     <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section>
-    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { demoRepository.clearAuthentication(); navigate('/login'); }} danger /></section>
+    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
   </AppShell>;
 }
 
@@ -414,7 +444,7 @@ function StatePage({ type, navigate }: { type: string; navigate: (to: string) =>
 
 export function MobileApp({ initialPath }: { initialPath: string }) {
   const hasCurrentAssetBundle = () => window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
-  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle);
+  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'checking' | 'authenticated' | 'guest' | 'anonymous'>('checking');
   const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
   useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
@@ -434,13 +464,28 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    let active = true;
+    void restoreH5Session().then((user) => {
+      if (!active) return;
+      if (user?.campusStatus === 'VERIFIED') {
+        demoRepository.markAuthenticated(user.id);
+        setAuthMode('authenticated');
+      } else setAuthMode(demoRepository.getAuthenticatedSid() === 'guest' ? 'guest' : 'anonymous');
+    });
+    return () => { active = false; };
+  }, []);
   const notify = useCallback((text: string) => setToast(text), []);
-  if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
-  const effectivePath = path === '/' && demoRepository.isOnboardingComplete() ? (demoRepository.getAuthenticatedSid() ? '/home' : '/login') : path;
+  if (!assetsReady || authMode === 'checking') return <main className="app-stage"><div className="route-view"><BootScreen progress={assetsReady ? 100 : assetProgress} /></div></main>;
+  const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
+  const needsAccount = privatePaths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
+  const effectivePath = needsAccount && authMode !== 'authenticated'
+    ? '/login'
+    : path === '/' && demoRepository.isOnboardingComplete() ? (authMode === 'anonymous' ? '/login' : '/home') : path;
   let page: React.ReactNode;
   if (effectivePath === '/') page = <WelcomePage navigate={navigate} />;
   else if (effectivePath === '/onboarding') page = <OnboardingPage navigate={navigate} />;
-  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} />;
+  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} onAuthenticated={() => setAuthMode('authenticated')} onGuest={() => setAuthMode('guest')} />;
   else if (effectivePath === '/home') page = <HomePage navigate={navigate} />;
   else if (effectivePath === '/category') page = <CategoryPage navigate={navigate} notify={notify} />;
   else if (effectivePath.startsWith('/books/')) page = <BookDetailPage id={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
@@ -448,7 +493,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/messages') page = <MessagesPage navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/notifications/')) page = <NotificationDetailPage type={effectivePath.split('/')[3]} navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
-  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} />;
+  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} onLogout={() => setAuthMode('anonymous')} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/my-listings') page = <MyListingsPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;

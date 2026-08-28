@@ -25,7 +25,12 @@ services:
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
     deploy: { resources: { limits: { cpus: "4", memory: 4G } } }
   h5:
-    build: { context: .., dockerfile: miniProgram/Dockerfile.h5 }
+    build:
+      context: ..
+      dockerfile: miniProgram/Dockerfile.h5
+      args:
+        BITERSTORE_API_URL: /api/v1
+        BIT_LOGIN_URL: "${BIT_LOGIN_URL:-https://login.bit101.flwfdd.xyz}"
     restart: unless-stopped
   admin:
     build: ../admin

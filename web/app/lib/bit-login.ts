@@ -1,4 +1,4 @@
-export type BitLoginStatus = 'running' | 'waiting_sms' | 'processing' | 'authenticated' | 'failed' | 'expired';
+export type BitLoginStatus = 'running' | 'waiting_sms' | 'processing' | 'authenticated' | 'failed' | 'expired' | 'cancelled';
 
 declare const __BIT_LOGIN_URL__: string;
 
@@ -14,7 +14,7 @@ export interface BitLoginChallenge {
 }
 
 const baseUrl = __BIT_LOGIN_URL__;
-const terminalStatuses: BitLoginStatus[] = ['waiting_sms', 'authenticated', 'failed', 'expired'];
+const terminalStatuses: BitLoginStatus[] = ['waiting_sms', 'authenticated', 'failed', 'expired', 'cancelled'];
 
 function getMessage(value: unknown): string {
   if (value && typeof value === 'object' && 'detail' in value) {
@@ -48,14 +48,14 @@ async function pollChallenge(challenge: BitLoginChallenge): Promise<BitLoginChal
     current = { ...snapshot, access_token: challenge.access_token };
   }
   if (!terminalStatuses.includes(current.status)) throw new Error('统一身份认证等待超时，请重试');
-  if (current.status === 'failed' || current.status === 'expired') throw new Error(current.error || '统一身份认证已失效，请重试');
+  if (current.status === 'failed' || current.status === 'expired' || current.status === 'cancelled') throw new Error(current.error || '统一身份认证已失效，请重试');
   return current;
 }
 
 export async function startBitLogin(username: string, password: string): Promise<BitLoginChallenge> {
   const challenge = await request('/api/auth/start', {
     method: 'POST',
-    body: JSON.stringify({ username, password, services: ['jwb'], wait_seconds: 1 }),
+    body: JSON.stringify({ username, password, services: ['webvpn'], wait_seconds: 1 }),
   });
   if (!challenge.access_token) throw new Error('登录服务未返回 access token');
   return pollChallenge(challenge);
@@ -68,4 +68,23 @@ export async function submitBitLoginSms(challenge: BitLoginChallenge, code: stri
     body: JSON.stringify({ code }),
   });
   return pollChallenge({ ...snapshot, access_token: challenge.access_token });
+}
+
+export async function getBitLoginRegistrationToken(challenge: BitLoginChallenge): Promise<string> {
+  if (challenge.status !== 'authenticated') throw new Error('校园身份尚未认证成功');
+  const response = await fetch(`${baseUrl}/api/auth/${challenge.challenge_id}/registration-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Challenge-Token': challenge.access_token },
+    body: JSON.stringify({ audience: 'biterstore' }),
+  });
+  const body = await response.json().catch(() => ({})) as { registration_token?: string; detail?: unknown };
+  if (!response.ok || !body.registration_token) throw new Error(getMessage(body));
+  return body.registration_token;
+}
+
+export async function destroyBitLoginChallenge(challenge: BitLoginChallenge): Promise<void> {
+  await fetch(`${baseUrl}/api/auth/${challenge.challenge_id}`, {
+    method: 'DELETE',
+    headers: { 'X-Challenge-Token': challenge.access_token },
+  }).catch(() => undefined);
 }
