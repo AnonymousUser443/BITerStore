@@ -37,8 +37,11 @@ export default function PublishPage() {
   const generate = async () => {
     if (!draft.coverMediaId || !draft.isbnMediaId) { await feedbackAdapter.toast('请先拍摄封面和 ISBN 页'); return }
     setAiLoading(true)
+    let recognizedIsbn = ''
     try {
       const isbn = await isbnRecognitionAdapter.scan(previews[draft.isbnMediaId])
+      recognizedIsbn = isbn
+      patch({ isbn })
       const metadata = __API_URL__ && !__BITERSTORE_E2E__
         ? await apiRequest<BookMetadata>(`/books/isbn/${isbn}`)
         : { isbn, title: '高等数学（第七版）上册', author: '同济大学数学系 编', publisher: '高等教育出版社', publishDate: '', coverUrl: '', subjects: ['教材'] }
@@ -47,7 +50,13 @@ export default function PublishPage() {
       patch({ ...result, title: metadata.title, author: metadata.author || draft.author, isbn: metadata.isbn, category, course: draft.course || metadata.title, description: `${metadata.title}${metadata.author ? `，${metadata.author}著` : ''}。${draft.condition}，支持校内当面验书。`, tags: Array.from(new Set([...result.tags, ...metadata.subjects.slice(0, 2)])) })
       await feedbackAdapter.toast('已识别 ISBN 并补全书籍信息')
       setStep(2)
-    } catch (cause) { await feedbackAdapter.toast(cause instanceof Error ? cause.message : '识别失败，请重试') }
+    } catch (cause) {
+      if (recognizedIsbn) {
+        patch({ isbn: recognizedIsbn })
+        await feedbackAdapter.toast('已识别 ISBN；书目信息暂未查到，请手动补全')
+        setStep(2)
+      } else await feedbackAdapter.toast(cause instanceof Error ? cause.message : '识别失败，请重试')
+    }
     finally { setAiLoading(false) }
   }
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0 }
