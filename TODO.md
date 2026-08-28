@@ -67,8 +67,8 @@
 - [x] 接入微信 ISBN 条码扫描、H5 BarcodeDetector 图片识别与 Open Library 免费书目回填，失败时允许手工填写
 - [x] 补充服务端 ZXing-C++ WASM 条码兜底、ISBN 校验位验证与真实条码运行验证
 - [x] 增加受限 Cloudflare Worker 书目代理模板、Redis 正负缓存，并通过受控媒体接口从公开访问中排除 ISBN 页
-- [ ] 部署书目代理并填写生产 `BOOK_METADATA_PROXY_URL` / `BOOK_METADATA_PROXY_TOKEN`
-- [ ] 验证私有 R2 Bucket 的凭据与直传 CORS 后，将生产 `UPLOAD_STORAGE` 从 `local` 切换为 `r2`
+- [x] 部署书目代理并填写生产 `BOOK_METADATA_PROXY_URL` / `BOOK_METADATA_PROXY_TOKEN`
+- [x] 验证私有 R2 Bucket 的凭据与直传 CORS 后，将生产 `UPLOAD_STORAGE` 从 `local` 切换为 `r2`
 
 ## 进行中
 
@@ -89,7 +89,7 @@
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
 - [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
 - [ ] Open Library 对中文教材覆盖率有限；灰度期需统计命中率，再决定是否增加国家图书馆数据源或部署本地 OCR/条码识别兜底。
-- [ ] 本机图片存储卷需要纳入备份与过期孤儿文件清理；生产规模增长后建议切换 R2。
+- [ ] R2 已上线；仍需为未完成上传的 `pending/` 孤儿对象配置生命周期清理规则。
 
 ## 待完成
 
