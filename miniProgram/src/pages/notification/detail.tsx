@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { Button, Text, View } from '@tarojs/components'
 import { AppShell } from '@/components/ui'
 import { Glyph, type GlyphName } from '@/components/Glyph'
 import type { Notification } from '@/domain/types'
 import { seedNotifications } from '@/domain/seed'
+import { requireAccount } from '@/domain/access'
 import { navigationAdapter } from '@/platform'
 
 const details: Record<Notification['type'], Array<[string, string, string, string]>> = {
@@ -15,6 +17,7 @@ const details: Record<Notification['type'], Array<[string, string, string, strin
 const glyphs: Record<Notification['type'], GlyphName> = { like: 'heart', comment: 'message', system: 'bell', follow: 'user' }
 
 export default function NotificationDetailPage() {
+  useEffect(() => { void requireAccount('登录后才能查看通知') }, [])
   const raw = Taro.getCurrentInstance().router?.params.type || 'system'
   const type = (['like', 'comment', 'system', 'follow'].includes(raw) ? raw : 'system') as Notification['type']
   const summary = seedNotifications.find((item) => item.type === type) || seedNotifications[2]

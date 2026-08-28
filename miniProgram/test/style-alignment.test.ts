@@ -57,9 +57,18 @@ describe('Golden Reference style alignment', () => {
     const ui = read('src/components/ui.tsx')
     expect(adapter).toContain('.page-title { grid-column: 2; justify-self: center;')
     expect(adapter).toContain('.native-chrome .content-scroll')
-    expect(ui).toContain("['search', '搜索', 'grid']")
+    expect(ui).toContain("['search', '分类', 'grid']")
     expect(ui).toContain("process.env.TARO_ENV !== 'h5'")
     expect(ui).toContain("process.env.TARO_ENV === 'weapp'")
+  })
+
+  it('保留桌面个人中心完整入口与 H5 顶栏交互样式', () => {
+    const golden = read('src/golden.css')
+    const h5 = read('src/h5.css')
+    expect(golden).toContain('.profile-menu { align-self: start; height: auto; }')
+    expect(golden).toContain('.profile-stats button, .profile-stats > div')
+    expect(golden).toContain('.topbar-menu')
+    expect(h5).toContain('.topbar-menu button:hover')
   })
 
   it('injects the ignored local AppID into every WeApp build without committing it', () => {

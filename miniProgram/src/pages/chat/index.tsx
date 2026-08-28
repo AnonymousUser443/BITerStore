@@ -4,6 +4,7 @@ import { Button, Input, Text, View } from '@tarojs/components'
 import { AppShell, Avatar, BookCover } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository, getUser } from '@/domain/repository'
+import { requireAccount } from '@/domain/access'
 import { CURRENT_USER_ID, seedListings } from '@/domain/seed'
 import type { ChatThread } from '@/domain/types'
 import { mediaAdapter } from '@/platform'
@@ -13,7 +14,7 @@ export default function ChatPage() {
   const [thread, setThread] = useState<ChatThread>()
   const [text, setText] = useState('')
   const load = useCallback(() => demoRepository.getThread(id).then(setThread), [id])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void requireAccount('登录后才能使用私聊').then((allowed) => allowed && load()) }, [load])
   const send = async () => { if (!text.trim()) return; await demoRepository.sendMessage(id, text.trim()); setText(''); await load() }
   const sendImage = async () => { const files = await mediaAdapter.persist(await mediaAdapter.pick()); if (files[0]) { await demoRepository.sendMessage(id, '[图片]', files[0].id); await load() } }
   const user = thread ? getUser(thread.participantId) : undefined

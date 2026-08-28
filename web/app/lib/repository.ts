@@ -1,6 +1,7 @@
-import { CURRENT_USER_ID, seedBooks, seedThreads, users } from './demo-data';
+import { CURRENT_USER_ID, notifications, seedBooks, seedThreads, users } from './demo-data';
+import { apiRepository } from './api-repository';
 import { clearImages } from './image-store';
-import type { Book, BookFilters, ChatThread, ListingStatus, Message, PublishDraft, User } from './types';
+import type { Book, BookFilters, ChatThread, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
 const KEYS = {
   books: 'biterstore:v1:books', favorites: 'biterstore:v1:favorites', threads: 'biterstore:v1:threads',
@@ -51,6 +52,7 @@ export interface DemoRepository {
   updateListingStatus(id: string, status: ListingStatus): Promise<void>;
   listMyListings(): Promise<Book[]>;
   listThreads(): Promise<ChatThread[]>;
+  listNotifications(): Promise<Notification[]>;
   getThread(id: string): Promise<ChatThread | null>;
   sendMessage(threadId: string, text: string): Promise<Message>;
   ensureThread(bookId: string): Promise<string>;
@@ -63,7 +65,7 @@ export interface DemoRepository {
   resetDemoData(): Promise<void>;
 }
 
-export const demoRepository: DemoRepository = {
+const localRepository: DemoRepository = {
   async listBooks(filters = defaultFilters) { await wait(); return filterBooks(read(KEYS.books, seedBooks), filters); },
   async getBook(id) { await wait(120); return read(KEYS.books, seedBooks).find((book) => book.id === id) ?? null; },
   async toggleFavorite(id) { const ids = read<string[]>(KEYS.favorites, []); const next = ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]; write(KEYS.favorites, next); await wait(90); return next.includes(id); },
@@ -77,6 +79,7 @@ export const demoRepository: DemoRepository = {
   async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); },
   async listMyListings() { await wait(); return read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); },
   async listThreads() { await wait(); return read(KEYS.threads, seedThreads); },
+  async listNotifications() { await wait(100); return notifications; },
   async getThread(id) { const threads = read(KEYS.threads, seedThreads); const thread = threads.find((item) => item.id === id) ?? null; if (thread?.unread) { thread.unread = 0; write(KEYS.threads, threads); } await wait(100); return thread; },
   async sendMessage(threadId, text) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }; const threads = read(KEYS.threads, seedThreads).map((thread) => thread.id === threadId ? { ...thread, updatedAt: message.createdAt, messages: [...thread.messages, message] } : thread); write(KEYS.threads, threads); await wait(110); return message; },
   async ensureThread(bookId) { const threads = read(KEYS.threads, seedThreads); const existing = threads.find((thread) => thread.bookId === bookId); if (existing) return existing.id; const book = read(KEYS.books, seedBooks).find((item) => item.id === bookId)!; const next: ChatThread = { id: `thread-${bookId}`, participantId: book.sellerId, bookId, unread: 0, updatedAt: '刚刚', messages: [] }; write(KEYS.threads, [next, ...threads]); await wait(90); return next.id; },
@@ -87,6 +90,39 @@ export const demoRepository: DemoRepository = {
   markAuthenticated(sid) { write(KEYS.authenticatedSid, sid); },
   clearAuthentication() { localStorage.removeItem(KEYS.authenticatedSid); },
   async resetDemoData() { Object.values(KEYS).forEach((key) => localStorage.removeItem(key)); await clearImages(); await wait(160); },
+};
+
+function usesRealApi() {
+  const sid = localRepository.getAuthenticatedSid();
+  return Boolean(sid && sid !== 'guest');
+}
+
+function activeRepository() {
+  return usesRealApi() ? apiRepository : localRepository;
+}
+
+export const demoRepository: DemoRepository = {
+  listBooks: (filters) => activeRepository().listBooks(filters),
+  getBook: (id) => activeRepository().getBook(id),
+  toggleFavorite: (id) => activeRepository().toggleFavorite(id),
+  listFavorites: () => activeRepository().listFavorites(),
+  saveDraft: (draft) => activeRepository().saveDraft(draft),
+  getDraft: () => activeRepository().getDraft(),
+  publishListing: (draft) => activeRepository().publishListing(draft),
+  updateListingStatus: (id, status) => activeRepository().updateListingStatus(id, status),
+  listMyListings: () => activeRepository().listMyListings(),
+  listThreads: () => activeRepository().listThreads(),
+  listNotifications: () => activeRepository().listNotifications(),
+  getThread: (id) => activeRepository().getThread(id),
+  sendMessage: (threadId, text) => activeRepository().sendMessage(threadId, text),
+  ensureThread: (bookId) => activeRepository().ensureThread(bookId),
+  getProfile: () => activeRepository().getProfile(),
+  isOnboardingComplete: () => localRepository.isOnboardingComplete(),
+  completeOnboarding: () => localRepository.completeOnboarding(),
+  getAuthenticatedSid: () => localRepository.getAuthenticatedSid(),
+  markAuthenticated: (sid) => localRepository.markAuthenticated(sid),
+  clearAuthentication: () => localRepository.clearAuthentication(),
+  resetDemoData: () => localRepository.resetDemoData(),
 };
 
 export function getUser(id: string) { return users.find((user) => user.id === id) ?? users[0]; }

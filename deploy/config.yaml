@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment: { POSTGRES_DB: biterstore, POSTGRES_USER: biterstore, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}" }
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    command: ["postgres","-c","shared_buffers=2GB","-c","effective_cache_size=6GB","-c","max_connections=150"]
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U biterstore"], interval: 5s, timeout: 3s, retries: 20 }
+    deploy: { resources: { limits: { cpus: "4", memory: 8G } } }
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server","--appendonly","yes","--maxmemory","768mb","--maxmemory-policy","allkeys-lru"]
+    volumes: [redis-data:/data]
+    healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 3s, retries: 20 }
+  bit-login:
+    build:
+      context: ./bit-login
+      args:
+        BIT_LOGIN_COMMIT: 5d537ca6123b405666b82eabc2328b8f4c70b6ca
+        INSTALL_DDDDOCR: "1"
+    restart: unless-stopped
+    environment:
+      WORKERS: "4"
+      AUTH_DB_PATH: /app/data/auth.db
+      AUTH_CHALLENGE_TTL: "300"
+      AUTH_SESSION_TTL: "1800"
+      BASE_URL: https://store.young581.com/bit-login
+      ALLOWED_CORS_ORIGINS: https://store.young581.com
+      REGISTRATION_JWT_PRIVATE_KEY_FILE: /run/secrets/registration-private.pem
+      REGISTRATION_JWT_ALLOWED_AUDIENCES: biterstore
+      REGISTRATION_JWT_ISSUER: bit-login
+      REGISTRATION_JWT_TTL: "300"
+      REGISTRATION_JWT_KEY_ID: registration-1
+    volumes:
+      - bit-login-data:/app/data
+      - ./secrets/bit-login-registration-private.pem:/run/secrets/registration-private.pem:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:16384/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy: { resources: { limits: { cpus: "2", memory: 2G } } }
+  api:
+    build: ../server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://biterstore:${POSTGRES_PASSWORD}@postgres:5432/biterstore
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      ALLOW_DEV_AUTH: "false"
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    deploy: { resources: { limits: { cpus: "4", memory: 4G } } }
+  h5:
+    build:
+      context: ..
+      dockerfile: miniProgram/Dockerfile.h5
+      args:
+        BITERSTORE_API_URL: /api/v1
+        BIT_LOGIN_URL: "${BIT_LOGIN_URL:-https://login.bit101.flwfdd.xyz}"
+    restart: unless-stopped
+  admin:
+    build: ../admin
+    restart: unless-stopped
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["127.0.0.1:${BIND_PORT:-18081}:80"]
+    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+    depends_on:
+      api: { condition: service_started }
+      h5: { condition: service_started }
+      admin: { condition: service_started }
+      bit-login: { condition: service_healthy }
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        while true; do
+          backup_time="$$(date -u +%Y%m%dT%H%M%SZ)"
+          pg_dump -h postgres -U biterstore -d biterstore -Fc > "/backups/biterstore-$${backup_time}.dump"
+          find /backups -type f -name 'biterstore-*.dump' -mtime +7 -delete
+          sleep 86400
+        done
+    volumes: [./backups:/backups]
+    depends_on: { postgres: { condition: service_healthy } }
+volumes: { postgres-data: {}, redis-data: {}, bit-login-data: {} }

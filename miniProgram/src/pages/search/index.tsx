@@ -5,6 +5,7 @@ import { AppShell, FilterDrawer, ListingCard } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { defaultFilters } from '@/domain/filters'
 import { demoRepository } from '@/domain/repository'
+import { isAuthenticated, requireAccount } from '@/domain/access'
 import type { Campus, Condition, Listing, ListingFilters } from '@/domain/types'
 import { navigationAdapter } from '@/platform'
 
@@ -31,9 +32,9 @@ export default function SearchPage() {
   useEffect(() => { if (filtersReady) void demoRepository.saveFilters(filters) }, [filters, filtersReady])
   const load = useCallback(() => demoRepository.listListings(filters).then(setItems), [filters])
   useEffect(() => { if (filtersReady) void load() }, [filtersReady, load])
-  useEffect(() => { void demoRepository.listFavorites().then((saved) => setFavorites(saved.map((item) => item.id))) }, [])
-  const toggleFavorite = async (id: string) => { const active = await demoRepository.toggleFavorite(id); setFavorites((current) => active ? [...new Set([...current, id])] : current.filter((value) => value !== id)) }
-  const contact = async (item: Listing) => { const thread = await demoRepository.ensureThread(item.id); await navigationAdapter.go(`/pages/chat/index?id=${thread}`) }
+  useEffect(() => { void isAuthenticated().then((loggedIn) => loggedIn && demoRepository.listFavorites().then((saved) => setFavorites(saved.map((item) => item.id)))) }, [])
+  const toggleFavorite = async (id: string) => { if (!await requireAccount('登录后才能收藏商品')) return; const active = await demoRepository.toggleFavorite(id); setFavorites((current) => active ? [...new Set([...current, id])] : current.filter((value) => value !== id)) }
+  const contact = async (item: Listing) => { if (!await requireAccount('请先使用学号登录后联系卖家')) return; const thread = await demoRepository.ensureThread(item.id); await navigationAdapter.go(`/pages/chat/index?id=${thread}`) }
 
   return <AppShell active='search' className='search-page'>
     <View className='search-input'><Glyph name='search' /><Input id='e2e-search-input' value={filters.query} onInput={(e) => setFilters({ ...filters, query: e.detail.value })} placeholder='搜索书名 / 作者 / ISBN / 课程' /><Button onClick={() => setFilters({ ...filters, query: '' })}><Glyph name={filters.query ? 'back' : 'camera'} /></Button></View>

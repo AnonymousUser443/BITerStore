@@ -59,4 +59,21 @@ describe('demoRepository persistence', () => {
     demoRepository.clearAuthentication();
     expect(demoRepository.getAuthenticatedSid()).toBe('');
   });
+
+  it('switches Golden pages to the real API after authentication', async () => {
+    demoRepository.markAuthenticated('user-real');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{
+      id: 'real-listing', title: '真实教材', author: '真实卖家', isbn: '9787300000000', category: '教材教辅',
+      course: '测试课程', priceCents: 1800, originalPriceCents: 3600, condition: '九成新', campus: '良乡',
+      description: '来自服务端的数据', status: 'ACTIVE', sellerId: 'seller-real', createdAt: '2026-08-28T00:00:00.000Z', tags: [],
+      seller: { id: 'seller-real', nickname: '真实卖家', campus: '良乡', campusStatus: 'VERIFIED' }, images: [],
+    }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const books = await demoRepository.listBooks();
+
+    expect(books).toHaveLength(1);
+    expect(books[0]).toMatchObject({ id: 'real-listing', title: '真实教材', seller: { name: '真实卖家' } });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/listings?');
+  });
 });

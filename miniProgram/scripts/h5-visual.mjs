@@ -17,6 +17,22 @@ const browserCandidates = [
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 ].filter(Boolean)
+const qaProfile = { id: 'qa-user', nickname: '北理测试同学', avatarUrl: null, campus: '良乡', bio: '用于本地视觉验收的确定性账号。', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED', createdAt: '2026-08-28T00:00:00.000Z', wechatBound: false }
+const qaSeller = { id: 'qa-seller', nickname: '校园书友', avatarUrl: null, campus: '中关村', campusStatus: 'VERIFIED', bio: '教材循环使用。' }
+const qaListing = { id: 'math-7', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', course: '高等数学', priceCents: 2800, originalPriceCents: 4980, condition: '九成新', campus: '良乡', description: '适合课程学习和期末复习，书页整洁。', status: 'ACTIVE', sellerId: qaSeller.id, seller: qaSeller, createdAt: '2026-08-28T00:00:00.000Z', tags: ['教材', '期末复习'], images: [], version: 1 }
+function apiFixture(pathname, method = 'GET') {
+  if (!pathname.startsWith('/api/v1/')) return null
+  if (pathname === '/api/v1/me' && method === 'GET') return { status: 200, body: qaProfile }
+  if (pathname === '/api/v1/auth/refresh' && method === 'POST') return { status: 200, body: { expiresIn: 900, user: qaProfile } }
+  if (pathname === '/api/v1/listings/favorites/mine') return { status: 200, body: [qaListing] }
+  if (pathname === '/api/v1/listings/mine/all') return { status: 200, body: { items: [qaListing], nextCursor: null } }
+  if (pathname === '/api/v1/listings/math-7') return { status: 200, body: qaListing }
+  if (pathname === '/api/v1/listings') return { status: 200, body: { items: [qaListing], nextCursor: null } }
+  if (pathname === '/api/v1/conversations/thread-lin/messages') return { status: 200, body: { items: [{ id: '1', senderId: qaSeller.id, content: '这本书还在，可以校内面交。', createdAt: '2026-08-28T08:00:00.000Z' }], nextCursor: '1' } }
+  if (pathname === '/api/v1/conversations') return { status: 200, body: [{ id: 'thread-lin', listingId: qaListing.id, sellerId: qaSeller.id, lastMessageAt: '2026-08-28T08:00:00.000Z', unread: 1, members: [{ userId: qaProfile.id, user: qaProfile }, { userId: qaSeller.id, user: qaSeller }], messages: [{ id: '1', senderId: qaSeller.id, content: '这本书还在，可以校内面交。', createdAt: '2026-08-28T08:00:00.000Z' }] }] }
+  if (pathname === '/api/v1/notifications') return { status: 200, body: [{ id: 'notice-comment', type: 'comment', title: '评论与回复', body: '校园书友回复了你的留言', readAt: null, createdAt: '2026-08-28T08:00:00.000Z' }] }
+  return { status: 404, body: { message: `未配置本地 QA 接口: ${method} ${pathname}` } }
+}
 const targets = [
   ['welcome-390', 390, 900, '/'],
   ['onboarding-390', 390, 900, '/onboarding'],
@@ -56,7 +72,14 @@ async function startPreviewServer() {
   await fs.access(indexPath)
   const server = http.createServer(async (request, response) => {
     try {
-      const requestPath = decodeURIComponent(new URL(request.url || '/', preview).pathname)
+      const requestUrl = new URL(request.url || '/', preview)
+      const requestPath = decodeURIComponent(requestUrl.pathname)
+      const fixture = apiFixture(requestPath, request.method)
+      if (fixture) {
+        response.writeHead(fixture.status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        response.end(JSON.stringify(fixture.body))
+        return
+      }
       const relativePath = requestPath.replace(/^\/+/, '')
       const candidate = path.resolve(distDir, relativePath || 'index.html')
       const insideDist = candidate === distDir || candidate.startsWith(`${distDir}${path.sep}`)
@@ -159,6 +182,13 @@ try {
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
+    if (name === 'profile-1280') {
+      const profileCheck = await client.send('Runtime.evaluate', { expression: `(() => { const clipped = [...document.querySelectorAll('.profile-menu')].flatMap(menu => { const boundary = menu.getBoundingClientRect(); return [...menu.querySelectorAll(':scope > button')].filter(button => button.getBoundingClientRect().bottom > boundary.bottom + 1).map(button => button.innerText.trim()) }); document.querySelector('[aria-label="查看消息通知"]')?.click(); return { clipped } })()`, returnByValue: true })
+      if (profileCheck.result.value.clipped.length) diagnostics.push({ type: 'clipped-profile-actions', text: profileCheck.result.value.clipped.join(', ') })
+      await delay(250)
+      const notificationPath = await client.send('Runtime.evaluate', { expression: 'location.pathname', returnByValue: true })
+      if (notificationPath.result.value !== '/messages') diagnostics.push({ type: 'inactive-header-control', text: `通知按钮未进入 /messages，当前 ${notificationPath.result.value}` })
+    }
   }
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`), pages, diagnostics }))
   if (diagnostics.length) process.exitCode = 1

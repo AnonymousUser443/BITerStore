@@ -9,6 +9,7 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
 
 const { d1, r2 } = hostingConfig;
 const bitLoginUrl = (process.env.NEXT_PUBLIC_BIT_LOGIN_URL ?? 'https://login.bit101.flwfdd.xyz').replace(/\/$/, '');
+const apiUrl = (process.env.NEXT_PUBLIC_BITERSTORE_API_URL ?? '/api/v1').replace(/\/$/, '');
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
@@ -46,7 +47,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
-    define: { __BIT_LOGIN_URL__: JSON.stringify(bitLoginUrl) },
+    define: { __BIT_LOGIN_URL__: JSON.stringify(bitLoginUrl), __API_URL__: JSON.stringify(apiUrl) },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }

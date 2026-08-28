@@ -10,6 +10,7 @@ export default function WelcomePage() {
   useEffect(() => { void demoRepository.shouldShowResetNotice().then(setNotice) }, [])
   const start = async () => { const done = await demoRepository.isOnboardingComplete(); if (!done) return navigationAdapter.go('/pages/onboarding/index'); await ((await demoRepository.getAuthenticatedSid()) ? navigationAdapter.switchTab('/pages/home/index') : navigationAdapter.go('/pages/login/index')) }
   return <View className='phone-shell welcome-page'>
+    {process.env.TARO_ENV === 'h5' && <Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />}
     <View className='welcome-decoration' />
     <View className='welcome-brand'><Brand /><Text className='leaf-seal'><Glyph name='leaf' /></Text></View>
     <View className='welcome-copy'><Text className='welcome-greeting'>你好呀，我是托比 <Glyph name='leaf' /></Text><Text className='welcome-title'>欢迎来到你的{process.env.TARO_ENV === 'h5' ? '\n' : ' '}<Text className='welcome-accent'>校园二手书小站</Text></Text><Text className='welcome-description'>搜索闲置教材、发布旧书、站内联系，{process.env.TARO_ENV === 'h5' ? '\n' : ' '}在校内安心完成交易。</Text></View>
