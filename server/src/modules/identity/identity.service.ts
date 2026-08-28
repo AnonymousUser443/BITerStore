@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common'
+import { BadRequestException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { importSPKI, jwtVerify } from 'jose'
 import { PrismaService } from '../../infra/prisma.service.js'
@@ -23,13 +23,25 @@ export class IdentityService {
     }
     else {
       if (!pem) throw new ServiceUnavailableException('校园认证公钥尚未配置')
-      const key = await importSPKI(pem, 'EdDSA')
-      const verified = await jwtVerify(token, key, {
-        algorithms: ['EdDSA'],
-        issuer: process.env.BIT_LOGIN_ISSUER || 'bit-login',
-        audience: process.env.BIT_LOGIN_AUDIENCE || 'biterstore'
-      })
-      payload = verified.payload
+      let key: CryptoKey
+      try {
+        key = await importSPKI(pem, 'EdDSA')
+      }
+      catch {
+        throw new ServiceUnavailableException('校园认证公钥配置无效')
+      }
+      try {
+        const verified = await jwtVerify(token, key, {
+          algorithms: ['EdDSA'],
+          issuer: process.env.BIT_LOGIN_ISSUER || 'bit-login',
+          audience: process.env.BIT_LOGIN_AUDIENCE || 'biterstore',
+          requiredClaims: ['sub', 'jti', 'iat', 'exp', 'purpose']
+        })
+        payload = verified.payload
+      }
+      catch {
+        throw new UnauthorizedException('校园认证凭证无效或已过期')
+      }
     }
     if (!payload.sub || !payload.jti || payload.purpose !== 'registration') throw new BadRequestException('校园认证凭证声明不完整')
     return {

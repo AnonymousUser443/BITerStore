@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose'
+import { UnauthorizedException } from '@nestjs/common'
 import { IdentityService } from '../src/modules/identity/identity.service.js'
 
 describe('BIT-Login registration JWT', () => {
@@ -44,9 +45,13 @@ describe('BIT-Login registration JWT', () => {
     expect(prisma.$transaction).toHaveBeenCalledOnce()
   })
 
+  it('returns an authentication error for a malformed compact JWT', async () => {
+    await expect(service.loginOrCreate('invalid')).rejects.toBeInstanceOf(UnauthorizedException)
+  })
+
   it('rejects the wrong audience, issuer, or purpose', async () => {
-    await expect(service.loginOrCreate(await token({ audience: 'other-app' }))).rejects.toThrow()
-    await expect(service.loginOrCreate(await token({ issuer: 'other-issuer' }))).rejects.toThrow()
+    await expect(service.loginOrCreate(await token({ audience: 'other-app' }))).rejects.toBeInstanceOf(UnauthorizedException)
+    await expect(service.loginOrCreate(await token({ issuer: 'other-issuer' }))).rejects.toBeInstanceOf(UnauthorizedException)
     await expect(service.loginOrCreate(await token({ purpose: 'access' }))).rejects.toThrow('校园认证凭证声明不完整')
   })
 })
