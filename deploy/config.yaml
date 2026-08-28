@@ -13,6 +13,34 @@ services:
     command: ["redis-server","--appendonly","yes","--maxmemory","768mb","--maxmemory-policy","allkeys-lru"]
     volumes: [redis-data:/data]
     healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 3s, retries: 20 }
+  bit-login:
+    build:
+      context: ./bit-login
+      args:
+        BIT_LOGIN_COMMIT: 5d537ca6123b405666b82eabc2328b8f4c70b6ca
+        INSTALL_DDDDOCR: "1"
+    restart: unless-stopped
+    environment:
+      WORKERS: "4"
+      AUTH_DB_PATH: /app/data/auth.db
+      AUTH_CHALLENGE_TTL: "300"
+      AUTH_SESSION_TTL: "1800"
+      BASE_URL: https://store.young581.com/bit-login
+      ALLOWED_CORS_ORIGINS: https://store.young581.com
+      REGISTRATION_JWT_PRIVATE_KEY_FILE: /run/secrets/registration-private.pem
+      REGISTRATION_JWT_ALLOWED_AUDIENCES: biterstore
+      REGISTRATION_JWT_ISSUER: bit-login
+      REGISTRATION_JWT_TTL: "300"
+      REGISTRATION_JWT_KEY_ID: registration-1
+    volumes:
+      - bit-login-data:/app/data
+      - ./secrets/bit-login-registration-private.pem:/run/secrets/registration-private.pem:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:16384/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy: { resources: { limits: { cpus: "2", memory: 2G } } }
   api:
     build: ../server
     restart: unless-stopped
@@ -40,7 +68,11 @@ services:
     restart: unless-stopped
     ports: ["127.0.0.1:${BIND_PORT:-18081}:80"]
     volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
-    depends_on: [api, h5, admin]
+    depends_on:
+      api: { condition: service_started }
+      h5: { condition: service_started }
+      admin: { condition: service_started }
+      bit-login: { condition: service_healthy }
   backup:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -58,4 +90,4 @@ services:
         done
     volumes: [./backups:/backups]
     depends_on: { postgres: { condition: service_healthy } }
-volumes: { postgres-data: {}, redis-data: {} }
+volumes: { postgres-data: {}, redis-data: {}, bit-login-data: {} }
