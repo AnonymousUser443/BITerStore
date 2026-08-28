@@ -6,12 +6,12 @@ import Image from 'next/image';
 import {
   ArrowLeft, Bell, BookOpen, Bookmark, Camera, Check, ChevronDown, ChevronRight,
   CircleAlert, Filter, Grid2X2, Heart, Home, ImagePlus, Info, Leaf, MapPin,
-  MessageCircle, MoreHorizontal, PackageCheck, Plus, RefreshCw, RotateCcw,
-  Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Star, Trash2,
+  MessageCircle, MoreHorizontal, PackageCheck, Plus, RefreshCw,
+  Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2,
   UserRound, WandSparkles, X,
 } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { CURRENT_USER_ID, notifications, seedBooks } from '../lib/demo-data';
+import { CURRENT_USER_ID, seedBooks } from '../lib/demo-data';
 import {
   destroyBitLoginChallenge,
   getBitLoginRegistrationToken,
@@ -62,28 +62,6 @@ function profileToUser(profile: H5Profile): User {
     avatarTone: 'sage',
   };
 }
-
-const notificationDetails: Record<Notification['type'], Array<{ source: string; text: string; time: string; route: string }>> = {
-  like: [
-    { source: '林小暖', text: '赞了你发布的《高等数学（第七版）上册》', time: '10:18', route: '/books/math-7' },
-    { source: '简一一', text: '赞了你的校园书单「期末复习好书」', time: '昨天 18:42', route: '/favorites' },
-    { source: 'Oliver_周', text: '赞了你分享的旧书循环动态', time: '周五 20:06', route: '/profile' },
-  ],
-  comment: [
-    { source: 'Oliver_周', text: '评论：书的笔记多吗？方便拍一下目录页吗？', time: '10:05', route: '/books/data-c' },
-    { source: '林小暖', text: '评论：这本高数正好是我需要的版本～', time: '昨天 21:30', route: '/books/math-7' },
-    { source: 'Leo 学长', text: '评论：中关村校区也可以约时间自取。', time: '昨天 16:12', route: '/messages/thread-leo' },
-    { source: '简一一', text: '评论：谢谢你的书单推荐！', time: '周四 19:45', route: '/messages/thread-jian' },
-    { source: 'Tobby', text: '你的发布收到了新的留言，记得及时回复。', time: '周三 12:08', route: '/messages' },
-  ],
-  system: [
-    { source: '校园交易安全提醒', text: '请尽量选择校内公共区域当面交易，确认书况后再付款。', time: '今天 09:00', route: '/states' },
-    { source: 'BITerStore 试运行公告', text: '演示数据与状态体验入口已经更新完成。', time: '昨天 12:00', route: '/profile' },
-  ],
-  follow: [
-    { source: '简一一', text: '关注了你，之后发布的新书会更容易被她发现。', time: '昨天 15:26', route: '/messages/thread-jian' },
-  ],
-};
 
 async function warmUiAssetBundle(onProgress: (value: number) => void) {
   const workerReady = 'serviceWorker' in navigator
@@ -194,7 +172,7 @@ function BookTile({ book, navigate }: { book: Book; navigate: (to: string) => vo
 }
 
 function BookListCard({ book, navigate, favorite, onFavorite }: { book: Book; navigate: (to: string) => void; favorite?: boolean; onFavorite?: (book: Book) => void }) {
-  const seller = getUser(book.sellerId);
+  const seller = book.seller || getUser(book.sellerId);
   return (
     <article className={`listing-card ${book.status !== 'available' ? 'unavailable-card' : ''}`}>
       <button className="listing-main" onClick={() => navigate(`/books/${book.id}`)}>
@@ -204,7 +182,7 @@ function BookListCard({ book, navigate, favorite, onFavorite }: { book: Book; na
           <p>{book.author}</p>
           <div className="listing-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div>
           <div className="listing-detail"><MapPin size={13} />{book.campus}校区 <BookOpen size={13} />{book.course}</div>
-          <div className="seller-line"><Avatar user={seller} size={25} /><span>{seller.name}</span><Star size={12} fill="currentColor" />4.9分</div>
+          <div className="seller-line"><Avatar user={seller} size={25} /><span>{seller.name}</span><ShieldCheck size={12} />{seller.verified ? '已认证' : '校园用户'}</div>
         </div>
       </button>
       <div className="listing-actions">
@@ -316,13 +294,15 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
 }
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
+  const [books, setBooks] = useState<Book[]>();
+  useEffect(() => { demoRepository.listBooks(defaultFilters).then(setBooks).catch(() => setBooks([])); }, []);
   return (
     <AppShell active="/home" navigate={navigate} className="home-page">
       <button className="search-box" onClick={() => navigate('/category')}><Search size={21} /><span>搜索书名、作者或 ISBN</span><SlidersHorizontal size={18} /></button>
       <nav className="category-chips">{categories.map((category, index) => <button className={index === 0 ? 'chip active' : 'chip'} onClick={() => navigate(`/category?category=${encodeURIComponent(category)}`)} key={category}>{category}</button>)}</nav>
       <section className="hero-card"><div className="hero-copy"><p className="eyebrow">书页轻翻 · 好物续航</p><h1>以书会友<br />共享知识之美</h1><p>让每一本闲置书，遇见下一位需要它的人。</p><button className="hero-button" onClick={() => navigate('/category')}>探索好书 <span>→</span></button></div><Image className="hero-tobby" src="/assets/tobby-hello.webp" alt="Tobby 抱着书向你打招呼" width={760} height={760} priority /></section>
-      <section className="section-block"><div className="section-title"><h2>精选推荐</h2><button className="section-more" onClick={() => navigate('/category')}>查看全部 <ChevronRight /></button></div><div className="book-row">{seedBooks.slice(0, 5).map((book) => <BookTile book={book} navigate={navigate} key={book.id} />)}</div></section>
-      <section className="ranking-card"><div className="section-title"><h2>校园热榜</h2><span>本周流动好书</span></div>{seedBooks.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><BookCover book={book} compact /><span className="rank-copy"><strong>{book.title}</strong><small>{book.author}</small><em>{book.campus}校区 · {book.condition}</em></span><span className="rank-price"><b>¥{book.price}</b><small>查看详情</small></span><ChevronRight /></button>)}</section>
+      <section className="section-block"><div className="section-title"><h2>精选推荐</h2><button className="section-more" onClick={() => navigate('/category')}>查看全部 <ChevronRight /></button></div>{books === undefined ? <InlineLoading /> : books.length ? <div className="book-row">{books.slice(0, 5).map((book) => <BookTile book={book} navigate={navigate} key={book.id} />)}</div> : <InlineEmpty navigate={navigate} />}</section>
+      {books && books.length > 0 && <section className="ranking-card"><div className="section-title"><h2>最近上架</h2><span>最新流动好书</span></div>{books.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><BookCover book={book} compact /><span className="rank-copy"><strong>{book.title}</strong><small>{book.author}</small><em>{book.campus}校区 · {book.condition}</em></span><span className="rank-price"><b>¥{book.price}</b><small>查看详情</small></span><ChevronRight /></button>)}</section>}
     </AppShell>
   );
 }
@@ -367,9 +347,10 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
   useEffect(() => { demoRepository.getBook(id).then((value) => { setBook(value); if (value?.imageStoreKey) getImages(value.imageStoreKey).then(setImages); }); }, [id]);
   if (book === undefined) return <AppShell navigate={navigate} title="商品详情" back noNav><InlineLoading /></AppShell>;
   if (!book) return <StatePage type="404" navigate={navigate} />;
-  const seller = getUser(book.sellerId); const unavailable = book.status !== 'available';
+  const seller = book.seller || getUser(book.sellerId); const unavailable = book.status !== 'available';
+  const displayImages = book.images?.length ? book.images : images;
   const contact = async () => { if (unavailable) return navigate('/states/unavailable'); const thread = await demoRepository.ensureThread(book.id); navigate(`/messages/${thread}`); };
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{images.length ? images.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button onClick={async () => { const active = await demoRepository.toggleFavorite(book.id); setFavorite(active); notify(active ? '收藏成功' : '已取消收藏'); }} aria-label="收藏"><Heart fill={favorite ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button onClick={contact}>联系</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录，演示中不会真实提交')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : '联系卖家'}</button></div></AppShell>;
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{displayImages.length ? displayImages.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button onClick={async () => { const active = await demoRepository.toggleFavorite(book.id); setFavorite(active); notify(active ? '收藏成功' : '已取消收藏'); }} aria-label="收藏"><Heart fill={favorite ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button onClick={contact}>联系</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : '联系卖家'}</button></div></AppShell>;
 }
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
@@ -377,40 +358,43 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
   useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft(value); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
   const update = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => setDraft((valueDraft) => ({ ...valueDraft, [key]: value }));
   const handleFiles = async (files: FileList | null) => { if (!files) return; const next = await Promise.all(Array.from(files).slice(0, 6).map(compressImage)); const key = draft.imageStoreKey ?? `draft-${Date.now()}`; await saveImages(key, next); setImages(next); setDraft({ ...draft, imageStoreKey: key }); notify(`已添加 ${next.length} 张图片`); };
-  const runAi = () => { setAiLoading(true); setTimeout(() => { setDraft({ ...draft, title: '高等数学（第七版）上册', author: '同济大学数学系 编', isbn: '978-7-5608-9493-7', category: '教材教辅', course: '高等数学', price: '26', originalPrice: '49.8', condition: '九成新', description: '同济版经典教材，例题讲解清晰，笔记和标注较少，整体干净整洁，适合期末复习备考。', tags: ['考研必备', '期末复习', '笔记少'] }); setAiLoading(false); setStep(2); notify('托比已经帮你补全书籍信息'); }, 1100); };
+  const runAi = () => { setAiLoading(true); window.setTimeout(() => { setAiLoading(false); notify('智能识别暂未开放，请手动填写书籍信息'); setStep(2); }, 350); };
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0; };
   const save = async () => { await demoRepository.saveDraft(draft); notify('草稿已保存'); };
   const nextStep = () => { if (step === 1) setStep(2); else if (step === 2 && validate()) setStep(3); };
-  const publish = async () => { if (!validate()) return setStep(2); await demoRepository.publishListing(draft); navigate('/states/published'); };
+  const publish = async () => { if (!validate()) return setStep(2); try { await demoRepository.publishListing(draft); navigate('/states/published'); } catch (cause) { notify(cause instanceof Error ? cause.message : '发布失败，请稍后重试'); } };
   return <AppShell active="/publish" navigate={navigate} title="发布闲置书籍" className="publish-page"><div className="stepper">{['上传图片', '填写信息', '确认发布'].map((label, index) => <div className={step >= index + 1 ? 'active' : ''} key={label}><span>{index + 1}</span><p>{label}</p>{index < 2 && <i />}</div>)}</div>{step === 1 && <><section className="upload-card"><div className="image-grid">{images.map((image, index) => <div className="upload-preview" key={image.slice(-20)}><img src={image} alt={`上传图片 ${index + 1}`} /><button onClick={() => setImages(images.filter((_, valueIndex) => valueIndex !== index))}><X /></button></div>)}<button className="add-image" onClick={() => inputRef.current?.click()}><Camera /><strong>添加图片</strong><span>最多 6 张</span></button></div><input ref={inputRef} hidden type="file" accept="image/*" multiple onChange={(event) => handleFiles(event.target.files)} /><div className="tobby-tip"><Image src="/assets/tobby-guide-publish.webp" alt="Tobby 提醒拍摄封面" width={760} height={760} /><span>拍下封面，托比来帮你补全信息～</span></div></section><section className="ai-card"><div><p><Sparkles />Tobby 一键成文</p><span>上传封面后，自动生成书名、ISBN、分类与简介。</span></div><button onClick={runAi} disabled={aiLoading}>{aiLoading ? <><RefreshCw className="spin" />识别中…</> : <><WandSparkles />一键识别生成</>}</button></section></>}{step === 2 && <section className="form-card"><FormField label="书名" required error={errors.includes('请填写书名')}><input value={draft.title} onChange={(event) => update('title', event.target.value)} /></FormField><div className="form-grid"><FormField label="作者" required error={errors.includes('请填写作者')}><input value={draft.author} onChange={(event) => update('author', event.target.value)} /></FormField><FormField label="ISBN"><input value={draft.isbn} onChange={(event) => update('isbn', event.target.value)} /></FormField><FormField label="课程 / 分类" required><select value={draft.category} onChange={(event) => update('category', event.target.value)}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></FormField><FormField label="成色" required><select value={draft.condition} onChange={(event) => update('condition', event.target.value as Condition)}>{conditions.slice(1).map((condition) => <option key={condition}>{condition}</option>)}</select></FormField><FormField label="价格" required error={errors.includes('请填写价格')}><input type="number" inputMode="decimal" value={draft.price} onChange={(event) => update('price', event.target.value)} placeholder="¥ 0.00" /></FormField><FormField label="校区" required><select value={draft.campus} onChange={(event) => update('campus', event.target.value as PublishDraft['campus'])}>{campuses.slice(1).map((campus) => <option key={campus}>{campus}</option>)}</select></FormField></div><FormField label="商品简介" required error={errors.includes('请填写商品简介')}><textarea rows={5} maxLength={300} value={draft.description} onChange={(event) => update('description', event.target.value)} /></FormField><div className="tag-picker"><span>添加标签</span>{['考研必备', '期末复习', '笔记少', '教材'].map((tag) => <button className={draft.tags.includes(tag) ? 'active' : ''} onClick={() => update('tags', draft.tags.includes(tag) ? draft.tags.filter((value) => value !== tag) : [...draft.tags, tag])} key={tag}>{tag}</button>)}</div>{errors.length > 0 && <div className="form-error"><CircleAlert />{errors.join('、')}</div>}</section>}{step === 3 && <section className="publish-preview"><p className="eyebrow">发布前最后确认</p><BookListCard book={{ ...seedBooks[0], id: 'preview', title: draft.title, author: draft.author, price: Number(draft.price || 0), originalPrice: Number(draft.originalPrice || draft.price || 0), condition: draft.condition, campus: draft.campus, description: draft.description, tags: draft.tags, status: 'available', course: draft.course || draft.category }} navigate={() => setStep(2)} /><div className="safety-note"><ShieldCheck />请确认图片和描述真实准确，联系方式仅对发起咨询的同学可见。</div></section>}<div className="publish-actions">{step === 2 && <button className="secondary-button" onClick={save}>保存草稿</button>}{step > 1 && <button className="secondary-button" onClick={() => setStep(step - 1)}>上一步</button>}<button className="primary-button" onClick={step === 3 ? publish : nextStep}>{step === 3 ? '发布上架' : '下一步'}</button></div></AppShell>;
 }
 
 function FormField({ label, children, required, error }: { label: string; children: React.ReactNode; required?: boolean; error?: boolean }) { return <label className={`form-field ${error ? 'error' : ''}`}><span>{required && <em>*</em>}{label}</span>{children}</label>; }
 
 function MessagesPage({ navigate }: { navigate: (to: string) => void }) {
-  const [threads, setThreads] = useState<ChatThread[]>([]); useEffect(() => { demoRepository.listThreads().then(setThreads); }, []);
-  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{notifications.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />全部已读</span></div><div className="thread-list">{threads.map((thread) => { const user = getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3>{user.name}<span>{user.campus}校区</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div><div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
+  const [threads, setThreads] = useState<ChatThread[]>([]); const [items, setItems] = useState<Notification[]>([]);
+  useEffect(() => { Promise.all([demoRepository.listThreads(), demoRepository.listNotifications()]).then(([nextThreads, nextItems]) => { setThreads(nextThreads); setItems(nextItems); }); }, []);
+  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3>{user.name}<span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
 }
 
 function NotificationDetailPage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
   const notificationType = (['like', 'comment', 'system', 'follow'].includes(type) ? type : 'system') as Notification['type'];
-  const summary = notifications.find((item) => item.type === notificationType) ?? notifications[2];
+  const [items, setItems] = useState<Notification[]>();
+  useEffect(() => { demoRepository.listNotifications().then((values) => setItems(values.filter((item) => item.type === notificationType))); }, [notificationType]);
+  const summary = items?.[0] ?? { id: notificationType, type: notificationType, title: { like: '赞与收藏', comment: '评论与回复', system: '系统通知', follow: '新的关注' }[notificationType], subtitle: '暂无新通知', unread: 0 };
   const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[notificationType];
-  return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{summary.unread} 条未读</b></section><div className="notification-feed">{notificationDetails[notificationType].map((item, index) => <button onClick={() => navigate(item.route)} key={`${item.source}-${item.time}`}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.source}</strong><p>{item.text}</p><time>{item.time}</time></div><ChevronRight /></button>)}</div><div className="notification-safe"><ShieldCheck />通知内容为本地演示数据，不会向校外账号发送。</div></AppShell>;
+  return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
 }
 
 function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: (to: string) => void; notify: (text: string) => void }) {
+  const currentUser = useContext(CurrentUserContext);
   const [thread, setThread] = useState<ChatThread | null>(); const [text, setText] = useState('');
   useEffect(() => { if (threadId.startsWith('new-')) { demoRepository.ensureThread(threadId.replace('new-', '')).then((id) => navigate(`/messages/${id}`)); } else demoRepository.getThread(threadId).then(setThread); }, [threadId, navigate]);
   if (!thread) return <AppShell navigate={navigate} title="消息" back noNav><InlineLoading /></AppShell>;
-  const user = getUser(thread.participantId); const book = seedBooks.find((item) => item.id === thread.bookId) ?? seedBooks[0];
+  const user = thread.participant || getUser(thread.participantId); const book = seedBooks.find((item) => item.id === thread.bookId) ?? seedBooks[0];
   const send = async () => { if (!text.trim()) return; const message = await demoRepository.sendMessage(thread.id, text.trim()); setThread({ ...thread, messages: [...thread.messages, message] }); setText(''); };
-  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus}校区 · 在线</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === CURRENT_USER_ID; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && <Avatar user={getUser(CURRENT_USER_ID)} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片发送为纯前端演示')}><ImagePlus /></button><button onClick={() => notify('商品链接已准备分享')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
+  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
 }
 
 function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
   const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
-  const [editing, setEditing] = useState(false); const [draft, setDraft] = useState<User>(); const [saving, setSaving] = useState(false); const avatarInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     Promise.all([getH5Profile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
       .then(([student, favoriteBooks, myBooks]) => {
@@ -420,50 +404,52 @@ function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout
       .catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
   }, [notify, onProfileUpdated]);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
-  const reset = async () => { await demoRepository.resetDemoData(); notify('演示数据已重置'); navigate('/'); };
+  return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
+    <section className="profile-hero">
+      <Avatar user={profile} size={86} />
+      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
+      <button aria-label="编辑个人资料" onClick={() => navigate('/profile/edit')}><Settings /></button>
+    </section>
+    <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong className="verified-stat">已认证</strong><span>校园身份</span></button></div>
+    <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
+    <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
+    <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /></section>
+    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
+  </AppShell>;
+}
+
+function ProfileEditPage({ navigate, notify, currentUser, onProfileUpdated }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void }) {
+  const [draft, setDraft] = useState<User | undefined>(currentUser); const [saving, setSaving] = useState(false); const avatarInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!currentUser) getH5Profile().then((profile) => setDraft(profileToUser(profile))).catch(() => notify('个人资料加载失败')); }, [currentUser, notify]);
+  if (!draft) return <AppShell navigate={navigate} title="编辑个人资料" back noNav className="profile-edit-page"><InlineLoading /></AppShell>;
   const selectAvatar = async (file?: File) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) return notify('请选择不超过 5MB 的 JPEG、PNG 或 WebP 图片');
     try {
       const avatar = await compressImage(file, 320, .78);
       if (avatar.length > 350_000) return notify('头像压缩后仍然过大，请换一张图片');
-      setDraft((value) => value ? { ...value, avatar } : value);
+      setDraft({ ...draft, avatar });
     } catch { notify('头像处理失败，请换一张图片重试'); }
   };
   const saveProfile = async () => {
-    if (!draft) return;
     const nickname = draft.name.trim();
     if (nickname.length < 2 || nickname.length > 24) return notify('昵称长度应为 2–24 个字符');
     setSaving(true);
     try {
-      const saved = profileToUser(await updateH5Profile({ nickname, avatarUrl: draft.avatar || null, campus: draft.campus === '未设置' ? null : draft.campus, bio: draft.bio === '还没有填写个人简介。' ? '' : draft.bio }));
-      setProfile(saved); onProfileUpdated(saved); setEditing(false); notify('个人资料已保存');
+      const saved = profileToUser(await updateH5Profile({ nickname, avatarUrl: draft.avatar || null, campus: draft.campus === '未设置' ? null : draft.campus, bio: draft.bio === '还没有填写个人简介。' ? '' : draft.bio.trim() }));
+      onProfileUpdated(saved); notify('个人资料已保存'); navigate('/profile');
     } catch (cause) { notify(cause instanceof Error ? cause.message : '个人资料保存失败'); }
     finally { setSaving(false); }
   };
-  return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
-    <section className="profile-hero">
-      <Avatar user={profile} size={86} />
-      <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
-      <button aria-label="编辑个人资料" onClick={() => { setDraft({ ...profile }); setEditing(true); }}><Settings /></button>
+  return <AppShell navigate={navigate} title="编辑个人资料" back noNav className="profile-edit-page">
+    <section className="profile-edit-intro"><div className="profile-avatar-editor"><Avatar user={draft} size={92} /><div><button className="secondary-button" onClick={() => avatarInput.current?.click()}><Camera />更换头像</button>{draft.avatar && <button className="profile-avatar-clear" onClick={() => setDraft({ ...draft, avatar: undefined })}>移除头像</button>}</div><input ref={avatarInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void selectAvatar(event.target.files?.[0]); event.target.value = ''; }} /></div><p>完善资料，让校友更放心地和你交易。</p></section>
+    <section className="profile-edit-card">
+      <label className="profile-edit-field"><span>昵称</span><input maxLength={24} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /><small>{draft.name.length}/24</small></label>
+      <label className="profile-edit-field"><span>校区</span><select value={draft.campus} onChange={(event) => setDraft({ ...draft, campus: event.target.value as User['campus'] })}><option value="未设置">暂不设置</option>{campuses.slice(1).map((campus) => <option value={campus} key={campus}>{campus}</option>)}</select></label>
+      <label className="profile-edit-field"><span>个人简介</span><textarea rows={5} maxLength={160} value={draft.bio === '还没有填写个人简介。' ? '' : draft.bio} onChange={(event) => setDraft({ ...draft, bio: event.target.value })} placeholder="介绍一下自己、常交易的校区或偏好的书籍" /><small>{draft.bio === '还没有填写个人简介。' ? 0 : draft.bio.length}/160</small></label>
     </section>
-    <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong>12</strong><span>校园信用</span></button></div>
-    <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
-    <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
-    <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /><MenuButton icon={Sparkles} label="演示与状态" detail="查看空状态、错误、维护等页面" onClick={() => navigate('/states')} /><MenuButton icon={RotateCcw} label="重置演示数据" detail="清空收藏、草稿、发布与消息变化" onClick={reset} danger /></section>
-    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
-    {editing && draft && <div className="sheet-layer profile-edit-layer">
-      <button className="sheet-scrim" onClick={() => !saving && setEditing(false)} aria-label="关闭个人资料编辑" />
-      <section className="filter-sheet profile-editor" aria-label="编辑个人资料">
-        <div className="sheet-handle" />
-        <div className="sheet-title"><h2>编辑个人资料</h2><span /><button onClick={() => !saving && setEditing(false)} aria-label="关闭"><X /></button></div>
-        <div className="profile-avatar-editor"><Avatar user={draft} size={82} /><div><button className="secondary-button" onClick={() => avatarInput.current?.click()}><Camera />更换头像</button>{draft.avatar && <button className="profile-avatar-clear" onClick={() => setDraft({ ...draft, avatar: undefined })}>移除头像</button>}</div><input ref={avatarInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void selectAvatar(event.target.files?.[0]); event.target.value = ''; }} /></div>
-        <label className="profile-edit-field"><span>昵称</span><input maxLength={24} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-        <label className="profile-edit-field"><span>校区</span><select value={draft.campus} onChange={(event) => setDraft({ ...draft, campus: event.target.value as User['campus'] })}><option value="未设置">暂不设置</option>{campuses.slice(1).map((campus) => <option value={campus} key={campus}>{campus}</option>)}</select></label>
-        <label className="profile-edit-field"><span>个人简介</span><textarea rows={3} maxLength={160} value={draft.bio === '还没有填写个人简介。' ? '' : draft.bio} onChange={(event) => setDraft({ ...draft, bio: event.target.value })} placeholder="介绍一下自己吧" /></label>
-        <button className="primary-button profile-save" disabled={saving} onClick={saveProfile}>{saving ? <><RefreshCw className="spin" />保存中</> : '保存个人资料'}</button>
-      </section>
-    </div>}
+    <div className="profile-edit-notice"><ShieldCheck /><span><strong>校园身份已认证</strong>学号与认证信息不会公开展示。</span></div>
+    <button className="primary-button profile-save" disabled={saving} onClick={saveProfile}>{saving ? <><RefreshCw className="spin" />保存中</> : '保存个人资料'}</button>
   </AppShell>;
 }
 
@@ -489,7 +475,7 @@ const stateContent: Record<string, { title: string; text: string; image: string;
   network: { title: '网络好像走丢了', text: '别担心，已填写的内容仍保存在本机。', image: '/assets/tobby-sad.webp', button: '重新加载' },
   maintenance: { title: '托比正在维护书架', text: '系统很快回来，稍后再来看看吧。', image: '/assets/tobby-maintenance.webp', button: '返回首页' },
   unavailable: { title: '这本书目前不可用', text: '它可能已经售出或暂时下架，再看看其他好书吧。', image: '/assets/tobby-unavailable.webp', button: '发现其他书' },
-  published: { title: '发布成功！', text: '你的闲置已经上架，等待下一位同学发现它。', image: '/assets/tobby-cheer.webp', button: '查看我的发布' },
+  published: { title: '提交成功！', text: '你的闲置已提交审核，可以在“我的发布”查看当前状态。', image: '/assets/tobby-cheer.webp', button: '查看我的发布' },
   '404': { title: '好像翻错书页了', text: '这个页面不存在，托比带你回到熟悉的地方。', image: '/assets/tobby-sad.webp', button: '返回首页' },
 };
 
@@ -551,6 +537,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/messages') page = <MessagesPage navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/notifications/')) page = <NotificationDetailPage type={effectivePath.split('/')[3]} navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
+  else if (effectivePath === '/profile/edit') page = <ProfileEditPage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={setCurrentUser} />;
   else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={setCurrentUser} onLogout={() => { setCurrentUser(undefined); setAuthMode('anonymous'); }} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/my-listings') page = <MyListingsPage navigate={navigate} notify={notify} />;

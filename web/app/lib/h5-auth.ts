@@ -39,7 +39,7 @@ async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<{ re
   return { response, body };
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+export async function h5ApiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   let result = await rawRequest<T>(path, init);
   if (result.response.status === 401 && retry && path !== '/auth/refresh') {
     const refreshed = await rawRequest<H5Session>('/auth/refresh', {
@@ -52,18 +52,18 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
 }
 
 export async function loginWithCampusCookie(registrationToken: string): Promise<H5Session> {
-  return request<H5Session>('/auth/campus', {
+  return h5ApiRequest<H5Session>('/auth/campus', {
     method: 'POST',
     body: JSON.stringify({ registrationToken, platform: 'h5', sessionTransport: 'cookie' }),
   }, false);
 }
 
 export function getH5Profile(): Promise<H5Profile> {
-  return request<H5Profile>('/me');
+  return h5ApiRequest<H5Profile>('/me');
 }
 
 export function updateH5Profile(profile: { nickname: string; avatarUrl: string | null; campus: string | null; bio: string }): Promise<H5Profile> {
-  return request<H5Profile>('/me', { method: 'PATCH', body: JSON.stringify(profile) });
+  return h5ApiRequest<H5Profile>('/me', { method: 'PATCH', body: JSON.stringify(profile) });
 }
 
 export async function restoreH5Session(): Promise<H5Profile | null> {

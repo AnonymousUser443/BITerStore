@@ -31,6 +31,8 @@ export interface Book {
   tags: string[];
   tone: string;
   imageStoreKey?: string;
+  images?: string[];
+  seller?: User;
 }
 
 export interface BookFilters {
@@ -75,6 +77,7 @@ export interface ChatThread {
   unread: number;
   updatedAt: string;
   messages: Message[];
+  participant?: User;
 }
 
 export interface Notification {
@@ -83,4 +86,5 @@ export interface Notification {
   title: string;
   subtitle: string;
   unread: number;
+  createdAt?: string;
 }
