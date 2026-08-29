@@ -71,6 +71,20 @@ describe('Golden Reference style alignment', () => {
     expect(h5).toContain('.topbar-menu button:hover')
   })
 
+  it('H5 在窄屏、折叠屏、平板、横屏和超宽窗口连续重排', () => {
+    const h5 = read('src/h5.css')
+    const visual = read('scripts/h5-visual.mjs')
+    expect(h5).toContain('@media (max-width: 340px)')
+    expect(h5).toContain('@media (min-width: 480px) and (max-width: 699px)')
+    expect(h5).toContain('@media (orientation: landscape) and (min-width: 700px)')
+    expect(h5).toContain('repeat(auto-fill, minmax(340px, 1fr))')
+    expect(h5).toContain('width: min(calc(100vw - 48px), 1600px)')
+    expect(visual).toContain("['home-1920', 1920, 1080, '/home']")
+    expect(visual).toContain("['home-landscape-844', 844, 390, '/home']")
+    expect(visual).toContain("type: 'horizontal-overflow'")
+    expect(visual).toContain("type: 'fixed-compact-canvas'")
+  })
+
   it('injects the ignored local AppID into every WeApp build without committing it', () => {
     const packageJson = read('package.json')
     const syncScript = read('scripts/sync-weapp-project-config.mjs')

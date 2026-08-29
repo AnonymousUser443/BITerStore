@@ -31,4 +31,13 @@ describe('authenticated Golden H5', () => {
     expect(mobileApp).toContain("window.history.replaceState({}, '', canonicalPath)");
     expect(mobileApp).toContain("path === '/' && demoRepository.isOnboardingComplete()");
   });
+
+  it('reflows continuously from narrow phones through ultra-wide H5 windows', () => {
+    expect(styles).toContain('@media (max-width: 340px)');
+    expect(styles).toContain('@media (min-width: 480px) and (max-width: 699px)');
+    expect(styles).toContain('@media (orientation: landscape) and (min-width: 700px)');
+    expect(styles).toContain('repeat(auto-fill, minmax(340px, 1fr))');
+    expect(styles).toContain('width: min(calc(100vw - 48px), 1600px)');
+    expect(styles).toContain('.profile-page .content-scroll { grid-template-columns: repeat(3, minmax(0, 1fr)); }');
+  });
 });

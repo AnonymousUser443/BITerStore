@@ -34,23 +34,58 @@ function apiFixture(pathname, method = 'GET') {
   return { status: 404, body: { message: `未配置本地 QA 接口: ${method} ${pathname}` } }
 }
 const targets = [
+  ['welcome-320', 320, 700, '/'],
   ['welcome-390', 390, 900, '/'],
+  ['welcome-768', 768, 1024, '/'],
   ['onboarding-390', 390, 900, '/onboarding'],
   ['login-390', 390, 900, '/login'],
   ['login-1280', 1280, 900, '/login'],
+  ['home-320', 320, 700, '/home'],
   ['home-360', 360, 900, '/home'],
+  ['home-480', 480, 900, '/home'],
+  ['home-600', 600, 900, '/home'],
+  ['home-768', 768, 1024, '/home'],
+  ['home-landscape-844', 844, 390, '/home'],
+  ['home-1024', 1024, 768, '/home'],
+  ['home-1440', 1440, 900, '/home'],
+  ['home-1920', 1920, 1080, '/home'],
+  ['search-320', 320, 700, '/search'],
   ['search-390', 390, 900, '/search'],
+  ['search-600', 600, 900, '/search'],
+  ['search-768', 768, 1024, '/search'],
+  ['search-1024', 1024, 768, '/search'],
+  ['search-1440', 1440, 900, '/search'],
+  ['publish-320', 320, 700, '/publish'],
   ['publish-430', 430, 900, '/publish'],
+  ['publish-600', 600, 900, '/publish'],
+  ['publish-768', 768, 1024, '/publish'],
+  ['publish-1440', 1440, 900, '/publish'],
+  ['messages-320', 320, 700, '/messages'],
   ['messages-390', 390, 900, '/messages'],
+  ['messages-600', 600, 900, '/messages'],
+  ['messages-768', 768, 1024, '/messages'],
+  ['messages-1440', 1440, 900, '/messages'],
   ['notification-390', 390, 900, '/messages/notifications/comment'],
+  ['notification-768', 768, 1024, '/messages/notifications/comment'],
+  ['chat-320', 320, 700, '/messages/thread-lin'],
   ['chat-390', 390, 900, '/messages/thread-lin'],
+  ['chat-768', 768, 1024, '/messages/thread-lin'],
+  ['chat-1440', 1440, 900, '/messages/thread-lin'],
   ['detail-390', 390, 900, '/books/math-7'],
+  ['detail-600', 600, 900, '/books/math-7'],
+  ['detail-768', 768, 1024, '/books/math-7'],
+  ['detail-1024', 1024, 768, '/books/math-7'],
+  ['detail-1440', 1440, 900, '/books/math-7'],
   ['favorites-390', 390, 900, '/favorites'],
   ['my-listings-390', 390, 900, '/my-listings'],
   ['states-390', 390, 900, '/states'],
+  ['states-600', 600, 900, '/states'],
+  ['states-1440', 1440, 900, '/states'],
   ['unavailable-390', 390, 900, '/states/unavailable'],
-  ['home-820', 820, 1000, '/home'],
-  ['profile-1280', 1280, 900, '/profile']
+  ['profile-600', 600, 900, '/profile'],
+  ['profile-1024', 1024, 768, '/profile'],
+  ['profile-1280', 1280, 900, '/profile'],
+  ['profile-1600', 1600, 1000, '/profile']
 ]
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -165,6 +200,49 @@ try {
   await client.send('Page.enable')
   await client.send('Runtime.enable')
   await client.send('Storage.clearDataForOrigin', { origin: preview, storageTypes: 'all' })
+  const layoutProbe = `(() => {
+    const shell = document.querySelector('.phone-shell')
+    const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero h1','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']
+    const measure = element => {
+      const box = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const child = element.querySelector(':scope > img')
+      const childBox = child?.getBoundingClientRect()
+      return { x: Math.round(box.x), y: Math.round(box.y), right: Math.round(box.right), bottom: Math.round(box.bottom), width: Math.round(box.width), height: Math.round(box.height), fontSize: style.fontSize, lineHeight: style.lineHeight, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }
+    }
+    const gridColumns = selector => {
+      const element = document.querySelector(selector)
+      if (!element) return 0
+      const columns = getComputedStyle(element).gridTemplateColumns
+      return columns && columns !== 'none' ? columns.trim().split(/\\s+/).length : 0
+    }
+    const content = document.querySelector('.content-scroll')
+    const nav = document.querySelector('.bottom-nav')
+    const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null]))
+    const shellBox = shell?.getBoundingClientRect()
+    return {
+      url: location.href,
+      text: document.body.innerText,
+      html: document.body.innerHTML.slice(0, 500),
+      viewport: { width: innerWidth, height: innerHeight },
+      document: { scrollWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth), clientWidth: document.documentElement.clientWidth },
+      metrics,
+      shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160), x: Math.round(shellBox.x), right: Math.round(shellBox.right), width: Math.round(shellBox.width), clientWidth: shell.clientWidth, scrollWidth: shell.scrollWidth } : null,
+      layout: {
+        content: content ? measure(content) : null,
+        contentClientWidth: content?.clientWidth || 0,
+        contentScrollWidth: content?.scrollWidth || 0,
+        contentPaddingLeft: content ? parseFloat(getComputedStyle(content).paddingLeft) : 0,
+        nav: nav ? measure(nav) : null,
+        bookColumns: gridColumns('.book-row'),
+        listingColumns: gridColumns('.listing-stack'),
+        notificationColumns: gridColumns('.notification-grid'),
+        threadColumns: gridColumns('.thread-list'),
+        stateColumns: gridColumns('.state-grid'),
+        profileColumns: gridColumns('.profile-page .content-scroll')
+      }
+    }
+  })()`
   for (const [name, width, height, route] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
@@ -177,9 +255,22 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-modal-close')?.click()` })
       await delay(250)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero h1','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), fontSize: style.fontSize, lineHeight: style.lineHeight, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
-    pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics })
-    if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
+    const pageState = await client.send('Runtime.evaluate', { expression: layoutProbe, returnByValue: true })
+    const state = pageState.result.value
+    pages.push({ name, url: state.url, textLength: state.text.length, shellClass: state.shell?.className || null, viewport: state.viewport, shell: state.shell, layout: state.layout, metrics: state.metrics })
+    if (!state.shell || state.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${state.url}` })
+    if (state.document.scrollWidth > state.viewport.width + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: document ${state.document.scrollWidth}px > viewport ${state.viewport.width}px` })
+    if (state.shell && (state.shell.x < -1 || state.shell.right > state.viewport.width + 1)) diagnostics.push({ type: 'shell-outside-viewport', text: `${name}: shell ${state.shell.x}–${state.shell.right}px @ ${state.viewport.width}px` })
+    if (width >= 480 && width < 700 && state.shell?.width < width - 40) diagnostics.push({ type: 'fixed-compact-canvas', text: `${name}: ${state.shell.width}px shell did not expand with ${width}px viewport` })
+    if (state.layout.contentScrollWidth > state.layout.contentClientWidth + 2) diagnostics.push({ type: 'content-horizontal-overflow', text: `${name}: content ${state.layout.contentScrollWidth}px > ${state.layout.contentClientWidth}px` })
+    if (state.layout.nav) {
+      const landscapeRail = width >= 700 && width < 1024 && height <= 500
+      if ((width >= 1024 || landscapeRail) && (state.layout.nav.width > 150 || state.layout.nav.height < 250)) diagnostics.push({ type: 'desktop-nav-orientation', text: `${name}: ${state.layout.nav.width}×${state.layout.nav.height}` })
+      if (width < 1024 && !landscapeRail && (state.layout.nav.width < state.shell.width * .7 || state.layout.nav.height > 100)) diagnostics.push({ type: 'touch-nav-orientation', text: `${name}: ${state.layout.nav.width}×${state.layout.nav.height}` })
+    }
+    if (name.startsWith('search-') && width >= 560 && state.layout.listingColumns < 2) diagnostics.push({ type: 'search-grid-not-reflowed', text: `${name}: ${state.layout.listingColumns} column(s)` })
+    if (name.startsWith('messages-') && width >= 700 && state.layout.notificationColumns < 3) diagnostics.push({ type: 'message-grid-not-reflowed', text: `${name}: ${state.layout.notificationColumns} column(s)` })
+    if (name === 'profile-1600' && state.layout.profileColumns < 3) diagnostics.push({ type: 'wide-profile-not-reflowed', text: `${name}: ${state.layout.profileColumns} column(s)` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
     if (name === 'profile-1280') {
