@@ -73,6 +73,7 @@ describe('authenticated Golden H5', () => {
     expect(publishPage).toContain('className="optional-images"')
     expect(styles).toContain('.optional-images .upload-preview img')
     expect(styles).toContain('object-fit: contain')
+    expect(styles).toContain('.publish-page .upload-card { flex: 0 0 auto; overflow: visible; }')
   })
 
   it('reflows continuously from narrow phones through ultra-wide H5 windows', () => {

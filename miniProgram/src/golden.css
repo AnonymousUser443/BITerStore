@@ -584,6 +584,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 
 .publish-page .content-scroll { display: flex; flex-direction: column; }
 .publish-page .publish-actions { margin-top: auto; }
+.publish-page .upload-card { flex: 0 0 auto; overflow: visible; }
 .upload-card { min-height: 244px; }
 .tobby-tip { position: relative; z-index: 1; min-height: 112px; margin-top: 8px; }
 .tobby-tip img { width: 126px; height: 110px; margin-left: -7px; filter: drop-shadow(0 8px 8px rgba(69,71,53,.12)); }
