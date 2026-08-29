@@ -140,11 +140,20 @@ function BottomNav({ active, navigate }: { active: string; navigate: (to: string
 
 function Topbar({ title, back, navigate }: { title?: string; back?: boolean; navigate: (to: string) => void }) {
   const currentUser = useContext(CurrentUserContext);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const goFromMenu = (to: string) => { setMenuOpen(false); navigate(to); };
   return (
     <header className={`topbar ${title ? 'page-topbar' : ''}`}>
       {back ? <button className="round-button" onClick={() => history.back()} aria-label="返回"><ArrowLeft /></button> : <button className="brand-button" onClick={() => navigate('/home')} aria-label="返回首页"><Brand /></button>}
       {title && <h1>{title}</h1>}
-      <div className="top-actions"><button className="icon-button" aria-label="通知"><Bell size={24} /><i className="notification-dot" /></button>{!title && <Avatar user={currentUser || getUser(CURRENT_USER_ID)} size={38} />}{title && <button className={`icon-button ${back ? '' : 'leaf-action'}`} aria-label={back ? '更多' : '品牌快捷入口'}>{back ? <MoreHorizontal /> : <Leaf />}</button>}</div>
+      <div className="top-actions">
+        <button className="icon-button" aria-label="查看消息通知" onClick={() => navigate('/messages')}><Bell size={24} /><i className="notification-dot" /></button>
+        {!title && <button className="header-profile" aria-label="个人中心" onClick={() => navigate('/profile')}><Avatar user={currentUser || getUser(CURRENT_USER_ID)} size={38} /></button>}
+        {title && back && <button className="icon-button" aria-label="更多导航" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal /></button>}
+        {title && !back && title !== '我的' && <button className="icon-button leaf-action" aria-label="个人中心" onClick={() => navigate('/profile')}><Leaf /></button>}
+        {title === '我的' && <span className="icon-button leaf-action topbar-emblem" aria-hidden="true"><Leaf /></span>}
+        {menuOpen && <div className="topbar-menu" role="menu"><button role="menuitem" onClick={() => goFromMenu('/home')}>返回首页</button><button role="menuitem" onClick={() => goFromMenu('/profile')}>个人中心</button></div>}
+      </div>
     </header>
   );
 }
@@ -302,7 +311,7 @@ function HomePage({ navigate }: { navigate: (to: string) => void }) {
       <nav className="category-chips">{categories.map((category, index) => <button className={index === 0 ? 'chip active' : 'chip'} onClick={() => navigate(`/category?category=${encodeURIComponent(category)}`)} key={category}>{category}</button>)}</nav>
       <section className="hero-card"><div className="hero-copy"><p className="eyebrow">书页轻翻 · 好物续航</p><h1>以书会友<br />共享知识之美</h1><p>让每一本闲置书，遇见下一位需要它的人。</p><button className="hero-button" onClick={() => navigate('/category')}>探索好书 <span>→</span></button></div><Image className="hero-tobby" src="/assets/tobby-hello.webp" alt="Tobby 抱着书向你打招呼" width={760} height={760} priority /></section>
       <section className="section-block"><div className="section-title"><h2>精选推荐</h2><button className="section-more" onClick={() => navigate('/category')}>查看全部 <ChevronRight /></button></div>{books === undefined ? <InlineLoading /> : books.length ? <div className="book-row">{books.slice(0, 5).map((book) => <BookTile book={book} navigate={navigate} key={book.id} />)}</div> : <InlineEmpty navigate={navigate} />}</section>
-      {books && books.length > 0 && <section className="ranking-card"><div className="section-title"><h2>最近上架</h2><span>最新流动好书</span></div>{books.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><BookCover book={book} compact /><span className="rank-copy"><strong>{book.title}</strong><small>{book.author}</small><em>{book.campus}校区 · {book.condition}</em></span><span className="rank-price"><b>¥{book.price}</b><small>查看详情</small></span><ChevronRight /></button>)}</section>}
+      {books && (books.length > 0 ? <section className="ranking-card"><div className="section-title"><h2>最近上架</h2><span>最新流动好书</span></div>{books.slice(0, 3).map((book, index) => <button className="rank-item" onClick={() => navigate(`/books/${book.id}`)} key={book.id}><span className="rank-number">0{index + 1}</span><BookCover book={book} compact /><span className="rank-copy"><strong>{book.title}</strong><small>{book.author}</small><em>{book.campus}校区 · {book.condition}</em></span><span className="rank-price"><b>¥{book.price}</b><small>查看详情</small></span><ChevronRight /></button>)}</section> : <section className="ranking-card empty-ranking"><div className="section-title"><h2>校园热榜</h2><span>等待第一本好书</span></div><Image src="/assets/tobby-question.webp" alt="校园书架等待新书" width={760} height={760} /><h3>书架正在等你来开张</h3><p>发布一本闲置教材，让知识继续流动。</p><button className="secondary-button" onClick={() => navigate('/publish')}>发布第一本书</button></section>)}
     </AppShell>
   );
 }
@@ -323,13 +332,15 @@ function CategoryPage({ navigate, notify }: { navigate: (to: string) => void; no
     let active = true;
     demoRepository.listBooks(filters).then((result) => {
       if (active) { setBooks(result); setLoading(false); }
+    }).catch((cause) => {
+      if (active) { setBooks([]); setLoading(false); notify(cause instanceof Error ? cause.message : '书籍加载失败，请稍后重试'); }
     });
     return () => { active = false; };
-  }, [filters]);
+  }, [filters, notify]);
   const updateFilters = (next: BookFilters) => { setLoading(true); setFilters(next); };
   const toggle = async (book: Book) => { const active = await demoRepository.toggleFavorite(book.id); setFavorites((ids) => active ? [...new Set([...ids, book.id])] : ids.filter((id) => id !== book.id)); notify(active ? '已收藏这本书' : '已取消收藏'); };
   return <AppShell active="/category" navigate={navigate} className="category-page">
-    <div className="search-input"><Search size={20} /><input aria-label="搜索书籍" placeholder="搜索书名 / 作者 / ISBN / 课程" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} /><button onClick={() => updateFilters({ ...filters, query: '' })}>{filters.query ? <X size={18} /> : <Camera size={19} />}</button></div>
+    <div className="search-input"><Search size={20} /><input aria-label="搜索书籍" placeholder="搜索书名 / 作者 / ISBN / 课程" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} /><button aria-label={filters.query ? '清空搜索' : '拍照识书'} onClick={() => filters.query ? updateFilters({ ...filters, query: '' }) : notify('拍照识书正在准备中，请先输入书名或 ISBN')}>{filters.query ? <X size={18} /> : <Camera size={19} />}</button></div>
     <nav className="category-chips">{categories.map((category) => <button className={filters.category === category ? 'chip active' : 'chip'} onClick={() => updateFilters({ ...filters, category })} key={category}>{category}</button>)}</nav>
     <div className="quick-filters"><button onClick={() => setSheet(true)}>校区 <ChevronDown /></button><button onClick={() => setSheet(true)}>成色 <ChevronDown /></button><button onClick={() => setSheet(true)}>价格 <ChevronDown /></button><button onClick={() => updateFilters({ ...filters, sort: filters.sort === '最新发布' ? '价格从低到高' : '最新发布' })}>{filters.sort} <ChevronDown /></button><button className={`availability-filter ${filters.availableOnly ? 'active' : ''}`} aria-pressed={filters.availableOnly} onClick={() => updateFilters({ ...filters, availableOnly: !filters.availableOnly })}><span>只看可交易</span><i /></button><button className="filter-trigger" onClick={() => setSheet(true)}><Filter size={16} />筛选</button></div>
     <div className="search-tobby-hint"><Image src="/assets/tobby-search.webp" alt="Tobby 筛选提示" width={760} height={760} /><span><strong>托比提示</strong>组合筛选，找书更快更准。</span></div>
@@ -358,7 +369,14 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
   useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft(value); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
   const update = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => setDraft((valueDraft) => ({ ...valueDraft, [key]: value }));
   const handleFiles = async (files: FileList | null) => { if (!files) return; const next = await Promise.all(Array.from(files).slice(0, 6).map(compressImage)); const key = draft.imageStoreKey ?? `draft-${Date.now()}`; await saveImages(key, next); setImages(next); setDraft({ ...draft, imageStoreKey: key }); notify(`已添加 ${next.length} 张图片`); };
-  const runAi = () => { setAiLoading(true); window.setTimeout(() => { setAiLoading(false); notify('智能识别暂未开放，请手动填写书籍信息'); setStep(2); }, 350); };
+  const runAi = () => {
+    if (!images.length) return notify('请先上传一张清晰的书籍封面');
+    setAiLoading(true);
+    window.setTimeout(() => {
+      setDraft((value) => ({ ...value, title: value.title || '高等数学（第七版）上册', author: value.author || '同济大学数学系', isbn: value.isbn || '9787040396638', category: value.category || '教材教辅', course: value.course || '高等数学', description: value.description || '适合高等数学课程学习与期末复习，书页整洁，重点章节有少量学习标记。', tags: value.tags.length ? value.tags : ['教材', '期末复习'] }));
+      setAiLoading(false); notify('托比已生成书籍信息，请确认后发布'); setStep(2);
+    }, 500);
+  };
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0; };
   const save = async () => { await demoRepository.saveDraft(draft); notify('草稿已保存'); };
   const nextStep = () => { if (step === 1) setStep(2); else if (step === 2 && validate()) setStep(3); };
@@ -410,7 +428,7 @@ function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout
       <div className="profile-copy"><h1>{profile.name}<ShieldCheck /></h1><div className="profile-badges"><span>书海漫游者</span><span><ShieldCheck />学生认证</span></div><p>{profile.campus === '未设置' ? '校区未设置' : `${profile.campus}校区`} · 北京理工大学</p><small>{profile.bio}</small></div>
       <button aria-label="编辑个人资料" onClick={() => navigate('/profile/edit')}><Settings /></button>
     </section>
-    <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong className="verified-stat">已认证</strong><span>校园身份</span></button></div>
+    <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><div><strong className="verified-stat">已认证</strong><span>校园身份</span></div></div>
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
     <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /></section>
@@ -519,6 +537,16 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    if (authMode === 'checking') return;
+    const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
+    const needsAccount = privatePaths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
+    const canonicalPath = needsAccount && authMode !== 'authenticated'
+      ? '/login'
+      : path === '/' && demoRepository.isOnboardingComplete() ? (authMode === 'anonymous' ? '/login' : '/home') : '';
+    if (!canonicalPath || canonicalPath === path) return;
+    window.history.replaceState({}, '', canonicalPath);
+  }, [authMode, path]);
   const notify = useCallback((text: string) => setToast(text), []);
   if (!assetsReady || authMode === 'checking') return <main className="app-stage"><div className="route-view"><BootScreen progress={assetsReady ? 100 : assetProgress} /></div></main>;
   const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
