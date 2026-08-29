@@ -541,7 +541,8 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .welcome-steps::before, .welcome-steps::after { position: absolute; color: rgba(111,121,86,.42); font-size: 15px; }
 .welcome-steps::before { content: '❧'; left: 10px; top: 8px; }
 .welcome-steps::after { content: '❧'; right: 10px; bottom: 8px; transform: rotate(180deg); }
-.profile-hero, .profile-menu, .upload-card { position: relative; overflow: hidden; }
+.profile-hero, .upload-card { position: relative; overflow: hidden; }
+.profile-menu { position: relative; }
 .profile-hero::after, .profile-menu::after, .upload-card::before { content: '❧'; position: absolute; color: rgba(111,121,86,.28); font-size: 20px; pointer-events: none; }
 .profile-hero::after { right: 12px; bottom: 6px; transform: rotate(-16deg); }
 .profile-menu::after { right: 13px; top: 8px; }
@@ -842,7 +843,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .profile-hero { grid-column: 1 / -1; }
   .profile-stats, .profile-reminder, .profile-menu { margin: 0; }
   .profile-stats, .profile-reminder { grid-column: 1 / -1; }
-  .profile-menu { height: 100%; }
   .states-index .state-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
   .welcome-page { display: grid; grid-template-columns: minmax(330px, .95fr) minmax(330px, 1.05fr); grid-template-rows: auto auto auto 1fr; column-gap: 38px; align-items: center; padding: 34px 48px; }

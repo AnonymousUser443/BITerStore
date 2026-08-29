@@ -37,6 +37,16 @@ describe('Golden Reference style alignment', () => {
     expect(goldenCss).toContain('@media (min-width: 1024px) and (max-height: 699px)')
   })
 
+  it('个人页宽屏网格由较高菜单撑开，不裁切额外操作', () => {
+    const h5Css = read('../web/app/globals.css')
+    const weappCss = read('src/golden.css')
+    for (const css of [h5Css, weappCss]) {
+      expect(css).toContain('.profile-menu { position: relative; }')
+      expect(css).not.toContain('.profile-hero, .profile-menu, .upload-card { position: relative; overflow: hidden; }')
+      expect(css).not.toContain('.profile-menu { height: 100%; }')
+    }
+  })
+
   it('微信入口复用 Golden 样式并只追加原生节点适配', () => {
     const entry = read('src/app.weapp.ts')
     expect(entry).toContain("import './golden.css'")
