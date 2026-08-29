@@ -89,7 +89,7 @@
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
 - [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
 - [ ] Open Library 对中文教材覆盖率有限；灰度期需统计命中率，再决定是否增加国家图书馆数据源或部署本地 OCR/条码识别兜底。
-- [ ] R2 已上线；仍需为未完成上传的 `pending/` 孤儿对象配置生命周期清理规则。
+- [ ] R2 已上线，历史已完成对象已迁移至 `media/`；生命周期脚本已提供，但当前 R2 S3 凭据缺少 Bucket Settings 权限（403），仍需使用 Cloudflare 账户 API 令牌为未完成的 `pending/` 对象配置 1 天清理规则，并部署新版多源书目 Worker。
 
 ## 待完成
 
