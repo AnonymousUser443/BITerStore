@@ -68,6 +68,13 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('.confirm-dialog')
   })
 
+  it('keeps optional publish photos fully visible across aspect ratios', () => {
+    const publishPage = mobileApp.slice(mobileApp.indexOf('function PublishPage'), mobileApp.indexOf('function ProfileEditPage'))
+    expect(publishPage).toContain('className="optional-images"')
+    expect(styles).toContain('.optional-images .upload-preview img')
+    expect(styles).toContain('object-fit: contain')
+  })
+
   it('reflows continuously from narrow phones through ultra-wide H5 windows', () => {
     expect(styles).toContain('@media (max-width: 340px)')
     expect(styles).toContain('@media (min-width: 480px) and (max-width: 699px)')

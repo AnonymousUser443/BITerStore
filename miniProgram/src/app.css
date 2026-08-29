@@ -188,6 +188,7 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .optional-images { margin-top: 12px; }
 .optional-images > text { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; }
 .optional-images .image-grid { grid-template-columns: repeat(4, 1fr); }
+.optional-images .upload-preview image, .optional-image-preview { width: 100%; height: 100%; object-fit: contain; background: #e7ebdc; }
 .ai-card button[disabled] { opacity: .48; }
 .tobby-tip > image, .tobby-tip > taro-image-core { flex: 0 0 126px; width: 126px; height: 110px; margin-left: -7px; object-fit: contain; filter: drop-shadow(0 8px 8px rgba(69,71,53,.12)); }
 .tobby-tip > taro-image-core > img { object-fit: contain; }
