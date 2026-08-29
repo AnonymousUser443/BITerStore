@@ -29,6 +29,15 @@ describe('book metadata', () => {
     await expect(service.lookup('9787115428029')).rejects.toBeInstanceOf(BadRequestException)
   })
 
+  it('returns verified Chinese metadata instead of a romanized upstream title', async () => {
+    const store = redis()
+    await expect(new BooksService(store as never).lookup('9787111544937')).resolves.toMatchObject({
+      title: '深入理解计算机系统（原书第3版）',
+      publisher: '机械工业出版社'
+    })
+    expect(store.ensureConnected).not.toHaveBeenCalled()
+  })
+
   it('returns a cached normalized result without an upstream request', async () => {
     const value = { isbn, title: '缓存教材', author: '', publisher: '', publishDate: '', coverUrl: '', subjects: [] }
     const store = redis(JSON.stringify(value))
@@ -47,6 +56,15 @@ describe('book metadata', () => {
     const result = await new BooksService(store as never).lookup(isbn)
     expect(result).toMatchObject({ isbn, title: '高等数学', author: '同济大学' })
     expect(fetchMock).toHaveBeenCalledWith(`https://metadata.example.test/isbn/${isbn}`, expect.objectContaining({ headers: { Authorization: 'Bearer shared-secret' } }))
-    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v2:${isbn}`, expect.any(String), 'EX', 2592000)
+    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v3:${isbn}`, expect.any(String), 'EX', 2592000)
+  })
+
+  it('does not autofill a romanized title for a mainland Chinese ISBN', async () => {
+    process.env.BOOK_METADATA_PROXY_URL = 'https://metadata.example.test/'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ title: 'Pin yin shu ming' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(new BooksService(redis() as never).lookup(isbn)).rejects.toMatchObject({
+      message: '免费书目源仅返回了英文或拼音书名，请手动填写中文书名'
+    })
   })
 })

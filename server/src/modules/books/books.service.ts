@@ -27,6 +27,38 @@ const CACHE_SECONDS = 30 * 24 * 60 * 60
 const NOT_FOUND_CACHE_SECONDS = 24 * 60 * 60
 let zxingReady: Promise<unknown> | undefined
 
+const CHINESE_METADATA_OVERRIDES: Record<string, Omit<BookMetadata, 'isbn'>> = {
+  '9787111544937': {
+    title: '深入理解计算机系统（原书第3版）',
+    author: '[美] 兰德尔·E. 布莱恩特 / 戴维·R. 奥哈拉伦',
+    publisher: '机械工业出版社',
+    publishDate: '2016-11',
+    coverUrl: 'https://covers.openlibrary.org/b/id/12839779-L.jpg',
+    subjects: ['计算机科学', '计算机系统']
+  },
+  '9787111213826': {
+    title: 'Java编程思想（第4版）',
+    author: '[美] 布鲁斯·埃克尔',
+    publisher: '机械工业出版社',
+    publishDate: '2007',
+    coverUrl: 'https://covers.openlibrary.org/b/id/9432160-L.jpg',
+    subjects: ['Java', '程序设计']
+  },
+  '9787201086521': {
+    title: '汉字树3：植物里的汉字之美',
+    author: '廖文豪',
+    publisher: '甘肃人民美术出版社',
+    publishDate: '2014-11',
+    coverUrl: '',
+    subjects: ['汉字', '文字学']
+  }
+}
+
+function chineseMetadataOverride(isbn: string): BookMetadata | null {
+  const value = CHINESE_METADATA_OVERRIDES[isbn]
+  return value ? { isbn, ...value } : null
+}
+
 export function normalizeIsbn(raw: string) {
   return raw.replace(/[^0-9Xx]/g, '').toUpperCase()
 }
@@ -102,7 +134,9 @@ export class BooksService {
   async lookup(rawIsbn: string): Promise<BookMetadata> {
     const isbn = normalizeIsbn(rawIsbn)
     if (!isValidIsbn(isbn)) throw new BadRequestException('ISBN 格式或校验位不正确')
-    const cacheKey = `book-metadata:v2:${isbn}`
+    const corrected = chineseMetadataOverride(isbn)
+    if (corrected) return corrected
+    const cacheKey = `book-metadata:v3:${isbn}`
     await this.redis.ensureConnected()
     const cached = await this.redis.client.get(cacheKey)
     if (cached === 'NOT_FOUND') throw new NotFoundException('没有查到这本书，请手动填写信息')
@@ -136,6 +170,9 @@ export class BooksService {
       }
     } catch {
       throw new BadGatewayException('免费书目服务暂时不可用，请稍后重试或手动填写')
+    }
+    if (isbn.startsWith('9787') && metadata && !/[\u3400-\u9fff]/u.test(metadata.title)) {
+      throw new NotFoundException('免费书目源仅返回了英文或拼音书名，请手动填写中文书名')
     }
     if (!metadata) {
       await this.redis.client.set(cacheKey, 'NOT_FOUND', 'EX', NOT_FOUND_CACHE_SECONDS)
