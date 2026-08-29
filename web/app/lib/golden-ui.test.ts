@@ -45,4 +45,12 @@ describe('authenticated Golden H5', () => {
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
   })
+
+  it('shows a retryable error instead of loading a failed chat forever', () => {
+    const chatPage = mobileApp.slice(mobileApp.indexOf('function ChatPage'), mobileApp.indexOf('function ProfilePage'))
+    expect(chatPage).toContain("setError(message); setThread(null); notify(message)")
+    expect(chatPage).toContain('if (thread === undefined)')
+    expect(chatPage).toContain('会话加载失败')
+    expect(chatPage).toContain("setThread(undefined); setError(''); setAttempt((value) => value + 1)")
+  })
 });

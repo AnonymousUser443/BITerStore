@@ -460,9 +460,29 @@ function NotificationDetailPage({ type, navigate }: { type: string; navigate: (t
 
 function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: (to: string) => void; notify: (text: string) => void }) {
   const currentUser = useContext(CurrentUserContext);
-  const [thread, setThread] = useState<ChatThread | null>(); const [text, setText] = useState('');
-  useEffect(() => { if (threadId.startsWith('new-')) { demoRepository.ensureThread(threadId.replace('new-', '')).then((id) => navigate(`/messages/${id}`)); } else demoRepository.getThread(threadId).then(setThread); }, [threadId, navigate]);
-  if (!thread) return <AppShell navigate={navigate} title="消息" back noNav><InlineLoading /></AppShell>;
+  const [thread, setThread] = useState<ChatThread | null>(); const [text, setText] = useState(''); const [error, setError] = useState(''); const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        if (threadId.startsWith('new-')) {
+          const id = await demoRepository.ensureThread(threadId.replace('new-', ''));
+          if (active) navigate(`/messages/${id}`);
+          return;
+        }
+        const loaded = await demoRepository.getThread(threadId);
+        if (!loaded) throw new Error('会话不存在或已不可访问');
+        if (active) setThread(loaded);
+      } catch (cause) {
+        if (!active) return;
+        const message = cause instanceof Error ? cause.message : '会话加载失败，请稍后重试';
+        setError(message); setThread(null); notify(message);
+      }
+    })();
+    return () => { active = false; };
+  }, [threadId, navigate, notify, attempt]);
+  if (thread === undefined) return <AppShell navigate={navigate} title="消息" back noNav><InlineLoading /></AppShell>;
+  if (thread === null) return <AppShell navigate={navigate} title="消息" back noNav><div className="inline-state large"><Image src="/assets/tobby-sad.webp" alt="会话加载失败" width={760} height={760} /><h3>会话加载失败</h3><p>{error}</p><button className="primary-button" onClick={() => { setThread(undefined); setError(''); setAttempt((value) => value + 1); }}>重新加载</button></div></AppShell>;
   const user = thread.participant || getUser(thread.participantId); const book = seedBooks.find((item) => item.id === thread.bookId) ?? seedBooks[0];
   const send = async () => { if (!text.trim()) return; const message = await demoRepository.sendMessage(thread.id, text.trim()); setThread({ ...thread, messages: [...thread.messages, message] }); setText(''); };
   return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
