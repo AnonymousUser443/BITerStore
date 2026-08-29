@@ -13,8 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
-    "r2:migrate-completed": "tsx src/maintenance/migrate-completed-uploads.ts",
-    "r2:configure-lifecycle": "tsx src/maintenance/configure-r2-lifecycle.ts",
+    "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
+    "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
     "admin:promote": "tsx scripts/promote-admin.ts"
   },
   "dependencies": {

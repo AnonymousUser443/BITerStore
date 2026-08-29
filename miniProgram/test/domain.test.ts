@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import Taro from '@tarojs/taro'
+import { apiRequest } from '@/domain/api'
 import { defaultFilters, filterListings } from '@/domain/filters'
 import { seedListings } from '@/domain/seed'
 import { listingAssistant } from '@/domain/assistant'
@@ -13,10 +15,12 @@ vi.mock('@tarojs/taro', () => ({ default: {
   getStorage: vi.fn(async ({ key }) => { if (!memory.has(key)) throw new Error('not found'); return { data: memory.get(key) } }),
   setStorage: vi.fn(async ({ key, data }) => { memory.set(key, data) }), removeStorage: vi.fn(async ({ key }) => { memory.delete(key) }),
   getStorageInfo: vi.fn(async () => ({ keys: [...memory.keys()] })), showToast: vi.fn(), showModal: vi.fn(async () => ({ confirm: true })),
+  request: vi.fn(async () => ({ statusCode: 200, data: { ok: true } })),
   navigateTo: vi.fn(), switchTab: vi.fn(), navigateBack: vi.fn(), getCurrentInstance: vi.fn(() => ({ router: { path: '' } })), setClipboardData: vi.fn()
 } }))
 describe('domain', () => {
-  beforeEach(() => memory.clear())
+  beforeEach(() => { memory.clear(); vi.stubGlobal('__API_URL__', 'http://api.test'); vi.mocked(Taro.request).mockClear() })
+  it('无请求体的写请求会发送空 JSON 对象', async () => { await apiRequest('/empty', { method: 'POST' }); expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', data: {} })) })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
   it('收藏能够持久化并取消', async () => { expect(await demoRepository.toggleFavorite('math-7')).toBe(true); expect((await demoRepository.listFavorites()).map((x) => x.id)).toEqual(['math-7']); expect(await demoRepository.toggleFavorite('math-7')).toBe(false) })
   it('列表读取后可同步交给详情页首帧', async () => { await demoRepository.listListings(); expect(demoRepository.peekListing('math-7')?.title).toContain('高等数学') })
