@@ -53,4 +53,10 @@ describe('authenticated Golden H5', () => {
     expect(chatPage).toContain('会话加载失败')
     expect(chatPage).toContain("setThread(undefined); setError(''); setAttempt((value) => value + 1)")
   })
+
+  it('removes a deleted listing immediately and surfaces delete failures', () => {
+    const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
+    expect(myListingsPage).toContain('setBooks((current) => current.filter((item) => item.id !== book.id))')
+    expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
+  })
 });

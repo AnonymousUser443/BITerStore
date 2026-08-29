@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { destroyBitLoginChallenge, getBitLoginRegistrationToken, startBitLogin, type BitLoginChallenge } from './bit-login';
-import { loginWithCampusCookie, restoreH5Session, updateH5Profile } from './h5-auth';
+import { h5ApiRequest, loginWithCampusCookie, restoreH5Session, updateH5Profile } from './h5-auth';
 
 const challenge: BitLoginChallenge = {
   challenge_id: 'challenge-1', access_token: 'challenge-secret', status: 'authenticated',
@@ -78,5 +78,14 @@ describe('Golden H5 authentication', () => {
     expect(fetch).toHaveBeenCalledWith('/api/v1/me', expect.objectContaining({
       method: 'PATCH', credentials: 'include', body: JSON.stringify(input)
     }));
+  });
+
+  it('does not declare JSON content for a bodyless DELETE request', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ deleted: true }));
+
+    await h5ApiRequest('/listings/listing-1', { method: 'DELETE' });
+
+    const init = vi.mocked(fetch).mock.calls[0][1];
+    expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
   });
 });

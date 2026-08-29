@@ -559,7 +559,14 @@ function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; 
   const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
   const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
-  const remove = async (book: Book) => { if (!window.confirm(`确定删除《${book.title}》吗？删除后不会再公开展示。`)) return; await demoRepository.deleteListing(book.id); notify('已删除这本书'); await load(); };
+  const remove = async (book: Book) => {
+    if (!window.confirm(`确定删除《${book.title}》吗？删除后不会再公开展示。`)) return;
+    try {
+      await demoRepository.deleteListing(book.id);
+      setBooks((current) => current.filter((item) => item.id !== book.id));
+      notify('已删除这本书'); load();
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '删除失败，请稍后重试'); }
+  };
   return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
 }
 
