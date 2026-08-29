@@ -14,6 +14,52 @@ function filesBelow(directory: string, extension: string): string[] {
 }
 
 describe('Golden Reference style alignment', () => {
+  it('H5 直接复用 Golden Reference 组件和原始样式', () => {
+    const pages = filesBelow(path.join(source, 'pages'), '.tsx')
+    const config = read('config/index.ts')
+    const h5Pages = pages.filter((file) => file.endsWith('.h5.tsx'))
+    expect(h5Pages).toHaveLength(14)
+    expect(h5Pages.every((file) => fs.readFileSync(file, 'utf8').includes("from '@/h5/GoldenRoute'"))).toBe(true)
+    expect(read('src/h5/GoldenRoute.tsx')).toContain("from '../../../web/app/components/mobile-app'")
+    expect(config).toContain("path.resolve(__dirname, '../../web/app')")
+    expect(config).toContain(".set('lucide-react$'")
+    expect(config).toContain(".set('next/image'")
+    expect(read('src/app.ts')).toContain("import '../../web/app/globals.css'")
+    expect(read('src/app.ts')).not.toContain("import './app.css'")
+    expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
+  })
+
+  it('H5 内容高度跟随应用外壳并覆盖短横屏布局', () => {
+    const goldenCss = read('../web/app/globals.css')
+    expect(goldenCss).toContain('.content-scroll { position: relative; height: calc(100% - 76px);')
+    expect(goldenCss).toContain('.chat-page .content-scroll { height: calc(100% - 68px);')
+    expect(goldenCss).toContain('@media (min-width: 700px) and (max-width: 1023px) and (max-height: 599px)')
+    expect(goldenCss).toContain('@media (min-width: 1024px) and (max-height: 699px)')
+  })
+
+  it('个人页宽屏网格由较高菜单撑开，不裁切额外操作', () => {
+    const h5Css = read('../web/app/globals.css')
+    const weappCss = read('src/golden.css')
+    for (const css of [h5Css, weappCss]) {
+      expect(css).toContain('.profile-menu { position: relative; }')
+      expect(css).not.toContain('.profile-hero, .profile-menu, .upload-card { position: relative; overflow: hidden; }')
+      expect(css).not.toContain('.profile-menu { height: 100%; }')
+    }
+  })
+
+  it('主页面顶栏统一使用通知与头像，返回页保留更多操作', () => {
+    const app = read('../web/app/components/mobile-app.tsx')
+    expect(app).toContain('className="icon-button avatar-action"')
+    expect(app).toContain('aria-label="我的"')
+    expect(app).not.toContain('leaf-action')
+  })
+
+  it('宽屏页面不显示额外的浏览器或内容滚动条', () => {
+    const h5Css = read('../web/app/globals.css')
+    expect(h5Css).toContain('html, body { width: 100%; height: 100%; margin: 0; overflow: hidden;')
+    expect(h5Css).not.toContain('scrollbar-width: thin; scrollbar-color: rgba(115,126,88,.5) transparent;')
+  })
+
   it('微信入口复用 Golden 样式并只追加原生节点适配', () => {
     const entry = read('src/app.weapp.ts')
     expect(entry).toContain("import './golden.css'")
@@ -62,15 +108,6 @@ describe('Golden Reference style alignment', () => {
     expect(ui).toContain("process.env.TARO_ENV === 'weapp'")
   })
 
-  it('保留桌面个人中心完整入口与 H5 顶栏交互样式', () => {
-    const golden = read('src/golden.css')
-    const h5 = read('src/h5.css')
-    expect(golden).toContain('.profile-menu { align-self: start; height: auto; }')
-    expect(golden).toContain('.profile-stats button, .profile-stats > div')
-    expect(golden).toContain('.topbar-menu')
-    expect(h5).toContain('.topbar-menu button:hover')
-  })
-
   it('H5 在窄屏、折叠屏、平板、横屏和超宽窗口连续重排', () => {
     const h5 = read('src/h5.css')
     const visual = read('scripts/h5-visual.mjs')
@@ -101,5 +138,13 @@ describe('Golden Reference style alignment', () => {
     expect(platform).toContain('Taro.hideLoading()')
     expect(ui).toContain("onClick={href ? () => { void navigationAdapter.go(href) } : onTap}")
     expect(ui.match(/beginNavigationFeedback\(href\)/g)).toHaveLength(3)
+  })
+
+  it('gives native detail actions explicit owner and request-error feedback', () => {
+    const detail = read('src/pages/listing/detail.tsx')
+    expect(detail).toContain("feedbackAdapter.toast('不能收藏自己的商品')")
+    expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
+    expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
+    expect(detail).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
   })
 })

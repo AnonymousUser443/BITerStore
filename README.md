@@ -179,9 +179,11 @@ BITerStore/
 
 ## 🧪 当前边界
 
-`miniProgram/` 现已支持 Demo 与真实 API 两种 Repository：未配置 `BITERSTORE_API_URL` 时保留确定性的离线演示；配置后连接 `server/`。正式账号以学号和 BIT-Login 一次性注册凭证登录，微信仅作为登录后的可选绑定与快捷登录方式；游客无需登录即可浏览和搜索，但不能收藏、发布、私聊或进入个人数据页面。后端提供 PostgreSQL 持久化、Redis 会话辅助、R2 图片上传、文本会话、举报治理、审计和管理接口。
+`miniProgram/` 现已支持 Demo 与真实 API 两种 Repository：未配置 `BITERSTORE_API_URL` 时保留确定性的离线演示；配置后连接 `server/`。正式账号以学号和 BIT-Login 一次性注册凭证登录，微信仅作为登录后的可选绑定与快捷登录方式；游客无需登录即可浏览和搜索，但不能收藏、发布、私聊或进入个人数据页面。后端提供 PostgreSQL 持久化、Redis 会话辅助、本机/R2 可切换图片上传、ISBN 免费书目识别、文本会话、举报治理、审计和管理接口。
 
 本地部署及环境变量见 [`deploy/README.md`](./deploy/README.md)。真实微信、BIT-Login、R2 和 Cloudflare Tunnel 联调需要部署者自己的应用资质、域名与密钥。平台仍不提供在线支付、物流、评价、复杂推荐或音视频聊天。
+
+项目接手、生产发布、运维、回滚、密钥交接和已知风险见 [`docs/项目交接文档.md`](./docs/项目交接文档.md)。
 
 ## 📄 开源许可
 

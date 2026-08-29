@@ -6,7 +6,7 @@ export class UsersController {
   constructor(private readonly prisma: PrismaService) {}
 
   private async profile(userId: string) {
-    const record = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, nickname: true, avatarUrl: true, campus: true, bio: true, role: true, status: true, campusStatus: true, createdAt: true, _count: { select: { wechatAccounts: true } } } })
+    const record = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { id: true, studentNumber: true, nickname: true, avatarUrl: true, campus: true, bio: true, role: true, status: true, campusStatus: true, createdAt: true, _count: { select: { wechatAccounts: true } } } })
     const { _count, ...profile } = record
     return { ...profile, wechatBound: _count.wechatAccounts > 0 }
   }

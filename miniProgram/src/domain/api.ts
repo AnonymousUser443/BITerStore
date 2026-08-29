@@ -13,8 +13,10 @@ export function apiQuery(query: Record<string, unknown>) {
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}, retry = true): Promise<T> {
   const session = await storageAdapter.get<ApiSession | null>(SESSION_KEY, null)
+  const method = options.method || 'GET'
+  const data = options.data === undefined && method !== 'GET' ? {} : options.data
   const response = await Taro.request<T | { message?: string }>({
-    url: `${__API_URL__}${path}`, method: options.method || 'GET', data: options.data,
+    url: `${__API_URL__}${path}`, method, data,
     header: { 'Content-Type': 'application/json', ...(session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : {}) }
   })
   if (response.statusCode === 401 && retry && session?.refreshToken) {

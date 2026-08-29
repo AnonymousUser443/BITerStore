@@ -6,6 +6,7 @@ import { PrismaService } from '../../infra/prisma.service.js'
 type CampusClaims = {
   provider: string
   subjectHash: string
+  studentNumber: string
   defaultNickname: string
   jti: string
   expiresAt: Date | null
@@ -48,10 +49,13 @@ export class IdentityService {
     }
     if (!payload.sub || !payload.jti || payload.purpose !== 'registration') throw new BadRequestException('校园认证凭证声明不完整')
     const subject = String(payload.sub).trim()
+    const studentNumber = subject.replace(/^dev-/, '')
+    if (!/^\d{8,12}$/.test(studentNumber)) throw new BadRequestException('校园认证凭证未包含有效学号')
     return {
       provider: process.env.BIT_LOGIN_ISSUER || 'bit-login',
       subjectHash: createHash('sha256').update(subject).digest('hex'),
-      defaultNickname: `BITer${subject}`.slice(0, 24),
+      studentNumber,
+      defaultNickname: `BITer${studentNumber}`.slice(0, 24),
       jti: String(payload.jti),
       expiresAt: payload.identity_expires_at ? new Date(Number(payload.identity_expires_at) * 1000) : null
     }
@@ -69,10 +73,11 @@ export class IdentityService {
             where: { id: currentUser.id },
             data: {
               campusStatus: 'VERIFIED',
+              studentNumber: claims.studentNumber,
               ...(legacyDefaultNicknames.has(currentUser.nickname) ? { nickname: claims.defaultNickname } : {})
             }
           })
-        : await tx.user.create({ data: { nickname: claims.defaultNickname, campusStatus: 'VERIFIED' } })
+        : await tx.user.create({ data: { studentNumber: claims.studentNumber, nickname: claims.defaultNickname, campusStatus: 'VERIFIED' } })
 
       await tx.usedAuthToken.create({ data: { jti: claims.jti, userId: user.id } })
       await tx.campusIdentity.upsert({
@@ -91,7 +96,7 @@ export class IdentityService {
       const existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
       if (existing && existing.userId !== userId) throw new BadRequestException('该校园身份已绑定其他账号')
       await tx.campusIdentity.upsert({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } }, create: { userId, provider: claims.provider, externalSubjectHash: claims.subjectHash, verifiedAt: new Date(), expiresAt: claims.expiresAt }, update: { verifiedAt: new Date(), expiresAt: claims.expiresAt, revokedAt: null } })
-      await tx.user.update({ where: { id: userId }, data: { campusStatus: 'VERIFIED' } })
+      await tx.user.update({ where: { id: userId }, data: { campusStatus: 'VERIFIED', studentNumber: claims.studentNumber } })
     })
     return { status: 'VERIFIED', verifiedAt: new Date().toISOString() }
   }

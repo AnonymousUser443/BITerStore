@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "biterstore-book-metadata",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-28",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "book-meta.young581.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "UPSTREAM_USER_AGENT": "BITerStore/1.0 (https://store.young581.com)"
+  }
+}

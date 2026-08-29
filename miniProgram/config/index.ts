@@ -32,6 +32,11 @@ export default defineConfig<'webpack5'>(async (merge) => {
     },
     h5: {
       publicPath: '/', staticDirectory: 'static',
+      cssLoaderOption: {
+        // Golden Reference uses public-root asset URLs. Keep those URLs intact
+        // so the copied /assets bundle remains the single source of truth.
+        url: { filter: (url: string) => !url.startsWith('/') }
+      },
       router: {
         mode: 'browser',
         customRoutes: {

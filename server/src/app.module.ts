@@ -12,9 +12,10 @@ import { UploadsModule } from './modules/uploads/uploads.module.js'
 import { AdminModule } from './modules/admin/admin.module.js'
 import { HealthController } from './health.controller.js'
 import { InfraModule } from './infra/infra.module.js'
+import { BooksModule } from './modules/books/books.module.js'
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), InfraModule, AuthModule, IdentityModule, UsersModule, ListingsModule, ConversationsModule, ModerationModule, UploadsModule, AdminModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), InfraModule, AuthModule, IdentityModule, UsersModule, ListingsModule, ConversationsModule, ModerationModule, UploadsModule, AdminModule, BooksModule],
   controllers: [HealthController],
   providers: []
 })

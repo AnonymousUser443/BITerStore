@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate",
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
@@ -14,13 +13,14 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
+    "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
+    "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
     "admin:promote": "tsx scripts/promote-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.883.0",
     "@aws-sdk/s3-request-presigner": "^3.883.0",
     "@fastify/cookie": "^11.0.2",
-    "@fastify/static": "^10.1.3",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
@@ -30,7 +30,8 @@
     "ioredis": "^5.7.0",
     "jose": "^6.1.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zxing-wasm": "^3.1.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

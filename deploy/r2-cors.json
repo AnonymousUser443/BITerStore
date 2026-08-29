@@ -1,0 +1,11 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://store.young581.com"],
+      "AllowedMethods": ["PUT"],
+      "AllowedHeaders": ["content-type"],
+      "ExposeHeaders": ["etag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

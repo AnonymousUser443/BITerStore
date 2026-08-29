@@ -9,6 +9,7 @@ export interface H5SessionUser {
 }
 
 export interface H5Profile extends H5SessionUser {
+  studentNumber: string | null;
   nickname: string;
   avatarUrl: string | null;
   campus: string | null;
@@ -30,10 +31,12 @@ function messageOf(body: unknown, fallback: string) {
 }
 
 async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<{ response: Response; body: T | Record<string, unknown> }> {
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init.headers },
+    headers,
   });
   const body = await response.json().catch(() => ({})) as T | Record<string, unknown>;
   return { response, body };

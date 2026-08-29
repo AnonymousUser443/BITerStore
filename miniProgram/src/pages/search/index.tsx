@@ -32,7 +32,7 @@ export default function SearchPage() {
   useEffect(() => { if (filtersReady) void demoRepository.saveFilters(filters) }, [filters, filtersReady])
   const load = useCallback(() => demoRepository.listListings(filters).then(setItems), [filters])
   useEffect(() => { if (filtersReady) void load() }, [filtersReady, load])
-  useEffect(() => { void isAuthenticated().then((loggedIn) => loggedIn && demoRepository.listFavorites().then((saved) => setFavorites(saved.map((item) => item.id)))) }, [])
+  useEffect(() => { void isAuthenticated().then((loggedIn) => { if (loggedIn) return demoRepository.listFavorites().then((saved) => setFavorites(saved.map((item) => item.id))) }) }, [])
   const toggleFavorite = async (id: string) => { if (!await requireAccount('登录后才能收藏商品')) return; const active = await demoRepository.toggleFavorite(id); setFavorites((current) => active ? [...new Set([...current, id])] : current.filter((value) => value !== id)) }
   const contact = async (item: Listing) => { if (!await requireAccount('请先使用学号登录后联系卖家')) return; const thread = await demoRepository.ensureThread(item.id); await navigationAdapter.go(`/pages/chat/index?id=${thread}`) }
 

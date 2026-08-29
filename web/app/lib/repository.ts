@@ -9,6 +9,9 @@ const KEYS = {
   authenticatedSid: 'biterstore:v1:authenticated-sid',
 };
 
+const LIST_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:list:';
+const MY_LISTING_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:mine:';
+const knownBooks = new Map<string, Book>();
 const wait = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function read<T>(key: string, fallback: T): T {
@@ -41,6 +44,38 @@ export function filterBooks(books: Book[], filters: BookFilters): Book[] {
   return result;
 }
 
+function listSnapshotKey(filters: BookFilters) { return `${LIST_SNAPSHOT_PREFIX}${encodeURIComponent(JSON.stringify(filters))}`; }
+function myListingSnapshotKey() { return `${MY_LISTING_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
+function remember(items: Book[]) { items.forEach((item) => knownBooks.set(item.id, item)); return items; }
+function updateSnapshots(update: (items: Book[]) => Book[]) {
+  if (typeof window === 'undefined') return;
+  Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((key): key is string => typeof key === 'string' && (key.startsWith(LIST_SNAPSHOT_PREFIX) || key.startsWith(MY_LISTING_SNAPSHOT_PREFIX))).forEach((key) => {
+    let next = update(read<Book[]>(key, []));
+    if (key.startsWith(LIST_SNAPSHOT_PREFIX)) {
+      try { next = filterBooks(next, JSON.parse(decodeURIComponent(key.slice(LIST_SNAPSHOT_PREFIX.length))) as BookFilters); } catch { /* replace malformed snapshots on the next network refresh */ }
+    }
+    write(key, remember(next));
+  });
+}
+export function peekBooks(filters: BookFilters = defaultFilters): Book[] | undefined {
+  const cached = read<Book[] | undefined>(listSnapshotKey(filters), undefined);
+  return cached ? remember(cached) : undefined;
+}
+export function peekMyListings(): Book[] | undefined {
+  const cached = read<Book[] | undefined>(myListingSnapshotKey(), undefined);
+  return cached ? remember(cached) : undefined;
+}
+export function peekBook(id: string): Book | undefined {
+  const known = knownBooks.get(id);
+  if (known || typeof window === 'undefined') return known;
+  for (const key of Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((value): value is string => Boolean(value))) {
+    if (!key.startsWith(LIST_SNAPSHOT_PREFIX) && !key.startsWith(MY_LISTING_SNAPSHOT_PREFIX)) continue;
+    const found = read<Book[]>(key, []).find((item) => item.id === id);
+    if (found) { knownBooks.set(id, found); return found; }
+  }
+  return undefined;
+}
+
 export interface DemoRepository {
   listBooks(filters?: BookFilters): Promise<Book[]>;
   getBook(id: string): Promise<Book | null>;
@@ -48,8 +83,9 @@ export interface DemoRepository {
   listFavorites(): Promise<Book[]>;
   saveDraft(draft: PublishDraft): Promise<void>;
   getDraft(): Promise<PublishDraft | null>;
-  publishListing(draft: PublishDraft): Promise<Book>;
+  publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Book>;
   updateListingStatus(id: string, status: ListingStatus): Promise<void>;
+  deleteListing(id: string): Promise<void>;
   listMyListings(): Promise<Book[]>;
   listThreads(): Promise<ChatThread[]>;
   listNotifications(): Promise<Notification[]>;
@@ -72,11 +108,13 @@ const localRepository: DemoRepository = {
   async listFavorites() { const ids = read<string[]>(KEYS.favorites, []); await wait(); return read(KEYS.books, seedBooks).filter((book) => ids.includes(book.id)); },
   async saveDraft(draft) { write(KEYS.draft, draft); await wait(100); },
   async getDraft() { await wait(80); return read<PublishDraft | null>(KEYS.draft, null); },
-  async publishListing(draft) {
+  async publishListing(draft, onProgress) {
+    onProgress?.(20);
     const book: Book = { id: `listing-${Date.now()}`, title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, price: Number(draft.price), originalPrice: Number(draft.originalPrice || draft.price), condition: draft.condition, campus: draft.campus, description: draft.description, status: 'available', sellerId: CURRENT_USER_ID, createdAt: new Date().toISOString(), tags: draft.tags, tone: 'sage', imageStoreKey: draft.imageStoreKey };
-    write(KEYS.books, [book, ...read(KEYS.books, seedBooks)]); localStorage.removeItem(KEYS.draft); await wait(480); return book;
+    write(KEYS.books, [book, ...read(KEYS.books, seedBooks)]); localStorage.removeItem(KEYS.draft); await wait(480); onProgress?.(100); return book;
   },
   async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); },
+  async deleteListing(id) { write(KEYS.books, read(KEYS.books, seedBooks).filter((book) => book.id !== id)); await wait(120); },
   async listMyListings() { await wait(); return read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); },
   async listThreads() { await wait(); return read(KEYS.threads, seedThreads); },
   async listNotifications() { await wait(100); return notifications; },
@@ -102,15 +140,22 @@ function activeRepository() {
 }
 
 export const demoRepository: DemoRepository = {
-  listBooks: (filters) => activeRepository().listBooks(filters),
+  async listBooks(filters = defaultFilters) { const items = remember(await activeRepository().listBooks(filters)); write(listSnapshotKey(filters), items); return items; },
   getBook: (id) => activeRepository().getBook(id),
   toggleFavorite: (id) => activeRepository().toggleFavorite(id),
   listFavorites: () => activeRepository().listFavorites(),
   saveDraft: (draft) => activeRepository().saveDraft(draft),
   getDraft: () => activeRepository().getDraft(),
-  publishListing: (draft) => activeRepository().publishListing(draft),
-  updateListingStatus: (id, status) => activeRepository().updateListingStatus(id, status),
-  listMyListings: () => activeRepository().listMyListings(),
+  async publishListing(draft, onProgress) {
+    const created = await activeRepository().publishListing(draft, onProgress);
+    knownBooks.set(created.id, created);
+    write(myListingSnapshotKey(), [created, ...(peekMyListings() || []).filter((item) => item.id !== created.id)]);
+    updateSnapshots((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+    return created;
+  },
+  async updateListingStatus(id, status) { await activeRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },
+  async deleteListing(id) { await activeRepository().deleteListing(id); knownBooks.delete(id); updateSnapshots((items) => items.filter((item) => item.id !== id)); },
+  async listMyListings() { const items = remember(await activeRepository().listMyListings()); write(myListingSnapshotKey(), items); return items; },
   listThreads: () => activeRepository().listThreads(),
   listNotifications: () => activeRepository().listNotifications(),
   getThread: (id) => activeRepository().getThread(id),

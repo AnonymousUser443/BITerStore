@@ -48,7 +48,7 @@ describe('BIT-Login registration JWT', () => {
   it('accepts a valid one-time registration JWT', async () => {
     await expect(service.loginOrCreate(await token())).resolves.toMatchObject({ id: 'student-1', campusStatus: 'VERIFIED' })
     expect(prisma.$transaction).toHaveBeenCalledOnce()
-    expect(tx.user.create).toHaveBeenCalledWith({ data: { nickname: 'BITer1120230000', campusStatus: 'VERIFIED' } })
+    expect(tx.user.create).toHaveBeenCalledWith({ data: { studentNumber: '1120230000', nickname: 'BITer1120230000', campusStatus: 'VERIFIED' } })
   })
 
   it('upgrades only a legacy default nickname on the next campus login', async () => {
@@ -59,7 +59,7 @@ describe('BIT-Login registration JWT', () => {
     await service.loginOrCreate(await token())
 
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { campusStatus: 'VERIFIED', nickname: 'BITer1120230000' }
+      data: { campusStatus: 'VERIFIED', studentNumber: '1120230000', nickname: 'BITer1120230000' }
     }))
   })
 

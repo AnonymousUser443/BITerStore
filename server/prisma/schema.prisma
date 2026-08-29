@@ -44,6 +44,11 @@ enum ModerationStatus {
   APPROVED
   REJECTED
 }
+enum ListingImageRole {
+  COVER
+  ISBN
+  GALLERY
+}
 enum ReportStatus {
   OPEN
   PROCESSING
@@ -53,6 +58,7 @@ enum ReportStatus {
 
 model User {
   id String @id @default(uuid())
+  studentNumber String? @unique
   nickname String @default("新书友")
   avatarUrl String?
   campus String?
@@ -128,6 +134,7 @@ model Session {
 model Listing {
   id String @id @default(uuid())
   sellerId String
+  clientRequestId String?
   title String
   author String
   isbn String @default("")
@@ -138,7 +145,7 @@ model Listing {
   originalPriceCents Int?
   campus String
   description String
-  status ListingStatus @default(PENDING_REVIEW)
+  status ListingStatus @default(ACTIVE)
   tags String[]
   version Int @default(1)
   viewCount Int @default(0)
@@ -151,6 +158,7 @@ model Listing {
   conversations Conversation[]
   @@index([status, createdAt(sort: Desc)])
   @@index([sellerId, status])
+  @@unique([sellerId, clientRequestId])
 }
 
 model ListingImage {
@@ -160,6 +168,7 @@ model ListingImage {
   objectKey String @unique
   mime String
   size Int
+  role ListingImageRole @default(GALLERY)
   width Int?
   height Int?
   sortOrder Int @default(0)
