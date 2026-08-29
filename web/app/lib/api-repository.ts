@@ -89,11 +89,20 @@ function currentUserId() {
   try { return JSON.parse(localStorage.getItem('biterstore:v1:authenticated-sid') || '""') as string; } catch { return ''; }
 }
 
+function compactThreadTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}月${date.getDate()}日`;
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 function thread(value: ApiConversation): ChatThread {
   const other = (value.members || []).find((member) => member.userId !== currentUserId()) || (value.members || [])[0];
   return {
     id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? user(other.user) : undefined,
-    bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: value.lastMessageAt,
+    bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: compactThreadTime(value.lastMessageAt),
     messages: (value.messages || []).map(message),
   };
 }

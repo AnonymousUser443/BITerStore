@@ -144,6 +144,7 @@
 .brand-button { padding: 0; border: 0; background: transparent; }
 .round-button { width: 43px; height: 43px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(213,199,167,.65); border-radius: 50%; background: rgba(255,253,248,.8); }
 .top-actions .icon-button { display: grid; place-items: center; padding: 0; }
+.avatar-action .avatar { pointer-events: none; }
 .notification-dot { position: absolute; top: 7px; right: 5px; width: 8px; height: 8px; border: 2px solid var(--paper); border-radius: 50%; background: #df6752; }
 .page-topbar { display: grid; grid-template-columns: 1fr auto 1fr; }
 .page-topbar .brand > span:last-child { display: none; }
@@ -414,10 +415,11 @@
 .thread-list { display: grid; gap: 7px; }
 .thread-list > button { min-height: 78px; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; position: relative; padding: 10px; border: 1px solid rgba(213,199,167,.55); border-radius: 17px; background: rgba(255,253,248,.82); text-align: left; }
 .thread-list div { min-width: 0; }
-.thread-list h3 { margin: 0; font-size: 13px; }
-.thread-list h3 span { margin-left: 6px; padding: 3px 6px; border: 1px solid #dfd4bd; border-radius: 7px; color: #8b7d64; font-size: 8px; font-weight: 400; }
+.thread-list h3 { min-width: 0; display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; }
+.thread-list h3 strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-list h3 span { flex: 0 0 auto; padding: 3px 6px; border: 1px solid #dfd4bd; border-radius: 7px; color: #8b7d64; font-size: 8px; font-weight: 400; white-space: nowrap; }
 .thread-list p { margin: 6px 0 0; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.thread-list time { align-self: start; padding-top: 4px; color: #99958c; font-size: 8px; }
+.thread-list time { align-self: start; padding-top: 4px; color: #99958c; font-size: 8px; white-space: nowrap; }
 .thread-list b { position: absolute; right: 10px; bottom: 10px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #e5924b; color: white; font-size: 8px; }
 .tobby-banner { min-height: 73px; display: flex; align-items: center; margin-top: 15px; padding: 8px 12px 8px 85px; position: relative; border: 1px solid var(--border); border-radius: 17px; background: rgba(255,253,248,.86); }
 .tobby-banner img { position: absolute; width: 96px; height: 96px; object-fit: contain; left: -4px; bottom: -3px; }
@@ -541,7 +543,8 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .welcome-steps::before, .welcome-steps::after { position: absolute; color: rgba(111,121,86,.42); font-size: 15px; }
 .welcome-steps::before { content: '❧'; left: 10px; top: 8px; }
 .welcome-steps::after { content: '❧'; right: 10px; bottom: 8px; transform: rotate(180deg); }
-.profile-hero, .upload-card { position: relative; overflow: hidden; }
+.profile-hero { position: relative; }
+.upload-card { position: relative; overflow: hidden; }
 .profile-menu { position: relative; }
 .profile-hero::after, .profile-menu::after, .upload-card::before { content: '❧'; position: absolute; color: rgba(111,121,86,.28); font-size: 20px; pointer-events: none; }
 .profile-hero::after { right: 12px; bottom: 6px; transform: rotate(-16deg); }

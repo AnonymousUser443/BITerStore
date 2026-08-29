@@ -80,4 +80,20 @@ describe('demoRepository persistence', () => {
     expect(peekBooks()?.[0]).toMatchObject({ id: 'real-listing', title: '真实教材' });
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/listings?');
   });
+
+  it('formats API conversation timestamps for compact message cards', async () => {
+    demoRepository.markAuthenticated('user-real');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-30T00:00:00Z'));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{
+      id: 'thread-real', listingId: 'real-listing', sellerId: 'seller-real', lastMessageAt: '2026-08-29T12:24:07.770Z',
+      unread: 0, members: [{ userId: 'user-real', user: { id: 'user-real', nickname: '自己', campus: null } }, { userId: 'seller-real', user: { id: 'seller-real', nickname: '卖家', campus: null } }],
+    }]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const threads = await demoRepository.listThreads();
+
+    expect(threads[0]).toMatchObject({ id: 'thread-real', updatedAt: '8月29日' });
+    vi.useRealTimers();
+  });
 });

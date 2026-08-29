@@ -47,6 +47,19 @@ describe('Golden Reference style alignment', () => {
     }
   })
 
+  it('主页面顶栏统一使用通知与头像，返回页保留更多操作', () => {
+    const app = read('../web/app/components/mobile-app.tsx')
+    expect(app).toContain('className="icon-button avatar-action"')
+    expect(app).toContain('aria-label="我的"')
+    expect(app).not.toContain('leaf-action')
+  })
+
+  it('宽屏页面不显示额外的浏览器或内容滚动条', () => {
+    const h5Css = read('../web/app/globals.css')
+    expect(h5Css).toContain('html, body { width: 100%; height: 100%; margin: 0; overflow: hidden;')
+    expect(h5Css).not.toContain('scrollbar-width: thin; scrollbar-color: rgba(115,126,88,.5) transparent;')
+  })
+
   it('微信入口复用 Golden 样式并只追加原生节点适配', () => {
     const entry = read('src/app.weapp.ts')
     expect(entry).toContain("import './golden.css'")
