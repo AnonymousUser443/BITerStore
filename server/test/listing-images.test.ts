@@ -36,6 +36,7 @@ describe('listing required images', () => {
     }
     const service = new ListingsService(prisma as never)
     await expect(service.create('owner-id', body)).resolves.toEqual({ id: 'listing-id' })
+    expect(prisma.listing.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'ACTIVE' }) }))
     expect(prisma.listingImage.findMany).toHaveBeenCalledWith({ where: { id: { in: body.imageIds }, ownerId: 'owner-id', uploadedAt: { not: null }, listingId: null } })
   })
 

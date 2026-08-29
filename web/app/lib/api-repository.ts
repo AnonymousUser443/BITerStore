@@ -187,7 +187,7 @@ export const apiRepository: DemoRepository = {
   },
   async updateListingStatus(id, status) {
     const current = await h5ApiRequest<ApiListing>(`/listings/${id}`);
-    const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : current.status === 'OFF_SHELF' ? 'PENDING_REVIEW' : 'ACTIVE';
+    const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : 'ACTIVE';
     await h5ApiRequest(`/listings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: current.version }) });
   },
   async listMyListings() {

@@ -145,7 +145,7 @@ model Listing {
   originalPriceCents Int?
   campus String
   description String
-  status ListingStatus @default(PENDING_REVIEW)
+  status ListingStatus @default(ACTIVE)
   tags String[]
   version Int @default(1)
   viewCount Int @default(0)

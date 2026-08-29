@@ -3,7 +3,7 @@ import { ListingStatus, Prisma } from '@prisma/client'
 import { PrismaService } from '../../infra/prisma.service.js'
 
 export const allowedTransitions: Record<ListingStatus, ListingStatus[]> = {
-  DRAFT: ['PENDING_REVIEW'], PENDING_REVIEW: ['ACTIVE', 'OFF_SHELF', 'BLOCKED'], ACTIVE: ['RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'], RESERVED: ['ACTIVE', 'SOLD', 'OFF_SHELF', 'BLOCKED'], SOLD: [], OFF_SHELF: ['PENDING_REVIEW'], BLOCKED: []
+  DRAFT: ['ACTIVE'], PENDING_REVIEW: ['ACTIVE', 'OFF_SHELF', 'BLOCKED'], ACTIVE: ['RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'], RESERVED: ['ACTIVE', 'SOLD', 'OFF_SHELF', 'BLOCKED'], SOLD: [], OFF_SHELF: ['ACTIVE'], BLOCKED: []
 }
 @Injectable()
 export class ListingsService {
@@ -30,7 +30,7 @@ export class ListingsService {
     if (images.length !== imageIds.length) throw new BadRequestException('图片不存在、尚未上传完成或不属于当前用户')
     if (!body.draft && (!images.some((image) => image.role === 'COVER') || !images.some((image) => image.role === 'ISBN'))) throw new BadRequestException('发布前必须上传封面和 ISBN 页')
     try {
-      return await this.prisma.listing.create({ data: { sellerId: userId, clientRequestId, title: body.title.trim().slice(0, 100), author: String(body.author || '').trim().slice(0, 80), isbn: String(body.isbn || '').replace(/[^0-9Xx]/g, '').slice(0, 13), category: String(body.category || '其他').slice(0, 30), course: String(body.course || '').slice(0, 60), condition: String(body.condition || '八成新').slice(0, 20), priceCents: body.priceCents, originalPriceCents: body.originalPriceCents || null, campus: String(body.campus || '').slice(0, 20), description: String(body.description || '').slice(0, 1000), tags: Array.isArray(body.tags) ? body.tags.slice(0, 8).map((x: unknown) => String(x).slice(0, 20)) : [], status: body.draft ? 'DRAFT' : 'PENDING_REVIEW', images: imageIds.length ? { connect: imageIds.map((id) => ({ id })) } : undefined } })
+      return await this.prisma.listing.create({ data: { sellerId: userId, clientRequestId, title: body.title.trim().slice(0, 100), author: String(body.author || '').trim().slice(0, 80), isbn: String(body.isbn || '').replace(/[^0-9Xx]/g, '').slice(0, 13), category: String(body.category || '其他').slice(0, 30), course: String(body.course || '').slice(0, 60), condition: String(body.condition || '八成新').slice(0, 20), priceCents: body.priceCents, originalPriceCents: body.originalPriceCents || null, campus: String(body.campus || '').slice(0, 20), description: String(body.description || '').slice(0, 1000), tags: Array.isArray(body.tags) ? body.tags.slice(0, 8).map((x: unknown) => String(x).slice(0, 20)) : [], status: body.draft ? 'DRAFT' : 'ACTIVE', images: imageIds.length ? { connect: imageIds.map((id) => ({ id })) } : undefined } })
     } catch (cause) {
       if (clientRequestId && (cause as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.listing.findFirst({ where: { sellerId: userId, clientRequestId } })

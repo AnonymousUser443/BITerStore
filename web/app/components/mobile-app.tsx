@@ -21,7 +21,7 @@ import {
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
-import { defaultFilters, demoRepository, getUser } from '../lib/repository';
+import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekMyListings } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
@@ -49,6 +49,15 @@ const UI_ASSETS = [
 ] as const;
 
 const CurrentUserContext = createContext<User | undefined>(undefined);
+const PROFILE_SNAPSHOT_KEY = 'biterstore:v1:snapshot:profile';
+
+function readProfileSnapshot(): User | undefined {
+  try { return JSON.parse(window.localStorage.getItem(PROFILE_SNAPSHOT_KEY) || 'null') as User | undefined; } catch { return undefined; }
+}
+function writeProfileSnapshot(profile?: User) {
+  if (profile) window.localStorage.setItem(PROFILE_SNAPSHOT_KEY, JSON.stringify(profile));
+  else window.localStorage.removeItem(PROFILE_SNAPSHOT_KEY);
+}
 
 function profileToUser(profile: H5Profile): User {
   return {
@@ -301,7 +310,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
 }
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
-  const [books, setBooks] = useState<Book[]>();
+  const [books, setBooks] = useState<Book[] | undefined>(() => peekBooks(defaultFilters));
   useEffect(() => { demoRepository.listBooks(defaultFilters).then(setBooks).catch(() => setBooks([])); }, []);
   return (
     <AppShell active="/home" navigate={navigate} className="home-page">
@@ -325,7 +334,7 @@ function FilterGroup({ label, options, value, onSelect }: { label: string; optio
 function CategoryPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const [filters, setFilters] = useState<BookFilters>({ ...defaultFilters, category: params.get('category') || '全部' });
-  const [books, setBooks] = useState<Book[]>([]); const [loading, setLoading] = useState(true); const [sheet, setSheet] = useState(false); const [favorites, setFavorites] = useState<string[]>([]);
+  const [books, setBooks] = useState<Book[]>(() => peekBooks(filters) || []); const [loading, setLoading] = useState(() => !peekBooks(filters)); const [sheet, setSheet] = useState(false); const [favorites, setFavorites] = useState<string[]>([]);
   useEffect(() => {
     let active = true;
     demoRepository.listBooks(filters).then((result) => {
@@ -333,7 +342,7 @@ function CategoryPage({ navigate, notify }: { navigate: (to: string) => void; no
     });
     return () => { active = false; };
   }, [filters]);
-  const updateFilters = (next: BookFilters) => { setLoading(true); setFilters(next); };
+  const updateFilters = (next: BookFilters) => { const cached = peekBooks(next); if (cached) setBooks(cached); setLoading(!cached && books.length === 0); setFilters(next); };
   const toggle = async (book: Book) => { const active = await demoRepository.toggleFavorite(book.id); setFavorites((ids) => active ? [...new Set([...ids, book.id])] : ids.filter((id) => id !== book.id)); notify(active ? '已收藏这本书' : '已取消收藏'); };
   return <AppShell active="/category" navigate={navigate} className="category-page">
     <div className="search-input"><Search size={20} /><input aria-label="搜索书籍" placeholder="搜索书名 / 作者 / ISBN / 课程" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} /><button onClick={() => updateFilters({ ...filters, query: '' })}>{filters.query ? <X size={18} /> : <Camera size={19} />}</button></div>
@@ -350,7 +359,7 @@ function InlineLoading() { return <div className="inline-state"><Image src="/ass
 function InlineEmpty({ navigate }: { navigate: (to: string) => void }) { return <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="没有搜索结果" width={760} height={760} /><h3>这次没有找到合适的书</h3><p>换个关键词，或者发布一条求书心愿吧。</p><button className="secondary-button" onClick={() => navigate('/states/no-results')}>查看空状态</button></div>; }
 
 function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [book, setBook] = useState<Book | null>(); const [favorite, setFavorite] = useState(false); const [images, setImages] = useState<string[]>([]);
+  const [book, setBook] = useState<Book | null | undefined>(() => peekBook(id)); const [favorite, setFavorite] = useState(false); const [images, setImages] = useState<string[]>([]);
   useEffect(() => { demoRepository.getBook(id).then((value) => { setBook(value); if (value?.imageStoreKey) getImages(value.imageStoreKey).then(setImages); }); }, [id]);
   if (book === undefined) return <AppShell navigate={navigate} title="商品详情" back noNav><InlineLoading /></AppShell>;
   if (!book) return <StatePage type="404" navigate={navigate} />;
@@ -498,11 +507,11 @@ function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; n
 }
 
 function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>([]); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
+  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
   const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
   const remove = async (book: Book) => { if (!window.confirm(`确定删除《${book.title}》吗？删除后不会再公开展示。`)) return; await demoRepository.deleteListing(book.id); notify('已删除这本书'); await load(); };
-  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['reviewing', '待审核'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
+  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
 }
 
 const stateContent: Record<string, { title: string; text: string; image: string; button: string }> = {
@@ -513,7 +522,7 @@ const stateContent: Record<string, { title: string; text: string; image: string;
   network: { title: '网络好像走丢了', text: '别担心，已填写的内容仍保存在本机。', image: '/assets/tobby-sad.webp', button: '重新加载' },
   maintenance: { title: '托比正在维护书架', text: '系统很快回来，稍后再来看看吧。', image: '/assets/tobby-maintenance.webp', button: '返回首页' },
   unavailable: { title: '这本书目前不可用', text: '它可能已经售出或暂时下架，再看看其他好书吧。', image: '/assets/tobby-unavailable.webp', button: '发现其他书' },
-  published: { title: '提交成功！', text: '你的闲置已提交审核，可以在“我的发布”查看当前状态。', image: '/assets/tobby-cheer.webp', button: '查看我的发布' },
+  published: { title: '发布成功！', text: '你的闲置已经上架，其他同学现在就能看到。', image: '/assets/tobby-cheer.webp', button: '查看我的发布' },
   '404': { title: '好像翻错书页了', text: '这个页面不存在，托比带你回到熟悉的地方。', image: '/assets/tobby-sad.webp', button: '返回首页' },
 };
 
@@ -525,7 +534,7 @@ function StatePage({ type, navigate }: { type: string; navigate: (to: string) =>
 
 export function MobileApp({ initialPath }: { initialPath: string }) {
   const hasCurrentAssetBundle = () => window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
-  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'checking' | 'authenticated' | 'guest' | 'anonymous'>('checking'); const [currentUser, setCurrentUser] = useState<User>();
+  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'authenticated' | 'guest' | 'anonymous'>(() => { const sid = demoRepository.getAuthenticatedSid(); return sid === 'guest' ? 'guest' : sid ? 'authenticated' : 'anonymous'; }); const [currentUser, setCurrentUser] = useState<User | undefined>(readProfileSnapshot);
   const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
   useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
   useEffect(() => { if (!toast || /正在上传并发布\s+(?:[0-9]|[1-9][0-9])%$/.test(toast)) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
@@ -551,15 +560,19 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
       if (!active) return;
       if (user?.campusStatus === 'VERIFIED') {
         demoRepository.markAuthenticated(user.id);
-        setCurrentUser(profileToUser(user));
+        const profile = profileToUser(user);
+        writeProfileSnapshot(profile);
+        setCurrentUser(profile);
         setAuthMode('authenticated');
-      } else { setCurrentUser(undefined); setAuthMode(demoRepository.getAuthenticatedSid() === 'guest' ? 'guest' : 'anonymous'); }
+      } else if (!demoRepository.getAuthenticatedSid()) { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }
     });
     return () => { active = false; };
   }, []);
   const notify = useCallback((text: string) => setToast(text), []);
+  const updateCurrentUser = useCallback((profile: User) => { writeProfileSnapshot(profile); setCurrentUser(profile); }, []);
+  const clearCurrentUser = useCallback(() => { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }, []);
   const toastProgress = Number(toast.match(/正在上传并发布\s+(\d+)%$/)?.[1] || 0);
-  if (!assetsReady || authMode === 'checking') return <main className="app-stage"><div className="route-view"><BootScreen progress={assetsReady ? 100 : assetProgress} /></div></main>;
+  if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
   const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
   const needsAccount = privatePaths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
   const effectivePath = needsAccount && authMode !== 'authenticated'
@@ -568,7 +581,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   let page: React.ReactNode;
   if (effectivePath === '/') page = <WelcomePage navigate={navigate} />;
   else if (effectivePath === '/onboarding') page = <OnboardingPage navigate={navigate} />;
-  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} onAuthenticated={(profile) => { setCurrentUser(profileToUser(profile)); setAuthMode('authenticated'); }} onGuest={() => { setCurrentUser(undefined); setAuthMode('guest'); }} />;
+  else if (effectivePath === '/login') page = <LoginPage navigate={navigate} onAuthenticated={(profile) => { const next = profileToUser(profile); writeProfileSnapshot(next); setCurrentUser(next); setAuthMode('authenticated'); }} onGuest={() => { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('guest'); }} />;
   else if (effectivePath === '/home') page = <HomePage navigate={navigate} />;
   else if (effectivePath === '/category') page = <CategoryPage navigate={navigate} notify={notify} />;
   else if (effectivePath.startsWith('/books/')) page = <BookDetailPage id={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
@@ -576,8 +589,8 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/messages') page = <MessagesPage navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/notifications/')) page = <NotificationDetailPage type={effectivePath.split('/')[3]} navigate={navigate} />;
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
-  else if (effectivePath === '/profile/edit') page = <ProfileEditPage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={setCurrentUser} />;
-  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={setCurrentUser} onLogout={() => { setCurrentUser(undefined); setAuthMode('anonymous'); }} />;
+  else if (effectivePath === '/profile/edit') page = <ProfileEditPage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={updateCurrentUser} />;
+  else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={updateCurrentUser} onLogout={clearCurrentUser} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/my-listings') page = <MyListingsPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;

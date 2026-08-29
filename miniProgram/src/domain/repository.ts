@@ -13,7 +13,7 @@ export interface DemoRepository {
   toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>;
   reportListing(id: string, reason: string): Promise<void>;
   saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
-  updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>;
+  updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; peekMyListings(): Listing[] | undefined;
   listThreads(): Promise<ChatThread[]>; getThread(id: string): Promise<ChatThread>; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
   listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
@@ -38,6 +38,7 @@ const localRepository: DemoRepository = {
   async updateListingStatus(id, status) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.map((x) => x.id === id ? { ...x, status } : x); await storageAdapter.set(KEYS.listings, listingCache) },
   async deleteListing(id) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.filter((item) => item.id !== id); await storageAdapter.set(KEYS.listings, listingCache) },
   async listMyListings() { return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID) },
+  peekMyListings() { return listingCache.filter((item) => item.sellerId === CURRENT_USER_ID) },
   async listThreads() { return storageAdapter.get(KEYS.threads, seedThreads) },
   async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return thread },
   async sendMessage(threadId, text, mediaId) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), kind: mediaId ? 'image' : 'text', mediaId }; const threads = (await storageAdapter.get(KEYS.threads, seedThreads)).map((x) => x.id === threadId ? { ...x, updatedAt: message.createdAt, messages: [...x.messages, message] } : x); await storageAdapter.set(KEYS.threads, threads); return message },
