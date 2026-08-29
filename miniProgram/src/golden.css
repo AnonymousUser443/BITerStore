@@ -846,6 +846,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .profile-hero { grid-column: 1 / -1; }
   .profile-stats, .profile-reminder, .profile-menu { margin: 0; }
   .profile-stats, .profile-reminder { grid-column: 1 / -1; }
+  .profile-menu { align-self: start; height: auto; }
   .states-index .state-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
   .welcome-page { display: grid; grid-template-columns: minmax(330px, .95fr) minmax(330px, 1.05fr); grid-template-rows: auto auto auto 1fr; column-gap: 38px; align-items: center; padding: 34px 48px; }

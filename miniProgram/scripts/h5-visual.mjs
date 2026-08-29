@@ -8,24 +8,58 @@ const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Ap
 const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
 const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
 const allTargets = [
+  ['welcome-320', 320, 700, '/'],
   ['welcome-390', 390, 900, '/welcome'],
+  ['welcome-768', 768, 1024, '/'],
   ['onboarding-390', 390, 900, '/onboarding'],
   ['login-390', 390, 900, '/login'],
   ['login-1280', 1280, 900, '/login'],
+  ['home-320', 320, 700, '/home'],
   ['home-360', 360, 900, '/home'],
+  ['home-480', 480, 900, '/home'],
+  ['home-600', 600, 900, '/home'],
+  ['home-768', 768, 1024, '/home'],
+  ['home-landscape-844', 844, 390, '/home'],
+  ['home-1024', 1024, 768, '/home'],
+  ['home-1440', 1440, 900, '/home'],
+  ['home-1920', 1920, 1080, '/home'],
+  ['search-320', 320, 700, '/search'],
   ['search-390', 390, 900, '/search'],
+  ['search-600', 600, 900, '/search'],
+  ['search-768', 768, 1024, '/search'],
+  ['search-1024', 1024, 768, '/search'],
+  ['search-1440', 1440, 900, '/search'],
+  ['publish-320', 320, 700, '/publish'],
   ['publish-430', 430, 900, '/publish'],
+  ['publish-600', 600, 900, '/publish'],
+  ['publish-768', 768, 1024, '/publish'],
+  ['publish-1440', 1440, 900, '/publish'],
+  ['messages-320', 320, 700, '/messages'],
   ['messages-390', 390, 900, '/messages'],
+  ['messages-600', 600, 900, '/messages'],
+  ['messages-768', 768, 1024, '/messages'],
+  ['messages-1440', 1440, 900, '/messages'],
   ['notification-390', 390, 900, '/notifications?type=comment'],
+  ['notification-768', 768, 1024, '/messages/notifications/comment'],
+  ['chat-320', 320, 700, '/chat?id=thread-lin'],
   ['chat-390', 390, 900, '/chat?id=thread-lin'],
+  ['chat-768', 768, 1024, '/chat?id=thread-lin'],
+  ['chat-1440', 1440, 900, '/chat?id=thread-lin'],
   ['detail-390', 390, 900, '/books?id=math-7'],
+  ['detail-600', 600, 900, '/books?id=math-7'],
+  ['detail-768', 768, 1024, '/books?id=math-7'],
+  ['detail-1024', 1024, 768, '/books?id=math-7'],
+  ['detail-1440', 1440, 900, '/books?id=math-7'],
   ['home-390-short', 390, 667, '/home'],
   ['home-600-800', 600, 800, '/home'],
   ['detail-844-landscape', 844, 390, '/books?id=math-7'],
   ['favorites-390', 390, 900, '/favorites'],
   ['my-listings-390', 390, 900, '/my-listings'],
   ['states-390', 390, 900, '/states'],
+  ['states-600', 600, 900, '/states'],
+  ['states-1440', 1440, 900, '/states'],
   ['unavailable-390', 390, 900, '/states?type=unavailable'],
+  ['profile-600', 600, 900, '/profile'],
   ['home-820', 820, 1000, '/home'],
   ['detail-1024-768', 1024, 768, '/books?id=math-7'],
   ['detail-1280-600', 1280, 600, '/books?id=math-7'],
@@ -37,7 +71,7 @@ const allTargets = [
   ['profile-1023', 1023, 900, '/profile'],
   ['profile-1024', 1024, 900, '/profile'],
   ['profile-1280', 1280, 900, '/profile'],
-  ['home-1920-1080', 1920, 1080, '/home']
+  ['profile-1600', 1600, 1000, '/profile']
 ]
 const requestedTargets = new Set((process.env.BITERSTORE_H5_TARGETS || '').split(',').map((value) => value.trim()).filter(Boolean))
 const targets = requestedTargets.size ? allTargets.filter(([name]) => requestedTargets.has(name)) : allTargets
@@ -179,6 +213,8 @@ try {
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     if (expectedPageClass[name] && !pageState.result.value.shell?.className.includes(expectedPageClass[name])) diagnostics.push({ type: 'unexpected-page', text: `${name}: expected ${expectedPageClass[name]}, got ${pageState.result.value.shell?.className || 'no shell'}` })
     const layout = pageState.result.value.layout
+    if (layout?.documentScroll?.scrollWidth > width + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: document ${layout.documentScroll.scrollWidth}px > viewport ${width}px` })
+    if (width >= 480 && width < 700 && layout?.shellRect?.width < width - 40) diagnostics.push({ type: 'fixed-compact-canvas', text: `${name}: ${layout.shellRect.width}px shell did not expand with ${width}px viewport` })
     if (layout?.shellInsideViewport === false || layout?.navInsideShell === false || layout?.contentInsideShell === false) diagnostics.push({ type: 'layout-overflow', text: `${name}: ${JSON.stringify(layout)}` })
     if (layout?.contentScroll?.bottomReachable === false) diagnostics.push({ type: 'unreachable-content', text: `${name}: ${JSON.stringify(layout.contentScroll)}` })
     if (layout?.profileMenus?.some((menu) => menu.clippedButtons.length)) diagnostics.push({ type: 'clipped-profile-action', text: `${name}: ${JSON.stringify(layout.profileMenus)}` })

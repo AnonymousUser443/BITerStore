@@ -10,6 +10,6 @@ export const projectPath = process.env.WEAPP_PROJECT_PATH || root
 export const servicePort = Number(process.env.WECHAT_DEVTOOLS_SERVICE_PORT || 0)
 export const automationPort = Number(process.env.WEAPP_AUTOMATION_PORT || 9420)
 export const wsEndpoint = `ws://127.0.0.1:${automationPort}`
-export function commandArgs(command) { const args = [command, '--project', projectPath, '--auto-port', String(automationPort), '--trust-project']; if (servicePort) args.push('--port', String(servicePort)); if (process.env.WECHAT_DEVTOOLS_CLI_TOKEN) args.push('--token', process.env.WECHAT_DEVTOOLS_CLI_TOKEN); args.push('--lang', 'zh'); return args }
+export function commandArgs(command) { const args = command === 'quit' ? [command] : [command, '--project', projectPath]; if (command === 'auto') args.push('--auto-port', String(automationPort), '--trust-project'); if (servicePort) args.push('--port', String(servicePort)); if (process.env.WECHAT_DEVTOOLS_CLI_TOKEN) args.push('--token', process.env.WECHAT_DEVTOOLS_CLI_TOKEN); args.push('--lang', 'zh'); return args }
 export function windowsCliInvocation(args) { const quote = (value) => `"${String(value).replaceAll('"', '""')}"`; const commandLine = [cliPath, ...args].map(quote).join(' '); return { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `"${commandLine}"`] } }
 export function assertLocalPaths() { if (!fs.existsSync(cliPath)) throw new Error(`微信 CLI 不存在: ${cliPath}`); if (!fs.existsSync(path.join(projectPath, 'project.config.json'))) throw new Error(`微信项目配置不存在: ${projectPath}`) }

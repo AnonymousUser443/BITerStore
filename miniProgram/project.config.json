@@ -3,6 +3,13 @@
   "projectname": "BITerStore Taro",
   "description": "BITerStore",
   "appid": "touristappid",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "qa-artifacts" },
+      { "type": "folder", "value": "qa-screenshots" }
+    ],
+    "include": []
+  },
   "setting": {
     "urlCheck": true,
     "es6": true,

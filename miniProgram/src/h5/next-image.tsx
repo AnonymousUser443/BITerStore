@@ -5,6 +5,13 @@ type NextImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   unoptimized?: boolean
 }
 
-export default function NextImage({ priority: _priority, unoptimized: _unoptimized, ...props }: NextImageProps) {
-  return <img {...props} />
+export default function NextImage({ priority, unoptimized: _unoptimized, loading, decoding, fetchPriority, ...props }: NextImageProps) {
+  return (
+    <img
+      {...props}
+      loading={priority ? 'eager' : loading ?? 'lazy'}
+      decoding={decoding ?? 'async'}
+      fetchPriority={priority ? 'high' : fetchPriority}
+    />
+  )
 }
