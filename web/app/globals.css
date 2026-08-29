@@ -334,6 +334,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .switch-row input:checked + i::after { transform: translateX(20px); }
 .apply-filter { width: 100%; margin-top: 10px; }
 
+/* In-app confirmations keep destructive actions inside the visual system. */
+.dialog-layer { position: absolute; z-index: 60; inset: 0; display: grid; place-items: center; padding: 20px; }
+.dialog-scrim { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(45,47,39,.46); backdrop-filter: blur(3px); }
+.confirm-dialog { position: relative; z-index: 1; width: min(100%, 390px); padding: 22px; border: 1px solid var(--border); border-radius: 22px; background: rgba(255,253,248,.98); box-shadow: 0 20px 55px rgba(42,45,37,.28); }
+.confirm-dialog-copy { display: flex; align-items: flex-start; gap: 12px; }
+.confirm-dialog-copy > span { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 11px; background: #fff0ec; color: #b75f54; }
+.confirm-dialog-copy svg { width: 19px; }
+.confirm-dialog-copy h2 { margin: 1px 0 6px; color: var(--ink); font: 700 17px "Noto Serif SC", serif; }
+.confirm-dialog-copy p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.confirm-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 20px; }
+.confirm-dialog-actions button { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.confirm-dialog-actions svg { width: 16px; }
+
 /* Detail */
 .detail-gallery { position: relative; min-height: 285px; display: flex; gap: 8px; overflow-x: auto; padding: 6px; border: 1px solid rgba(213,199,167,.62); border-radius: 24px; background: rgba(255,253,248,.75); }
 .detail-gallery > .book-cover { min-width: 100%; height: 275px; }

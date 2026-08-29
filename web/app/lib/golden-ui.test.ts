@@ -60,6 +60,14 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
   })
 
+  it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {
+    const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
+    expect(myListingsPage).not.toContain('window.confirm')
+    expect(myListingsPage).toContain('role="alertdialog"')
+    expect(myListingsPage).toContain('className="dialog-scrim"')
+    expect(styles).toContain('.confirm-dialog')
+  })
+
   it('reflows continuously from narrow phones through ultra-wide H5 windows', () => {
     expect(styles).toContain('@media (max-width: 340px)')
     expect(styles).toContain('@media (min-width: 480px) and (max-width: 699px)')
