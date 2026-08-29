@@ -29,6 +29,14 @@ describe('Golden Reference style alignment', () => {
     expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
   })
 
+  it('H5 内容高度跟随应用外壳并覆盖短横屏布局', () => {
+    const goldenCss = read('../web/app/globals.css')
+    expect(goldenCss).toContain('.content-scroll { position: relative; height: calc(100% - 76px);')
+    expect(goldenCss).toContain('.chat-page .content-scroll { height: calc(100% - 68px);')
+    expect(goldenCss).toContain('@media (min-width: 700px) and (max-width: 1023px) and (max-height: 599px)')
+    expect(goldenCss).toContain('@media (min-width: 1024px) and (max-height: 699px)')
+  })
+
   it('微信入口复用 Golden 样式并只追加原生节点适配', () => {
     const entry = read('src/app.weapp.ts')
     expect(entry).toContain("import './golden.css'")
