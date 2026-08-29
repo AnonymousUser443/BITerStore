@@ -15,3 +15,9 @@ export async function isAuthenticated() {
   if (__BITERSTORE_E2E__) return true
   return (await sessionStore.get())?.user.campusStatus === 'VERIFIED'
 }
+
+export async function getAuthenticatedUserId() {
+  if (__BITERSTORE_E2E__) return undefined
+  const session = await sessionStore.get()
+  return session?.user.campusStatus === 'VERIFIED' ? session.user.id : undefined
+}

@@ -36,4 +36,13 @@ describe('authenticated Golden H5', () => {
     expect(mobileApp).toContain('正在上传并发布 ${progress}%')
     expect(styles).toContain('.toast.progress-toast progress')
   })
+
+  it('explains blocked detail actions and surfaces request failures', () => {
+    const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(detailPage).toContain("if (ownListing) return notify('不能收藏自己的商品')")
+    expect(detailPage).toContain("if (ownListing) return notify('不能联系自己发布的商品')")
+    expect(detailPage).toContain("navigate('/login')")
+    expect(detailPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
+    expect(detailPage).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+  })
 });

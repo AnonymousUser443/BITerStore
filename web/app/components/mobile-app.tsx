@@ -359,14 +359,43 @@ function InlineLoading() { return <div className="inline-state"><Image src="/ass
 function InlineEmpty({ navigate }: { navigate: (to: string) => void }) { return <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="没有搜索结果" width={760} height={760} /><h3>这次没有找到合适的书</h3><p>换个关键词，或者发布一条求书心愿吧。</p><button className="secondary-button" onClick={() => navigate('/states/no-results')}>查看空状态</button></div>; }
 
 function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [book, setBook] = useState<Book | null | undefined>(() => peekBook(id)); const [favorite, setFavorite] = useState(false); const [images, setImages] = useState<string[]>([]);
+  const currentUser = useContext(CurrentUserContext);
+  const [book, setBook] = useState<Book | null | undefined>(() => peekBook(id)); const [favorite, setFavorite] = useState(false); const [images, setImages] = useState<string[]>([]); const [pendingAction, setPendingAction] = useState<'favorite' | 'contact'>();
   useEffect(() => { demoRepository.getBook(id).then((value) => { setBook(value); if (value?.imageStoreKey) getImages(value.imageStoreKey).then(setImages); }); }, [id]);
+  useEffect(() => {
+    let active = true;
+    if (!currentUser) return;
+    demoRepository.listFavorites().then((items) => { if (active) setFavorite(items.some((item) => item.id === id)); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [currentUser, id]);
   if (book === undefined) return <AppShell navigate={navigate} title="商品详情" back noNav><InlineLoading /></AppShell>;
   if (!book) return <StatePage type="404" navigate={navigate} />;
   const seller = book.seller || getUser(book.sellerId); const unavailable = book.status !== 'available';
   const displayImages = book.images?.length ? book.images : images;
-  const contact = async () => { if (unavailable) return navigate('/states/unavailable'); const thread = await demoRepository.ensureThread(book.id); navigate(`/messages/${thread}`); };
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{displayImages.length ? displayImages.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button onClick={async () => { const active = await demoRepository.toggleFavorite(book.id); setFavorite(active); notify(active ? '收藏成功' : '已取消收藏'); }} aria-label="收藏"><Heart fill={favorite ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button onClick={contact}>联系</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : '联系卖家'}</button></div></AppShell>;
+  const ownListing = currentUser?.id === book.sellerId;
+  const favoriteActive = Boolean(currentUser && favorite);
+  const requireAccount = (message: string) => { if (currentUser) return true; notify(message); navigate('/login'); return false; };
+  const toggleFavorite = async () => {
+    if (!requireAccount('请先使用学号登录后收藏商品')) return;
+    if (ownListing) return notify('不能收藏自己的商品');
+    if (pendingAction) return;
+    setPendingAction('favorite');
+    try { const active = await demoRepository.toggleFavorite(book.id); setFavorite(active); notify(active ? '收藏成功' : '已取消收藏'); }
+    catch (cause) { notify(cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'); }
+    finally { setPendingAction(undefined); }
+  };
+  const contact = async () => {
+    if (unavailable) return navigate('/states/unavailable');
+    if (!requireAccount('请先使用学号登录后联系卖家')) return;
+    if (ownListing) return notify('不能联系自己发布的商品');
+    if (pendingAction) return;
+    setPendingAction('contact');
+    try { const thread = await demoRepository.ensureThread(book.id); navigate(`/messages/${thread}`); }
+    catch (cause) { notify(cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'); }
+    finally { setPendingAction(undefined); }
+  };
+  const contactLabel = ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系';
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{displayImages.length ? displayImages.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
 }
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {

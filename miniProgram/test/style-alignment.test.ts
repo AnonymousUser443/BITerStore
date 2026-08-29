@@ -94,4 +94,12 @@ describe('Golden Reference style alignment', () => {
     expect(ui).toContain("onClick={href ? () => { void navigationAdapter.go(href) } : onTap}")
     expect(ui.match(/beginNavigationFeedback\(href\)/g)).toHaveLength(3)
   })
+
+  it('gives native detail actions explicit owner and request-error feedback', () => {
+    const detail = read('src/pages/listing/detail.tsx')
+    expect(detail).toContain("feedbackAdapter.toast('不能收藏自己的商品')")
+    expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
+    expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
+    expect(detail).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+  })
 })
