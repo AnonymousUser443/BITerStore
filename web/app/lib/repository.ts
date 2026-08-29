@@ -48,8 +48,9 @@ export interface DemoRepository {
   listFavorites(): Promise<Book[]>;
   saveDraft(draft: PublishDraft): Promise<void>;
   getDraft(): Promise<PublishDraft | null>;
-  publishListing(draft: PublishDraft): Promise<Book>;
+  publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Book>;
   updateListingStatus(id: string, status: ListingStatus): Promise<void>;
+  deleteListing(id: string): Promise<void>;
   listMyListings(): Promise<Book[]>;
   listThreads(): Promise<ChatThread[]>;
   listNotifications(): Promise<Notification[]>;
@@ -72,11 +73,13 @@ const localRepository: DemoRepository = {
   async listFavorites() { const ids = read<string[]>(KEYS.favorites, []); await wait(); return read(KEYS.books, seedBooks).filter((book) => ids.includes(book.id)); },
   async saveDraft(draft) { write(KEYS.draft, draft); await wait(100); },
   async getDraft() { await wait(80); return read<PublishDraft | null>(KEYS.draft, null); },
-  async publishListing(draft) {
+  async publishListing(draft, onProgress) {
+    onProgress?.(20);
     const book: Book = { id: `listing-${Date.now()}`, title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, price: Number(draft.price), originalPrice: Number(draft.originalPrice || draft.price), condition: draft.condition, campus: draft.campus, description: draft.description, status: 'available', sellerId: CURRENT_USER_ID, createdAt: new Date().toISOString(), tags: draft.tags, tone: 'sage', imageStoreKey: draft.imageStoreKey };
-    write(KEYS.books, [book, ...read(KEYS.books, seedBooks)]); localStorage.removeItem(KEYS.draft); await wait(480); return book;
+    write(KEYS.books, [book, ...read(KEYS.books, seedBooks)]); localStorage.removeItem(KEYS.draft); await wait(480); onProgress?.(100); return book;
   },
   async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); },
+  async deleteListing(id) { write(KEYS.books, read(KEYS.books, seedBooks).filter((book) => book.id !== id)); await wait(120); },
   async listMyListings() { await wait(); return read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); },
   async listThreads() { await wait(); return read(KEYS.threads, seedThreads); },
   async listNotifications() { await wait(100); return notifications; },
@@ -108,8 +111,9 @@ export const demoRepository: DemoRepository = {
   listFavorites: () => activeRepository().listFavorites(),
   saveDraft: (draft) => activeRepository().saveDraft(draft),
   getDraft: () => activeRepository().getDraft(),
-  publishListing: (draft) => activeRepository().publishListing(draft),
+  publishListing: (draft, onProgress) => activeRepository().publishListing(draft, onProgress),
   updateListingStatus: (id, status) => activeRepository().updateListingStatus(id, status),
+  deleteListing: (id) => activeRepository().deleteListing(id),
   listMyListings: () => activeRepository().listMyListings(),
   listThreads: () => activeRepository().listThreads(),
   listNotifications: () => activeRepository().listNotifications(),

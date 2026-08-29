@@ -1,5 +1,5 @@
 export type Campus = '中关村' | '良乡' | '西山' | '珠海'
-export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft'
+export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing'
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下'
 
 export interface User { id: string; studentNumber?: string; name: string; campus: Campus; verified: boolean; wechatBound?: boolean; bio: string; responseTime: string; avatar?: string; avatarTone?: 'sage' | 'peach' | 'blue' | 'gold' | 'olive' }
@@ -18,7 +18,7 @@ export interface ListingFilters {
 export interface PublishDraft {
   title: string; author: string; isbn: string; category: string; course: string;
   price: string; originalPrice: string; condition: Condition; campus: Campus;
-  description: string; tags: string[]; mediaIds: string[]; coverMediaId?: string; isbnMediaId?: string
+  description: string; tags: string[]; mediaIds: string[]; coverMediaId?: string; isbnMediaId?: string; clientRequestId?: string
 }
 export interface BookMetadata { isbn: string; title: string; author: string; publisher: string; publishDate: string; coverUrl: string; subjects: string[] }
 export interface ListingAIDraft { title: string; description: string; tags: string[] }

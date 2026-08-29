@@ -57,12 +57,13 @@ const apiDefaults: BookFilters = {
 };
 
 function statusFromApi(value: string): ListingStatus {
-  return ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'draft' }[value] || 'offline') as ListingStatus;
+  return ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'reviewing' }[value] || 'offline') as ListingStatus;
 }
 
 function user(value: ApiUser): User {
+  const campus = ['中关村', '良乡', '西山', '珠海'].includes(value?.campus || '') ? value.campus as User['campus'] : '未设置';
   return {
-    id: value?.id || '', name: value?.nickname || 'BITer', campus: value?.campus || '未设置',
+    id: value?.id || '', name: value?.nickname || 'BITer', campus,
     verified: value?.campusStatus === 'VERIFIED', bio: value?.bio || '', responseTime: '通常很快回复',
     avatar: value?.avatarUrl || undefined, avatarTone: 'sage',
   };
@@ -110,12 +111,28 @@ function draftPayload(draft: PublishDraft, imageIds: string[]) {
     priceCents: Math.round(Number(draft.price) * 100),
     originalPriceCents: Math.round(Number(draft.originalPrice || draft.price) * 100),
     condition: draft.condition, campus: draft.campus, description: draft.description, tags: draft.tags, imageIds, draft: false,
+    clientRequestId: draft.clientRequestId,
   };
 }
 
-async function uploadDraftImages(draft: PublishDraft) {
+function putBlob(url: string, blob: Blob, authRequired: boolean, onProgress?: (progress: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', url);
+    request.withCredentials = authRequired;
+    request.setRequestHeader('Content-Type', blob.type || 'image/jpeg');
+    request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress?.(event.loaded / event.total); };
+    request.onerror = () => reject(new Error('图片上传网络中断，请检查网络后重试'));
+    request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error(`图片上传失败（${request.status}）`));
+    request.send(blob);
+  });
+}
+
+async function uploadDraftImages(draft: PublishDraft, onProgress?: (progress: number) => void) {
   const images = await getImages(draft.imageStoreKey);
   const uploaded: string[] = [];
+  const total = images.filter(Boolean).length;
+  let completed = 0;
   for (const [index, dataUrl] of images.entries()) {
     if (!dataUrl) continue;
     const blob = await fetch(dataUrl).then((response) => response.blob());
@@ -123,10 +140,11 @@ async function uploadDraftImages(draft: PublishDraft) {
     const ticket = await h5ApiRequest<{ id: string; uploadUrl: string; authRequired?: boolean }>('/uploads/presign', {
       method: 'POST', body: JSON.stringify({ mime: blob.type || 'image/jpeg', size: blob.size, role }),
     });
-    const response = await fetch(ticket.uploadUrl, { method: 'PUT', credentials: ticket.authRequired ? 'include' : 'same-origin', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
-    if (!response.ok) throw new Error(`图片上传失败（${response.status}）`);
+    await putBlob(ticket.uploadUrl, blob, Boolean(ticket.authRequired), (fraction) => onProgress?.(Math.round(((completed + fraction) / Math.max(total, 1)) * 88)));
     await h5ApiRequest(`/uploads/${ticket.id}/complete`, { method: 'POST', body: '{}' });
     uploaded.push(ticket.id);
+    completed += 1;
+    onProgress?.(Math.round((completed / Math.max(total, 1)) * 88));
   }
   return uploaded;
 }
@@ -158,10 +176,13 @@ export const apiRepository: DemoRepository = {
   },
   async saveDraft(draft) { localStorage.setItem(draftKey, JSON.stringify(draft)); },
   async getDraft() { try { return JSON.parse(localStorage.getItem(draftKey) || 'null') as PublishDraft | null; } catch { return null; } },
-  async publishListing(draft) {
-    const imageIds = await uploadDraftImages(draft);
+  async publishListing(draft, onProgress) {
+    onProgress?.(1);
+    const imageIds = await uploadDraftImages(draft, onProgress);
+    onProgress?.(94);
     const created = book(await h5ApiRequest<ApiListing>('/listings', { method: 'POST', body: JSON.stringify(draftPayload(draft, imageIds)) }));
     localStorage.removeItem(draftKey);
+    onProgress?.(100);
     return created;
   },
   async updateListingStatus(id, status) {
@@ -173,6 +194,7 @@ export const apiRepository: DemoRepository = {
     const result = await h5ApiRequest<{ items: ApiListing[] }>('/listings/mine/all?limit=50');
     return result.items.map(book);
   },
+  async deleteListing(id) { await h5ApiRequest(`/listings/${id}`, { method: 'DELETE' }); },
   async listThreads() { return (await h5ApiRequest<ApiConversation[]>('/conversations')).map(thread); },
   async getThread(id) {
     const [messages, conversations] = await Promise.all([
@@ -185,7 +207,7 @@ export const apiRepository: DemoRepository = {
   async ensureThread(listingId) { return (await h5ApiRequest<{ id: string }>('/conversations', { method: 'POST', body: JSON.stringify({ listingId }) })).id; },
   async listNotifications() {
     return (await h5ApiRequest<ApiNotification[]>('/notifications')).map((value): Notification => ({
-      id: value.id, type: ['like', 'comment', 'follow'].includes(value.type) ? value.type : 'system',
+      id: value.id, type: (['like', 'comment', 'follow'].includes(value.type) ? value.type : 'system') as Notification['type'],
       title: value.title, subtitle: value.body, unread: value.readAt ? 0 : 1, createdAt: value.createdAt,
     }));
   },

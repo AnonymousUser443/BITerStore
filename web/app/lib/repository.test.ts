@@ -45,6 +45,8 @@ describe('demoRepository persistence', () => {
     const listing = await demoRepository.publishListing(draft);
     expect(listing.status).toBe('available');
     expect((await demoRepository.listMyListings()).some((book) => book.id === listing.id)).toBe(true);
+    await demoRepository.deleteListing(listing.id);
+    expect((await demoRepository.listMyListings()).some((book) => book.id === listing.id)).toBe(false);
   });
 
   it('appends sent messages to a thread', async () => {

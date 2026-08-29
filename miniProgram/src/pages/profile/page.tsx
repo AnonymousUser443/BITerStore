@@ -19,7 +19,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<ProfileUpdate>()
   const load = useCallback(() => Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads()]).then(([profile, favorites, listings, threads]) => { setUser(profile); setCounts([favorites.length, listings.length, threads.length]) }), [])
-  useDidShow(() => { void requireAccount('请先使用学号登录后查看“我的”').then((allowed) => allowed && load()) })
+  useDidShow(() => { void requireAccount('请先使用学号登录后查看“我的”').then((allowed) => { if (allowed) return load() }) })
   const bindCurrentWechat = async () => {
     try {
       await bindWechat()

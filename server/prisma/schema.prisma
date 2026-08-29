@@ -134,6 +134,7 @@ model Session {
 model Listing {
   id String @id @default(uuid())
   sellerId String
+  clientRequestId String?
   title String
   author String
   isbn String @default("")
@@ -157,6 +158,7 @@ model Listing {
   conversations Conversation[]
   @@index([status, createdAt(sort: Desc)])
   @@index([sellerId, status])
+  @@unique([sellerId, clientRequestId])
 }
 
 model ListingImage {

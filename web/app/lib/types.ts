@@ -1,5 +1,5 @@
 export type Campus = '中关村' | '良乡' | '西山' | '珠海';
-export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft';
+export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing';
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下';
 
 export interface User {
@@ -60,6 +60,7 @@ export interface PublishDraft {
   description: string;
   tags: string[];
   imageStoreKey?: string;
+  clientRequestId?: string;
 }
 
 export interface Message {

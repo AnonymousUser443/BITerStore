@@ -96,7 +96,11 @@ const emptyDraft: PublishDraft = {
 };
 
 function formatPrice(price: number) { return price.toFixed(2); }
-function statusLabel(status: ListingStatus) { return { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿' }[status]; }
+function statusLabel(status: ListingStatus) { return { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }[status]; }
+
+function newPublishRequestId() {
+  return globalThis.crypto?.randomUUID?.() || `publish-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function Brand() {
   return <span className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>BITerStore</span></span>;
@@ -172,8 +176,10 @@ function BookTile({ book, navigate }: { book: Book; navigate: (to: string) => vo
   );
 }
 
-function BookListCard({ book, navigate, favorite, onFavorite }: { book: Book; navigate: (to: string) => void; favorite?: boolean; onFavorite?: (book: Book) => void }) {
-  const seller = book.seller || getUser(book.sellerId);
+function BookListCard({ book, navigate, favorite, onFavorite, ownerView = false }: { book: Book; navigate: (to: string) => void; favorite?: boolean; onFavorite?: (book: Book) => void; ownerView?: boolean }) {
+  const [previewSeller, setPreviewSeller] = useState<User>();
+  useEffect(() => { if (book.id === 'preview') demoRepository.getProfile().then(setPreviewSeller).catch(() => undefined); }, [book.id]);
+  const seller = book.id === 'preview' ? (previewSeller || getUser(CURRENT_USER_ID)) : (book.seller || getUser(book.sellerId));
   return (
     <article className={`listing-card ${book.status !== 'available' ? 'unavailable-card' : ''}`}>
       <button className="listing-main" onClick={() => navigate(`/books/${book.id}`)}>
@@ -186,12 +192,12 @@ function BookListCard({ book, navigate, favorite, onFavorite }: { book: Book; na
           <div className="seller-line"><Avatar user={seller} size={25} /><span>{seller.name}</span><ShieldCheck size={12} />{seller.verified ? '已认证' : '校园用户'}</div>
         </div>
       </button>
-      <div className="listing-actions">
+      {!ownerView && book.id !== 'preview' && <div className="listing-actions">
         <button onClick={() => onFavorite?.(book)}><Heart size={17} fill={favorite ? 'currentColor' : 'none'} />{favorite ? '已收藏' : '收藏'}</button>
         <button onClick={() => navigate(`/messages/new-${book.id}`)}><MessageCircle size={17} />联系卖家</button>
         <button className="detail-action" onClick={() => navigate(`/books/${book.id}`)}>详情 <ChevronRight size={15} /></button>
-      </div>
-      <span className={`status-badge ${book.status}`}>{statusLabel(book.status)}</span>
+      </div>}
+      <span className={`status-badge ${book.status}`}>{book.id === 'preview' ? '预览' : statusLabel(book.status)}</span>
     </article>
   );
 }
@@ -355,13 +361,13 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
 }
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [step, setStep] = useState(1); const [draft, setDraft] = useState<PublishDraft>(emptyDraft); const [images, setImages] = useState<string[]>([]); const [aiLoading, setAiLoading] = useState(false); const [errors, setErrors] = useState<string[]>([]); const coverInputRef = useRef<HTMLInputElement>(null); const isbnInputRef = useRef<HTMLInputElement>(null); const extraInputRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState(1); const [draft, setDraft] = useState<PublishDraft>(() => ({ ...emptyDraft, clientRequestId: newPublishRequestId() })); const [images, setImages] = useState<string[]>([]); const [aiLoading, setAiLoading] = useState(false); const [errors, setErrors] = useState<string[]>([]); const publishingRef = useRef(false); const coverInputRef = useRef<HTMLInputElement>(null); const isbnInputRef = useRef<HTMLInputElement>(null); const extraInputRef = useRef<HTMLInputElement>(null);
   const [defaultImageStoreKey] = useState(() => `draft-${Date.now()}`);
-  useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft(value); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
+  useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft({ ...value, clientRequestId: value.clientRequestId || newPublishRequestId() }); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
   const update = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => setDraft((valueDraft) => ({ ...valueDraft, [key]: value }));
   const persistImages = async (next: string[]) => { const key = draft.imageStoreKey ?? defaultImageStoreKey; await saveImages(key, next); setImages(next); setDraft((current) => ({ ...current, imageStoreKey: key })); };
   const handleRequired = async (slot: 0 | 1, files: FileList | null) => { const file = files?.[0]; if (!file) return; const image = await compressImage(file); const next = [...images]; next[slot] = image; await persistImages(next); notify(slot === 0 ? '封面已拍摄' : 'ISBN 页已拍摄'); };
-  const handleExtras = async (files: FileList | null) => { if (!files) return; const extras = await Promise.all(Array.from(files).slice(0, Math.max(0, 6 - images.filter(Boolean).length)).map(compressImage)); const next = [images[0] || '', images[1] || '', ...images.slice(2).filter(Boolean), ...extras].slice(0, 6); await persistImages(next); notify(`已添加 ${extras.length} 张补充图片`); };
+  const handleExtras = async (files: FileList | null) => { if (!files) return; const extras = await Promise.all(Array.from(files).slice(0, Math.max(0, 6 - images.filter(Boolean).length)).map((file) => compressImage(file))); const next = [images[0] || '', images[1] || '', ...images.slice(2).filter(Boolean), ...extras].slice(0, 6); await persistImages(next); notify(`已添加 ${extras.length} 张补充图片`); };
   const removeImage = async (index: number) => { const next = [...images]; if (index < 2) next[index] = ''; else next.splice(index, 1); await persistImages(next); };
   const runAi = async () => {
     if (!images[0] || !images[1]) return notify('请先拍摄封面和 ISBN 页');
@@ -387,7 +393,13 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0; };
   const save = async () => { await demoRepository.saveDraft(draft); notify('草稿已保存'); };
   const nextStep = () => { if (step === 1) { if (!images[0] || !images[1]) return notify('封面和 ISBN 页均为必拍项'); setStep(2); } else if (step === 2 && validate()) setStep(3); };
-  const publish = async () => { if (!validate()) return setStep(2); try { await demoRepository.publishListing(draft); navigate('/states/published'); } catch (cause) { notify(cause instanceof Error ? cause.message : '发布失败，请稍后重试'); } };
+  const publish = async () => {
+    if (publishingRef.current) return;
+    if (!validate()) return setStep(2);
+    publishingRef.current = true; notify('正在上传并发布 1%');
+    try { await demoRepository.publishListing(draft, (progress) => notify(`正在上传并发布 ${progress}%`)); navigate('/states/published'); }
+    catch (cause) { publishingRef.current = false; notify(cause instanceof Error ? cause.message : '发布失败，请稍后重试'); }
+  };
   return <AppShell active="/publish" navigate={navigate} title="发布闲置书籍" className="publish-page"><div className="stepper">{['上传图片', '填写信息', '确认发布'].map((label, index) => <div className={step >= index + 1 ? 'active' : ''} key={label}><span>{index + 1}</span><p>{label}</p>{index < 2 && <i />}</div>)}</div>{step === 1 && <><section className="upload-card"><strong className="upload-heading">两张必拍照片</strong><span className="upload-instruction">请对准拍摄，文字与条码保持清晰，发布时会再次校验。</span><div className="required-image-grid">{([['书籍封面', '必拍 · 用作商品首图', images[0], coverInputRef, 0], ['ISBN 页', '必拍 · 对准条形码', images[1], isbnInputRef, 1]] as const).map(([label, hint, image, ref, slot]) => <div className="required-image" key={label}>{image ? <div className="upload-preview"><img src={image} alt={label} /><span className="image-role">{label} ✓</span><button onClick={() => removeImage(slot)} aria-label={`移除${label}`}><X /></button></div> : <button className="required-image-button" onClick={() => ref.current?.click()}><Camera /><strong>{label}</strong><span>{hint}</span></button>}<input ref={ref} hidden type="file" accept="image/*" capture="environment" onChange={(event) => handleRequired(slot, event.target.files)} /></div>)}</div><div className="optional-images"><span>其他实拍图（选填，最多 4 张）</span><div className="image-grid">{images.slice(2).filter(Boolean).map((image, offset) => <div className="upload-preview" key={image.slice(-20)}><img src={image} alt={`补充图片 ${offset + 1}`} /><button onClick={() => removeImage(offset + 2)} aria-label={`移除补充图片 ${offset + 1}`}><X /></button></div>)}{images.filter(Boolean).length < 6 && <button className="add-image" onClick={() => extraInputRef.current?.click()}><Camera /><strong>补充图片</strong><span>书脊、内页或瑕疵</span></button>}</div><input ref={extraInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => handleExtras(event.target.files)} /></div><div className="tobby-tip"><Image src="/assets/tobby-guide-publish.webp" alt="Tobby 提醒拍摄封面" width={760} height={760} /><span>封面和 ISBN 页拍清楚，托比就能帮你补全信息～</span></div></section><section className="ai-card"><div><p><Sparkles />Tobby 一键识别</p><span>免费识别 ISBN 条码，查询书名、作者与分类；识别结果可修改。</span></div><button onClick={runAi} disabled={aiLoading || !images[0] || !images[1]}>{aiLoading ? <><RefreshCw className="spin" />识别中…</> : <><WandSparkles />一键识别生成</>}</button></section></>}{step === 2 && <section className="form-card"><FormField label="书名" required error={errors.includes('请填写书名')}><input value={draft.title} onChange={(event) => update('title', event.target.value)} /></FormField><div className="form-grid"><FormField label="作者" required error={errors.includes('请填写作者')}><input value={draft.author} onChange={(event) => update('author', event.target.value)} /></FormField><FormField label="ISBN"><input value={draft.isbn} onChange={(event) => update('isbn', event.target.value)} /></FormField><FormField label="课程 / 分类" required><select value={draft.category} onChange={(event) => update('category', event.target.value)}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></FormField><FormField label="成色" required><select value={draft.condition} onChange={(event) => update('condition', event.target.value as Condition)}>{conditions.slice(1).map((condition) => <option key={condition}>{condition}</option>)}</select></FormField><FormField label="价格" required error={errors.includes('请填写价格')}><input type="number" inputMode="decimal" value={draft.price} onChange={(event) => update('price', event.target.value)} placeholder="¥ 0.00" /></FormField><FormField label="校区" required><select value={draft.campus} onChange={(event) => update('campus', event.target.value as PublishDraft['campus'])}>{campuses.slice(1).map((campus) => <option key={campus}>{campus}</option>)}</select></FormField></div><FormField label="商品简介" required error={errors.includes('请填写商品简介')}><textarea rows={5} maxLength={300} value={draft.description} onChange={(event) => update('description', event.target.value)} /></FormField><div className="tag-picker"><span>添加标签</span>{['考研必备', '期末复习', '笔记少', '教材'].map((tag) => <button className={draft.tags.includes(tag) ? 'active' : ''} onClick={() => update('tags', draft.tags.includes(tag) ? draft.tags.filter((value) => value !== tag) : [...draft.tags, tag])} key={tag}>{tag}</button>)}</div>{errors.length > 0 && <div className="form-error"><CircleAlert />{errors.join('、')}</div>}</section>}{step === 3 && <section className="publish-preview"><p className="eyebrow">发布前最后确认</p><BookListCard book={{ ...seedBooks[0], id: 'preview', title: draft.title, author: draft.author, price: Number(draft.price || 0), originalPrice: Number(draft.originalPrice || draft.price || 0), condition: draft.condition, campus: draft.campus, description: draft.description, tags: draft.tags, status: 'available', course: draft.course || draft.category }} navigate={() => setStep(2)} /><div className="safety-note"><ShieldCheck />请确认图片和描述真实准确，联系方式仅对发起咨询的同学可见。</div></section>}<div className="publish-actions">{step === 2 && <button className="secondary-button" onClick={save}>保存草稿</button>}{step > 1 && <button className="secondary-button" onClick={() => setStep(step - 1)}>上一步</button>}<button className="primary-button" onClick={step === 3 ? publish : nextStep}>{step === 3 ? '发布上架' : '下一步'}</button></div></AppShell>;
 }
 
@@ -489,7 +501,8 @@ function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; 
   const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>([]); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
   const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
-  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} /><button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
+  const remove = async (book: Book) => { if (!window.confirm(`确定删除《${book.title}》吗？删除后不会再公开展示。`)) return; await demoRepository.deleteListing(book.id); notify('已删除这本书'); await load(); };
+  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['reviewing', '待审核'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
 }
 
 const stateContent: Record<string, { title: string; text: string; image: string; button: string }> = {
@@ -515,7 +528,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'checking' | 'authenticated' | 'guest' | 'anonymous'>('checking'); const [currentUser, setCurrentUser] = useState<User>();
   const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
   useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
-  useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
+  useEffect(() => { if (!toast || /正在上传并发布\s+(?:[0-9]|[1-9][0-9])%$/.test(toast)) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => {
     let active = true;
     const cached = window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
@@ -545,6 +558,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     return () => { active = false; };
   }, []);
   const notify = useCallback((text: string) => setToast(text), []);
+  const toastProgress = Number(toast.match(/正在上传并发布\s+(\d+)%$/)?.[1] || 0);
   if (!assetsReady || authMode === 'checking') return <main className="app-stage"><div className="route-view"><BootScreen progress={assetsReady ? 100 : assetProgress} /></div></main>;
   const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
   const needsAccount = privatePaths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
@@ -569,5 +583,5 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;
   else if (effectivePath.startsWith('/states/')) page = <StatePage type={effectivePath.split('/')[2]} navigate={navigate} />;
   else page = <StatePage type="404" navigate={navigate} />;
-  return <CurrentUserContext.Provider value={currentUser}><main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className="toast" role="status"><Leaf size={17} />{toast}</div>}</main></CurrentUserContext.Provider>;
+  return <CurrentUserContext.Provider value={currentUser}><main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className={`toast ${toastProgress ? 'progress-toast' : ''}`} role="status"><Leaf size={17} /><span>{toast}</span>{toastProgress > 0 && <progress max="100" value={toastProgress} />}</div>}</main></CurrentUserContext.Provider>;
 }

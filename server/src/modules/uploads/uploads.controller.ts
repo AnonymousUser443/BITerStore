@@ -1,8 +1,8 @@
 import { BadRequestException, Body, Controller, Param, Post, Put, UseGuards } from '@nestjs/common'
-import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { CopyObjectCommand, DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
 import { AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
@@ -42,13 +42,26 @@ export class UploadsController {
   }
   @Post(':id/complete') async complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, uploadedAt: null } }); if (!row) throw new BadRequestException('上传记录不存在或已完成')
+    const extension = row.objectKey.split('.').pop() || 'jpg'
+    const finalObjectKey = `media/${user.id}/${row.id}.${extension}`
     if (this.useR2()) {
       const head = await this.s3.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET, Key: row.objectKey }))
       if (head.ContentLength !== row.size || head.ContentType !== row.mime) throw new BadRequestException('上传文件与申请信息不一致')
+      await this.s3.send(new CopyObjectCommand({ Bucket: process.env.R2_BUCKET, CopySource: `${process.env.R2_BUCKET}/${row.objectKey}`, Key: finalObjectKey, ContentType: row.mime, MetadataDirective: 'REPLACE' }))
     } else {
       const file = await stat(this.localPath(row.objectKey)).catch(() => null)
       if (!file || file.size !== row.size) throw new BadRequestException('上传文件与申请信息不一致')
+      await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
+      await rename(this.localPath(row.objectKey), this.localPath(finalObjectKey))
     }
-    return this.prisma.listingImage.update({ where: { id }, data: { uploadedAt: new Date() } })
+    try {
+      const completed = await this.prisma.listingImage.update({ where: { id }, data: { objectKey: finalObjectKey, uploadedAt: new Date() } })
+      if (this.useR2()) await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: row.objectKey })).catch(() => undefined)
+      return completed
+    } catch (cause) {
+      if (this.useR2()) await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey })).catch(() => undefined)
+      else await rename(this.localPath(finalObjectKey), this.localPath(row.objectKey)).catch(() => undefined)
+      throw cause
+    }
   }
 }

@@ -18,7 +18,7 @@ export class MediaController {
   @Header('Cache-Control', 'public, max-age=31536000, immutable')
   async get(@Param('id') id: string) {
     const image = await this.prisma.listingImage.findFirst({
-      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' } }
+      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null } }
     })
     if (!image) throw new NotFoundException('图片不存在')
     try {

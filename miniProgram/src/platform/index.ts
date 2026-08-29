@@ -177,7 +177,7 @@ export const avatarAdapter = {
     const path = compressed.tempFilePath
     let base64: string
     if (process.env.TARO_ENV === 'h5') {
-      const bytes = new Uint8Array(await fetch(path).then((response) => response.arrayBuffer()))
+      const bytes = new Uint8Array(await fetch(path).then((response) => response.arrayBuffer()) as ArrayBuffer)
       let binary = ''
       for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
       base64 = globalThis.btoa(binary)
@@ -191,12 +191,14 @@ export const avatarAdapter = {
 }
 
 export const uploadAdapter = {
-  async put(url: string, item: StoredMedia, accessToken?: string) {
+  async put(url: string, item: StoredMedia, accessToken?: string, onProgress?: (progress: number) => void) {
     let data: ArrayBuffer
     if (process.env.TARO_ENV === 'h5') data = await fetch(item.uri).then((response) => response.arrayBuffer())
     else data = await new Promise<ArrayBuffer>((resolve, reject) => Taro.getFileSystemManager().readFile({ filePath: item.uri, success: (result) => resolve(result.data as ArrayBuffer), fail: reject }))
+    onProgress?.(0.05)
     const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime, ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) } })
     if (response.statusCode < 200 || response.statusCode >= 300) throw new AppError('MEDIA_PERSIST', `图片上传失败（${response.statusCode}）`)
+    onProgress?.(1)
   }
 }
 

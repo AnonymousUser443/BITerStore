@@ -11,6 +11,7 @@ export class ListingsController {
   @Get(':id') get(@Param('id') id: string) { return this.service.get(id) }
   @Post() @UseGuards(AuthGuard, VerifiedGuard) create(@CurrentUser() user: AuthUser, @Body() body: any) { return this.service.create(user.id, body) }
   @Patch(':id') @UseGuards(AuthGuard, VerifiedGuard) update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: any) { return this.service.update(user.id, id, body) }
+  @Delete(':id') @UseGuards(AuthGuard) remove(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.remove(user.id, id) }
   @Post(':id/status') @UseGuards(AuthGuard, VerifiedGuard) state(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { status: ListingStatus; version: number }) { return this.service.state(user.id, id, body.status, body.version) }
   @Put(':id/favorite') @UseGuards(AuthGuard) favorite(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.favorite(user.id, id, true) }
   @Delete(':id/favorite') @UseGuards(AuthGuard) unfavorite(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.favorite(user.id, id, false) }

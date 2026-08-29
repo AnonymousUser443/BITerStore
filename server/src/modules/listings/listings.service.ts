@@ -19,15 +19,35 @@ export class ListingsService {
   }
   async get(id: string) { const item = await this.prisma.listing.findFirst({ where: { id, deletedAt: null }, include: { images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' } }, orderBy: { sortOrder: 'asc' } }, seller: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } }); if (!item) throw new NotFoundException('商品不存在'); return this.present(item) }
   async create(userId: string, body: any) {
+    const clientRequestId = String(body.clientRequestId || '').trim().slice(0, 100) || null
+    if (clientRequestId) {
+      const existing = await this.prisma.listing.findFirst({ where: { sellerId: userId, clientRequestId } })
+      if (existing) return existing
+    }
     if (!body.title?.trim() || !Number.isInteger(body.priceCents) || body.priceCents <= 0) throw new BadRequestException('标题和价格不合法')
     const imageIds: string[] = Array.isArray(body.imageIds) ? Array.from(new Set<string>(body.imageIds.slice(0, 6).map((id: unknown) => String(id)))) : []
     const images = imageIds.length ? await this.prisma.listingImage.findMany({ where: { id: { in: imageIds }, ownerId: userId, uploadedAt: { not: null }, listingId: null } }) : []
     if (images.length !== imageIds.length) throw new BadRequestException('图片不存在、尚未上传完成或不属于当前用户')
     if (!body.draft && (!images.some((image) => image.role === 'COVER') || !images.some((image) => image.role === 'ISBN'))) throw new BadRequestException('发布前必须上传封面和 ISBN 页')
-    return this.prisma.listing.create({ data: { sellerId: userId, title: body.title.trim().slice(0, 100), author: String(body.author || '').trim().slice(0, 80), isbn: String(body.isbn || '').replace(/[^0-9Xx]/g, '').slice(0, 13), category: String(body.category || '其他').slice(0, 30), course: String(body.course || '').slice(0, 60), condition: String(body.condition || '八成新').slice(0, 20), priceCents: body.priceCents, originalPriceCents: body.originalPriceCents || null, campus: String(body.campus || '').slice(0, 20), description: String(body.description || '').slice(0, 1000), tags: Array.isArray(body.tags) ? body.tags.slice(0, 8).map((x: unknown) => String(x).slice(0, 20)) : [], status: body.draft ? 'DRAFT' : 'PENDING_REVIEW', images: imageIds.length ? { connect: imageIds.map((id) => ({ id })) } : undefined } })
+    try {
+      return await this.prisma.listing.create({ data: { sellerId: userId, clientRequestId, title: body.title.trim().slice(0, 100), author: String(body.author || '').trim().slice(0, 80), isbn: String(body.isbn || '').replace(/[^0-9Xx]/g, '').slice(0, 13), category: String(body.category || '其他').slice(0, 30), course: String(body.course || '').slice(0, 60), condition: String(body.condition || '八成新').slice(0, 20), priceCents: body.priceCents, originalPriceCents: body.originalPriceCents || null, campus: String(body.campus || '').slice(0, 20), description: String(body.description || '').slice(0, 1000), tags: Array.isArray(body.tags) ? body.tags.slice(0, 8).map((x: unknown) => String(x).slice(0, 20)) : [], status: body.draft ? 'DRAFT' : 'PENDING_REVIEW', images: imageIds.length ? { connect: imageIds.map((id) => ({ id })) } : undefined } })
+    } catch (cause) {
+      if (clientRequestId && (cause as { code?: string }).code === 'P2002') {
+        const existing = await this.prisma.listing.findFirst({ where: { sellerId: userId, clientRequestId } })
+        if (existing) return existing
+      }
+      throw cause
+    }
   }
   async update(userId: string, id: string, body: any) { const item = await this.get(id); if (item.sellerId !== userId) throw new ForbiddenException('不能修改他人的商品'); return this.prisma.listing.update({ where: { id }, data: { title: body.title?.trim(), description: body.description?.slice(0, 1000), priceCents: body.priceCents, campus: body.campus, version: { increment: 1 } } }) }
+  async remove(userId: string, id: string) {
+    const item = await this.prisma.listing.findFirst({ where: { id, deletedAt: null } })
+    if (!item) throw new NotFoundException('商品不存在')
+    if (item.sellerId !== userId) throw new ForbiddenException('不能删除他人的商品')
+    await this.prisma.listing.update({ where: { id }, data: { deletedAt: new Date(), status: 'OFF_SHELF', version: { increment: 1 } } })
+    return { deleted: true }
+  }
   async state(userId: string, id: string, status: ListingStatus, version: number) { const item = await this.get(id); if (item.sellerId !== userId) throw new ForbiddenException('不能修改他人的商品'); if (!allowedTransitions[item.status].includes(status)) throw new BadRequestException(`不允许从 ${item.status} 变更为 ${status}`); const result = await this.prisma.listing.updateMany({ where: { id, version }, data: { status, version: { increment: 1 } } }); if (!result.count) throw new BadRequestException('商品已被其他请求更新，请刷新后重试'); return this.get(id) }
   async favorite(userId: string, id: string, enabled: boolean) { const item = await this.get(id); if (item.sellerId === userId) throw new BadRequestException('不能收藏自己的商品'); if (enabled) await this.prisma.favorite.upsert({ where: { userId_listingId: { userId, listingId: id } }, create: { userId, listingId: id }, update: {} }); else await this.prisma.favorite.deleteMany({ where: { userId, listingId: id } }); return { favorited: enabled } }
-  favorites(userId: string) { return this.prisma.favorite.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { listing: { include: { images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' } }, orderBy: { sortOrder: 'asc' } }, seller: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } } } }).then((rows) => rows.map((row) => this.present(row.listing))) }
+  favorites(userId: string) { return this.prisma.favorite.findMany({ where: { userId, listing: { deletedAt: null } }, orderBy: { createdAt: 'desc' }, include: { listing: { include: { images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' } }, orderBy: { sortOrder: 'asc' } }, seller: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } } } }).then((rows) => rows.map((row) => this.present(row.listing))) }
 }

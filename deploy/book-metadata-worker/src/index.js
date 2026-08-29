@@ -40,18 +40,64 @@ function googleBook(isbn, value) {
   }
 }
 
+function openLibrarySearchBook(isbn, value) {
+  const book = value?.docs?.[0]
+  if (!book?.title) return null
+  return {
+    isbn,
+    title: book.title,
+    author: (book.author_name || []).join(' / '),
+    publisher: (book.publisher || []).slice(0, 3).join(' / '),
+    publishDate: book.first_publish_year ? String(book.first_publish_year) : '',
+    coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-L.jpg` : '',
+    subjects: (book.subject || []).slice(0, 5),
+  }
+}
+
+function crossrefBook(isbn, value) {
+  const book = (value?.message?.items || []).find((item) => (item.ISBN || []).map((candidate) => String(candidate).replace(/[^0-9Xx]/g, '')).includes(isbn))
+  const title = book?.title?.[0]
+  if (!title) return null
+  const dateParts = book.published?.['date-parts']?.[0] || []
+  return {
+    isbn,
+    title,
+    author: (book.author || []).map((author) => [author.given, author.family].filter(Boolean).join(' ')).filter(Boolean).join(' / '),
+    publisher: book.publisher || '',
+    publishDate: dateParts.join('-'),
+    coverUrl: '',
+    subjects: (book.subject || []).slice(0, 5),
+  }
+}
+
+async function fetchJson(url, headers) {
+  try {
+    const response = await fetch(url, { headers })
+    return response.ok ? response.json() : null
+  } catch {
+    return null
+  }
+}
+
 async function fetchBook(isbn, env) {
-  const key = `ISBN:${isbn}`
-  const openLibrary = await fetch(`https://openlibrary.org/api/books?bibkeys=${encodeURIComponent(key)}&format=json&jscmd=data`, {
-    headers: { 'user-agent': env.UPSTREAM_USER_AGENT || 'BITerStore/1.0 (book metadata proxy)' },
-  })
-  if (openLibrary.ok) {
-    const found = openLibraryBook(isbn, (await openLibrary.json())[key])
+  if (env.GOOGLE_BOOKS_API_KEY) {
+    const google = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=3&key=${encodeURIComponent(env.GOOGLE_BOOKS_API_KEY)}`)
+    const found = googleBook(isbn, google)
     if (found) return found
   }
-  if (!env.GOOGLE_BOOKS_API_KEY) return null
-  const google = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1&key=${encodeURIComponent(env.GOOGLE_BOOKS_API_KEY)}`)
-  return google.ok ? googleBook(isbn, await google.json()) : null
+
+  const key = `ISBN:${isbn}`
+  const headers = { 'user-agent': env.UPSTREAM_USER_AGENT || 'BITerStore/1.0 (book metadata proxy)' }
+  const openLibrary = await fetchJson(`https://openlibrary.org/api/books?bibkeys=${encodeURIComponent(key)}&format=json&jscmd=data`, headers)
+  const direct = openLibraryBook(isbn, openLibrary?.[key])
+  if (direct) return direct
+
+  const search = await fetchJson(`https://openlibrary.org/search.json?isbn=${encodeURIComponent(isbn)}&fields=title,author_name,publisher,first_publish_year,cover_i,subject&limit=1`, headers)
+  const searched = openLibrarySearchBook(isbn, search)
+  if (searched) return searched
+
+  const crossref = await fetchJson(`https://api.crossref.org/works?filter=isbn:${encodeURIComponent(isbn)}&rows=3&select=title,author,publisher,published,ISBN,subject`, headers)
+  return crossrefBook(isbn, crossref)
 }
 
 export default {
@@ -62,7 +108,7 @@ export default {
     if (!match || !validIsbn(match[1])) return json({ message: 'Invalid ISBN' }, 400, 0)
 
     const cache = caches.default
-    const cacheKey = new Request(`https://book-metadata-cache.invalid/isbn/${match[1]}`)
+    const cacheKey = new Request(`https://book-metadata-cache.invalid/v2/isbn/${match[1]}`)
     const cached = await cache.match(cacheKey)
     if (cached) return cached
 

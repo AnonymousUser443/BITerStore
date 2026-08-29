@@ -12,8 +12,8 @@ export interface DemoRepository {
   listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string): Promise<Listing>; peekListing(id: string): Listing | undefined;
   toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>;
   reportListing(id: string, reason: string): Promise<void>;
-  saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft): Promise<Listing>;
-  updateListingStatus(id: string, status: ListingStatus): Promise<void>; listMyListings(): Promise<Listing[]>;
+  saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
+  updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>;
   listThreads(): Promise<ChatThread[]>; getThread(id: string): Promise<ChatThread>; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
   listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
@@ -28,13 +28,15 @@ const localRepository: DemoRepository = {
   async listFavorites() { const ids = await storageAdapter.get<string[]>(KEYS.favorites, []); return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => ids.includes(x.id)) },
   async reportListing() {},
   async saveDraft(draft) { await storageAdapter.set(KEYS.draft, draft) }, async getDraft() { return storageAdapter.get<PublishDraft | null>(KEYS.draft, null) },
-  async publishListing(draft) {
+  async publishListing(draft, onProgress) {
+    onProgress?.(10)
     if (!draft.title.trim() || !draft.price || Number(draft.price) <= 0) throw new AppError('VALIDATION', '请填写标题和有效价格')
     if (!draft.coverMediaId || !draft.isbnMediaId) throw new AppError('VALIDATION', '发布前必须上传封面和 ISBN 页')
     const item: Listing = { id: `listing-${Date.now()}`, title: draft.title.trim(), author: draft.author.trim(), isbn: draft.isbn.trim(), category: draft.category, course: draft.course.trim(), price: Number(draft.price), originalPrice: Number(draft.originalPrice || draft.price), condition: draft.condition, campus: draft.campus, description: draft.description.trim(), status: 'available', sellerId: CURRENT_USER_ID, createdAt: new Date().toISOString(), tags: draft.tags, tone: 'sage', mediaIds: draft.mediaIds }
-    listingCache = [item, ...(await storageAdapter.get(KEYS.listings, seedListings))]; await storageAdapter.set(KEYS.listings, listingCache); await storageAdapter.remove(KEYS.draft); return item
+    listingCache = [item, ...(await storageAdapter.get(KEYS.listings, seedListings))]; await storageAdapter.set(KEYS.listings, listingCache); await storageAdapter.remove(KEYS.draft); onProgress?.(100); return item
   },
   async updateListingStatus(id, status) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.map((x) => x.id === id ? { ...x, status } : x); await storageAdapter.set(KEYS.listings, listingCache) },
+  async deleteListing(id) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.filter((item) => item.id !== id); await storageAdapter.set(KEYS.listings, listingCache) },
   async listMyListings() { return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID) },
   async listThreads() { return storageAdapter.get(KEYS.threads, seedThreads) },
   async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return thread },

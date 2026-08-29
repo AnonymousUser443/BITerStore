@@ -5,8 +5,8 @@ import { defaultFilters } from './filters'
 import type { DemoRepository } from './repository'
 import type { ChatThread, Listing, ListingStatus, Message, Notification, PublishDraft, User } from './types'
 
-const statusFromApi = (value: string): ListingStatus => ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'draft' }[value] || 'offline') as ListingStatus
-const statusToApi = (value: ListingStatus) => ({ available: 'ACTIVE', sold: 'SOLD', offline: 'OFF_SHELF', draft: 'DRAFT' }[value])
+const statusFromApi = (value: string): ListingStatus => ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'reviewing' }[value] || 'offline') as ListingStatus
+const statusToApi = (value: ListingStatus) => ({ available: 'ACTIVE', sold: 'SOLD', offline: 'OFF_SHELF', draft: 'DRAFT', reviewing: 'PENDING_REVIEW' }[value])
 function listing(value: any): Listing { return { id: value.id, title: value.title, author: value.author, isbn: value.isbn, category: value.category, course: value.course, price: value.priceCents / 100, originalPrice: (value.originalPriceCents ?? value.priceCents) / 100, condition: value.condition, campus: value.campus, description: value.description, status: statusFromApi(value.status), sellerId: value.sellerId, seller: value.seller ? profile(value.seller) : undefined, createdAt: value.createdAt, tags: value.tags || [], tone: 'sage', mediaIds: (value.images || []).map((image: any) => image.id), imageUrls: (value.images || []).map((image: any) => image.url).filter(Boolean) } }
 function profile(value: any): User { return { id: value.id, studentNumber: value.studentNumber || undefined, name: value.nickname, campus: value.campus || '良乡', verified: value.campusStatus === 'VERIFIED', wechatBound: value.wechatBound, bio: value.bio || '', responseTime: '通常很快回复', avatar: value.avatarUrl, avatarTone: 'sage' } }
 
@@ -17,9 +17,10 @@ export const apiRepository: DemoRepository = {
   async listFavorites() { const items = (await apiRequest<any[]>('/listings/favorites/mine')).map(listing); items.forEach((item) => favoriteIds.add(item.id)); return items },
   async reportListing(id, reason) { await apiRequest('/reports', { method: 'POST', data: { targetType: 'LISTING', targetId: id, reason } }) },
   async saveDraft(draft) { await storageAdapter.set('api-draft', draft) }, async getDraft() { return storageAdapter.get<PublishDraft | null>('api-draft', null) },
-  async publishListing(draft) { const imageIds = await uploadImages(draft); const result = listing(await apiRequest('/listings', { method: 'POST', data: { ...draftPayload(draft, false), imageIds } })); await storageAdapter.remove('api-draft'); return result },
+  async publishListing(draft, onProgress) { onProgress?.(1); const imageIds = await uploadImages(draft, onProgress); onProgress?.(94); const result = listing(await apiRequest('/listings', { method: 'POST', data: { ...draftPayload(draft, false), imageIds } })); await storageAdapter.remove('api-draft'); onProgress?.(100); return result },
   async updateListingStatus(id, status) { const current: any = await apiRequest(`/listings/${id}`); await apiRequest(`/listings/${id}/status`, { method: 'POST', data: { status: statusToApi(status), version: current.version } }) },
   async listMyListings() { const data = await apiRequest<{ items: any[] }>('/listings/mine/all' + apiQuery({ limit: 50 })); return data.items.map(listing) },
+  async deleteListing(id) { await apiRequest(`/listings/${id}`, { method: 'DELETE' }) },
   async listThreads() { const current = await sessionStore.get(); return (await apiRequest<any[]>('/conversations')).map((value) => thread(value, current?.user.id)) },
   async getThread(id) { const current = await sessionStore.get(); const messages = await apiRequest<{ items: any[] }>(`/conversations/${id}/messages`); const all = await apiRequest<any[]>('/conversations'); const found = all.find((item) => item.id === id); if (!found) throw new Error('会话不存在'); return thread({ ...found, messages: messages.items }, current?.user.id) },
   async sendMessage(threadId, text) { return message(await apiRequest(`/conversations/${threadId}/messages`, { method: 'POST', data: { content: text } })) },
@@ -31,20 +32,21 @@ export const apiRepository: DemoRepository = {
   async getAuthenticatedSid() { const session = await sessionStore.get(); return session?.user.id || ((await sessionStore.mode()) === 'guest' ? 'guest' : '') }, async markAuthenticated() {}, async clearAuthentication() { await sessionStore.clear() },
   async getFilters() { return defaultFilters }, async saveFilters() {}, async shouldShowResetNotice() { return false }, async acknowledgeResetNotice() {}, async resetDemoData() { throw new Error('真实数据模式不支持重置') }
 }
-function draftPayload(draft: PublishDraft, draftOnly: boolean) { return { title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, priceCents: Math.round(Number(draft.price) * 100), originalPriceCents: Math.round(Number(draft.originalPrice || draft.price) * 100), condition: draft.condition, campus: draft.campus, description: draft.description, tags: draft.tags, imageIds: draft.mediaIds, draft: draftOnly } }
+function draftPayload(draft: PublishDraft, draftOnly: boolean) { return { title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, priceCents: Math.round(Number(draft.price) * 100), originalPriceCents: Math.round(Number(draft.originalPrice || draft.price) * 100), condition: draft.condition, campus: draft.campus, description: draft.description, tags: draft.tags, imageIds: draft.mediaIds, draft: draftOnly, clientRequestId: draft.clientRequestId } }
 function message(value: any): Message { return { id: String(value.id), senderId: value.senderId, text: value.content, createdAt: value.createdAt, kind: 'text' } }
 function thread(value: any, currentUserId?: string): ChatThread { const other = (value.members || []).find((member: any) => member.userId !== currentUserId) || (value.members || [])[0]; return { id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? profile(other.user) : undefined, listingId: value.listingId, unread: Number(value.unread || 0), updatedAt: value.lastMessageAt, messages: (value.messages || []).map(message) } }
 const favoriteIds = new Set<string>()
-async function uploadImages(draft: PublishDraft) {
+async function uploadImages(draft: PublishDraft, onProgress?: (progress: number) => void) {
   const items = (await mediaAdapter.list()).filter((item) => draft.mediaIds.includes(item.id))
   const uploaded: string[] = []
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const role = item.id === draft.coverMediaId ? 'COVER' : item.id === draft.isbnMediaId ? 'ISBN' : 'GALLERY'
     const ticket = await apiRequest<{ id: string; uploadUrl: string; authRequired?: boolean }>('/uploads/presign', { method: 'POST', data: { mime: item.mime, size: item.size, role } })
     const session = ticket.authRequired ? await sessionStore.get() : null
-    await uploadAdapter.put(ticket.uploadUrl, item, session?.accessToken)
+    await uploadAdapter.put(ticket.uploadUrl, item, session?.accessToken, (fraction) => onProgress?.(Math.round(((index + fraction) / Math.max(items.length, 1)) * 88)))
     await apiRequest(`/uploads/${ticket.id}/complete`, { method: 'POST' })
     uploaded.push(ticket.id)
+    onProgress?.(Math.round(((index + 1) / Math.max(items.length, 1)) * 88))
   }
   return uploaded
 }

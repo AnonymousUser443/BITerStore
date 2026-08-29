@@ -102,7 +102,7 @@ export class BooksService {
   async lookup(rawIsbn: string): Promise<BookMetadata> {
     const isbn = normalizeIsbn(rawIsbn)
     if (!isValidIsbn(isbn)) throw new BadRequestException('ISBN 格式或校验位不正确')
-    const cacheKey = `book-metadata:${isbn}`
+    const cacheKey = `book-metadata:v2:${isbn}`
     await this.redis.ensureConnected()
     const cached = await this.redis.client.get(cacheKey)
     if (cached === 'NOT_FOUND') throw new NotFoundException('没有查到这本书，请手动填写信息')

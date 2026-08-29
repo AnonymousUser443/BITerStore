@@ -47,6 +47,6 @@ describe('book metadata', () => {
     const result = await new BooksService(store as never).lookup(isbn)
     expect(result).toMatchObject({ isbn, title: '高等数学', author: '同济大学' })
     expect(fetchMock).toHaveBeenCalledWith(`https://metadata.example.test/isbn/${isbn}`, expect.objectContaining({ headers: { Authorization: 'Bearer shared-secret' } }))
-    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:${isbn}`, expect.any(String), 'EX', 2592000)
+    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v2:${isbn}`, expect.any(String), 'EX', 2592000)
   })
 })
