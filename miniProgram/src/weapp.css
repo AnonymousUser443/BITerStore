@@ -122,6 +122,7 @@ button::after { border: 0; }
   padding: 8px 18px 108px;
 }
 .content-scroll.no-nav { padding-bottom: 90px; }
+.detail-page .content-scroll.no-nav { padding-bottom: 24px; }
 
 .primary-button,
 .secondary-button {

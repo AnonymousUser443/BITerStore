@@ -142,6 +142,9 @@ describe('Golden Reference style alignment', () => {
 
   it('gives native detail actions explicit owner and request-error feedback', () => {
     const detail = read('src/pages/listing/detail.tsx')
+    const ui = read('src/components/ui.tsx')
+    expect(ui).toContain("const hideNavigation = noNav || className === 'detail-page'")
+    expect(ui).toContain('{!hideNavigation && <AppNavigation active={active} />}')
     expect(detail).toContain("feedbackAdapter.toast('不能收藏自己的商品')")
     expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
     expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")

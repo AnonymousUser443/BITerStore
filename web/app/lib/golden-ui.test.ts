@@ -62,11 +62,14 @@ describe('authenticated Golden H5', () => {
 
   it('autoplays one detail image at a time and keeps actions at the bottom', () => {
     const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(mobileApp).toContain("const hideNavigation = noNav || className === 'detail-page'")
+    expect(mobileApp).toContain("!hideNavigation && <BottomNav")
     expect(detailPage).toContain('function DetailGallery')
     expect(detailPage).toContain('window.setInterval')
     expect(detailPage).toContain('scrollTo')
     expect(styles).toContain('scroll-snap-type: x mandatory')
     expect(styles).toContain('.detail-cta { grid-row: 4; position: sticky;')
+    expect(styles).toContain('.detail-page .content-scroll.no-nav { padding-bottom:')
   })
 
   it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {

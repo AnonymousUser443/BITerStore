@@ -166,12 +166,13 @@ function Topbar({ title, back, navigate }: { title?: string; back?: boolean; nav
 
 function AppShell({ children, active, navigate, title, back = false, noNav = false, className = '' }: { children: React.ReactNode; active?: string; navigate: (to: string) => void; title?: string; back?: boolean; noNav?: boolean; className?: string }) {
   const shouldGoBack = back || active === '/publish';
+  const hideNavigation = noNav || className === 'detail-page';
   return (
     <section className={`phone-shell ${className}`}>
       <div className="paper-texture" aria-hidden="true" />
       <Topbar title={title} back={shouldGoBack} navigate={navigate} />
-      <div className={`content-scroll ${noNav ? 'no-nav' : ''}`}>{children}</div>
-      {!noNav && <BottomNav active={active ?? ''} navigate={navigate} />}
+      <div className={`content-scroll ${hideNavigation ? 'no-nav' : ''}`}>{children}</div>
+      {!hideNavigation && <BottomNav active={active ?? ''} navigate={navigate} />}
     </section>
   );
 }

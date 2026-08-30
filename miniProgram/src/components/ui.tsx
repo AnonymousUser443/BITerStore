@@ -36,7 +36,8 @@ export function AppShell({ children, title, back, backTo, active, className = ''
   const shouldGoBack = back || active === 'publish'
   const destination = backTo || (active === 'publish' ? '/pages/home/index' : undefined)
   const nativeChrome = process.env.TARO_ENV === 'weapp'
-  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}<View className={`content-scroll page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <AppNavigation active={active} />}</View>
+  const hideNavigation = noNav || className === 'detail-page'
+  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}<View className={`content-scroll page-scroll ${hideNavigation ? 'no-nav' : ''}`}>{children}</View>{!hideNavigation && <AppNavigation active={active} />}</View>
 }
 
 export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'
