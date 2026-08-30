@@ -11,6 +11,7 @@ const KEYS = {
 
 const LIST_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:list:';
 const MY_LISTING_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:mine:';
+const FAVORITE_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:favorites:';
 const knownBooks = new Map<string, Book>();
 const wait = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,10 +47,11 @@ export function filterBooks(books: Book[], filters: BookFilters): Book[] {
 
 function listSnapshotKey(filters: BookFilters) { return `${LIST_SNAPSHOT_PREFIX}${encodeURIComponent(JSON.stringify(filters))}`; }
 function myListingSnapshotKey() { return `${MY_LISTING_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
+function favoriteSnapshotKey() { return `${FAVORITE_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
 function remember(items: Book[]) { items.forEach((item) => knownBooks.set(item.id, item)); return items; }
-function updateSnapshots(update: (items: Book[]) => Book[]) {
+function updateSnapshots(update: (items: Book[]) => Book[], prefixes = [LIST_SNAPSHOT_PREFIX, MY_LISTING_SNAPSHOT_PREFIX, FAVORITE_SNAPSHOT_PREFIX]) {
   if (typeof window === 'undefined') return;
-  Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((key): key is string => typeof key === 'string' && (key.startsWith(LIST_SNAPSHOT_PREFIX) || key.startsWith(MY_LISTING_SNAPSHOT_PREFIX))).forEach((key) => {
+  Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((key): key is string => typeof key === 'string' && prefixes.some((prefix) => key.startsWith(prefix))).forEach((key) => {
     let next = update(read<Book[]>(key, []));
     if (key.startsWith(LIST_SNAPSHOT_PREFIX)) {
       try { next = filterBooks(next, JSON.parse(decodeURIComponent(key.slice(LIST_SNAPSHOT_PREFIX.length))) as BookFilters); } catch { /* replace malformed snapshots on the next network refresh */ }
@@ -65,11 +67,15 @@ export function peekMyListings(): Book[] | undefined {
   const cached = read<Book[] | undefined>(myListingSnapshotKey(), undefined);
   return cached ? remember(cached) : undefined;
 }
+export function peekFavorites(): Book[] | undefined {
+  const cached = read<Book[] | undefined>(favoriteSnapshotKey(), undefined);
+  return cached ? remember(cached) : undefined;
+}
 export function peekBook(id: string): Book | undefined {
   const known = knownBooks.get(id);
   if (known || typeof window === 'undefined') return known;
   for (const key of Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((value): value is string => Boolean(value))) {
-    if (!key.startsWith(LIST_SNAPSHOT_PREFIX) && !key.startsWith(MY_LISTING_SNAPSHOT_PREFIX)) continue;
+    if (!key.startsWith(LIST_SNAPSHOT_PREFIX) && !key.startsWith(MY_LISTING_SNAPSHOT_PREFIX) && !key.startsWith(FAVORITE_SNAPSHOT_PREFIX)) continue;
     const found = read<Book[]>(key, []).find((item) => item.id === id);
     if (found) { knownBooks.set(id, found); return found; }
   }
@@ -141,16 +147,22 @@ function activeRepository() {
 
 export const demoRepository: DemoRepository = {
   async listBooks(filters = defaultFilters) { const items = remember(await activeRepository().listBooks(filters)); write(listSnapshotKey(filters), items); return items; },
-  getBook: (id) => activeRepository().getBook(id),
-  toggleFavorite: (id) => activeRepository().toggleFavorite(id),
-  listFavorites: () => activeRepository().listFavorites(),
+  async getBook(id) { const item = await activeRepository().getBook(id); if (item) knownBooks.set(item.id, item); return item; },
+  async toggleFavorite(id) {
+    const enabled = await activeRepository().toggleFavorite(id);
+    const current = peekFavorites() || [];
+    const item = peekBook(id);
+    write(favoriteSnapshotKey(), enabled && item ? [item, ...current.filter((book) => book.id !== id)] : current.filter((book) => book.id !== id));
+    return enabled;
+  },
+  async listFavorites() { const items = remember(await activeRepository().listFavorites()); write(favoriteSnapshotKey(), items); return items; },
   saveDraft: (draft) => activeRepository().saveDraft(draft),
   getDraft: () => activeRepository().getDraft(),
   async publishListing(draft, onProgress) {
     const created = await activeRepository().publishListing(draft, onProgress);
     knownBooks.set(created.id, created);
     write(myListingSnapshotKey(), [created, ...(peekMyListings() || []).filter((item) => item.id !== created.id)]);
-    updateSnapshots((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+    updateSnapshots((items) => [created, ...items.filter((item) => item.id !== created.id)], [LIST_SNAPSHOT_PREFIX]);
     return created;
   },
   async updateListingStatus(id, status) { await activeRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },

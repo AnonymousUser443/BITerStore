@@ -5,6 +5,7 @@ import { defaultFilters, filterListings } from '@/domain/filters'
 import { seedListings } from '@/domain/seed'
 import { listingAssistant } from '@/domain/assistant'
 import { demoRepository } from '@/domain/repository'
+import { apiRepository } from '@/domain/api-repository'
 
 const memory = new Map<string, unknown>()
 vi.mock('@tarojs/taro', () => ({ default: {
@@ -23,6 +24,23 @@ describe('domain', () => {
   it('无请求体的写请求会发送空 JSON 对象', async () => { await apiRequest('/empty', { method: 'POST' }); expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', data: {} })) })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
   it('收藏能够持久化并取消', async () => { expect(await demoRepository.toggleFavorite('math-7')).toBe(true); expect((await demoRepository.listFavorites()).map((x) => x.id)).toEqual(['math-7']); expect(await demoRepository.toggleFavorite('math-7')).toBe(false) })
+  it('真实 API 的个人数据快照按账号隔离', async () => {
+    const session = { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    memory.set('biterstore:taro:v1:api-session', session)
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { id: 'user-a', studentNumber: '1120240001', nickname: '同学 A', campus: '良乡', campusStatus: 'VERIFIED' } } as never)
+    await apiRepository.getProfile()
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: [{ id: 'book-a', title: '缓存书籍', author: '作者', isbn: '', category: '教材', course: '', priceCents: 1000, condition: '九成新', campus: '良乡', description: '', status: 'ACTIVE', sellerId: 'seller', createdAt: '2026-08-31T00:00:00.000Z', tags: [], images: [] }] } as never)
+    await apiRepository.listFavorites()
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { items: [] } } as never)
+    await apiRepository.listMyListings()
+    expect(apiRepository.peekProfile()?.name).toBe('同学 A')
+    expect(apiRepository.peekFavorites()?.[0].id).toBe('book-a')
+    expect(apiRepository.peekMyListings()).toEqual([])
+    memory.set('biterstore:taro:v1:api-session', { ...session, user: { ...session.user, id: 'user-b' } })
+    expect(apiRepository.peekProfile()).toBeUndefined()
+    expect(apiRepository.peekFavorites()).toBeUndefined()
+    expect(apiRepository.peekMyListings()).toBeUndefined()
+  })
   it('列表读取后可同步交给详情页首帧', async () => { await demoRepository.listListings(); expect(demoRepository.peekListing('math-7')?.title).toContain('高等数学') })
   it('草稿恢复、发布校验和删除', async () => { const draft = { title: '测试书', author: '', isbn: '', category: '数学', course: '高数', price: '12', originalPrice: '', condition: '八成新' as const, campus: '良乡' as const, description: '', tags: [], mediaIds: ['cover', 'isbn'], coverMediaId: 'cover', isbnMediaId: 'isbn' }; await demoRepository.saveDraft(draft); expect((await demoRepository.getDraft())?.title).toBe('测试书'); const published = await demoRepository.publishListing(draft); expect(published.status).toBe('available'); await demoRepository.deleteListing(published.id); expect((await demoRepository.listMyListings()).some((item) => item.id === published.id)).toBe(false); await expect(demoRepository.publishListing({ ...draft, price: '0' })).rejects.toMatchObject({ code: 'VALIDATION' }); await expect(demoRepository.publishListing({ ...draft, coverMediaId: undefined })).rejects.toMatchObject({ code: 'VALIDATION' }) })
   it('消息发送后可读取且未读归零', async () => { await demoRepository.sendMessage('thread-lin', '收到'); const thread = await demoRepository.getThread('thread-lin'); expect(thread.messages.at(-1)?.text).toBe('收到'); expect(thread.unread).toBe(0) })

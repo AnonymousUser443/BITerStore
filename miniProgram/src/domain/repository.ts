@@ -10,12 +10,12 @@ let filterCache: ListingFilters | undefined
 let listingCache: Listing[] = seedListings
 export interface DemoRepository {
   listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string): Promise<Listing>; peekListing(id: string): Listing | undefined;
-  toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>;
+  toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>; peekFavorites(): Listing[] | undefined;
   reportListing(id: string, reason: string): Promise<void>;
   saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
   updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; peekMyListings(): Listing[] | undefined;
   listThreads(): Promise<ChatThread[]>; getThread(id: string): Promise<ChatThread>; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
-  listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
@@ -26,6 +26,7 @@ const localRepository: DemoRepository = {
   peekListing(id) { return listingCache.find((item) => item.id === id) },
   async toggleFavorite(id) { const ids = await storageAdapter.get<string[]>(KEYS.favorites, []); const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]; await storageAdapter.set(KEYS.favorites, next); return next.includes(id) },
   async listFavorites() { const ids = await storageAdapter.get<string[]>(KEYS.favorites, []); return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => ids.includes(x.id)) },
+  peekFavorites() { const ids = storageAdapter.peek<string[]>(KEYS.favorites, []); return storageAdapter.peek(KEYS.listings, seedListings).filter((x) => ids.includes(x.id)) },
   async reportListing() {},
   async saveDraft(draft) { await storageAdapter.set(KEYS.draft, draft) }, async getDraft() { return storageAdapter.get<PublishDraft | null>(KEYS.draft, null) },
   async publishListing(draft, onProgress) {
@@ -45,6 +46,7 @@ const localRepository: DemoRepository = {
   async ensureThread(listingId) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const existing = threads.find((x) => x.listingId === listingId); if (existing) return existing.id; const listing = await this.getListing(listingId); const thread: ChatThread = { id: `thread-${listingId}`, participantId: listing.sellerId, listingId, unread: 0, updatedAt: '刚刚', messages: [] }; await storageAdapter.set(KEYS.threads, [thread, ...threads]); return thread.id },
   async listNotifications() { return storageAdapter.get(KEYS.notifications, seedNotifications) },
   async getProfile() { return storageAdapter.get<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
+  peekProfile() { return storageAdapter.peek<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   async updateProfile(profile) { const current = await this.getProfile(); const updated = { ...current, ...profile }; await storageAdapter.set('profile', updated); return updated },
   async getFilters() {
     if (filterCache) return filterCache
@@ -65,3 +67,7 @@ const localRepository: DemoRepository = {
 export function getUser(id: string) { return users.find((x) => x.id === id) ?? users[0] }
 
 export const demoRepository: DemoRepository = typeof __API_URL__ !== 'undefined' && Boolean(__API_URL__) && !__BITERSTORE_E2E__ ? apiRepository : localRepository
+
+export async function warmAccountSnapshots() {
+  await Promise.allSettled([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
+}

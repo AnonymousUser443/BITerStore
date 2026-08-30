@@ -5,8 +5,14 @@ import type { BitLoginChallenge } from '@/domain/bit-login'
 
 export const STORAGE_NAMESPACE = 'biterstore:taro:v1'
 const keyOf = (key: string) => `${STORAGE_NAMESPACE}:${key}`
-export interface StorageAdapter { get<T>(key: string, fallback: T): Promise<T>; set<T>(key: string, value: T): Promise<void>; remove(key: string): Promise<void>; clearNamespace(): Promise<void> }
+export interface StorageAdapter { peek<T>(key: string, fallback: T): T; get<T>(key: string, fallback: T): Promise<T>; set<T>(key: string, value: T): Promise<void>; remove(key: string): Promise<void>; clearNamespace(): Promise<void> }
 export const storageAdapter: StorageAdapter = {
+  peek(key, fallback) {
+    try {
+      const value = Taro.getStorageSync(keyOf(key))
+      return (value === '' || value === undefined ? fallback : value) as typeof fallback
+    } catch { return fallback }
+  },
   async get(key, fallback) {
     try {
       const value = Taro.getStorageSync(keyOf(key))

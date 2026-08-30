@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedBooks } from './demo-data';
-import { defaultFilters, demoRepository, filterBooks, peekBooks, peekMyListings } from './repository';
+import { defaultFilters, demoRepository, filterBooks, peekBooks, peekFavorites, peekMyListings } from './repository';
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -35,7 +35,9 @@ describe('demoRepository persistence', () => {
   it('toggles and returns favorites', async () => {
     expect(await demoRepository.toggleFavorite('math-7')).toBe(true);
     expect((await demoRepository.listFavorites()).map((book) => book.id)).toContain('math-7');
+    expect(peekFavorites()?.map((book) => book.id)).toContain('math-7');
     expect(await demoRepository.toggleFavorite('math-7')).toBe(false);
+    expect(peekFavorites()).toEqual([]);
   });
 
   it('saves a draft and publishes a local listing', async () => {

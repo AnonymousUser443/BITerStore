@@ -34,6 +34,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
 export type SessionMode = 'authenticated' | 'guest' | 'anonymous'
 
 export const sessionStore = {
+  peek: () => storageAdapter.peek<ApiSession | null>(SESSION_KEY, null),
   get: () => storageAdapter.get<ApiSession | null>(SESSION_KEY, null),
   async set(session: ApiSession) {
     await storageAdapter.set(SESSION_KEY, session)

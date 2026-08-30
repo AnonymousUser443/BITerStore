@@ -21,7 +21,7 @@ import {
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
-import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekMyListings } from '../lib/repository';
+import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
@@ -514,14 +514,11 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
 }
 
 function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
-  const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
+  const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(() => peekFavorites()?.length || 0); const [listings, setListings] = useState(() => peekMyListings()?.length || 0);
   useEffect(() => {
-    Promise.all([getH5Profile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
-      .then(([student, favoriteBooks, myBooks]) => {
-        const user = profileToUser(student);
-        setProfile(user); onProfileUpdated(user); setFavorites(favoriteBooks.length); setListings(myBooks.length);
-      })
-      .catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+    void getH5Profile().then((student) => { const user = profileToUser(student); setProfile(user); onProfileUpdated(user); }).catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+    void demoRepository.listFavorites().then((favoriteBooks) => setFavorites(favoriteBooks.length)).catch(() => undefined);
+    void demoRepository.listMyListings().then((myBooks) => setListings(myBooks.length)).catch(() => undefined);
   }, [notify, onProfileUpdated]);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
   return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
@@ -576,7 +573,7 @@ function ProfileEditPage({ navigate, notify, currentUser, onProfileUpdated }: { 
 function MenuButton({ icon: Icon, label, detail, onClick, danger }: { icon: typeof Heart; label: string; detail: string; onClick: () => void; danger?: boolean }) { return <button className={danger ? 'danger' : ''} onClick={onClick}><span><Icon /></span><div><strong>{label}</strong><small>{detail}</small></div><ChevronRight /></button>; }
 
 function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [books, setBooks] = useState<Book[]>(); useEffect(() => { demoRepository.listFavorites().then(setBooks); }, []);
+  const [books, setBooks] = useState<Book[] | undefined>(() => peekFavorites()); useEffect(() => { demoRepository.listFavorites().then(setBooks); }, []);
   return <AppShell navigate={navigate} title="我的收藏" back className="simple-list-page">{books === undefined ? <InlineLoading /> : books.length ? <div className="listing-stack">{books.map((book) => <BookListCard book={book} navigate={navigate} favorite onFavorite={async () => { await demoRepository.toggleFavorite(book.id); setBooks(books.filter((item) => item.id !== book.id)); notify('已取消收藏'); }} key={book.id} />)}</div> : <div className="inline-state large"><Image src="/assets/tobby-question.webp" alt="收藏为空" width={760} height={760} /><h3>收藏夹还空空的</h3><p>看到心仪的书，点一下爱心就能在这里找到它。</p><button className="primary-button" onClick={() => navigate('/category')}>去发现好书</button></div>}</AppShell>;
 }
 
@@ -641,6 +638,8 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   }, []);
   useEffect(() => {
     let active = true;
+    const sid = demoRepository.getAuthenticatedSid();
+    if (sid && sid !== 'guest') void Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings()]);
     void restoreH5Session().then((user) => {
       if (!active) return;
       if (user?.campusStatus === 'VERIFIED') {
