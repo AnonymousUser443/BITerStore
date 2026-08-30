@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { Button, Image, Text, View } from '@tarojs/components'
+import { Button, Image, Swiper, SwiperItem, Text, View } from '@tarojs/components'
 import { AppShell, Avatar, BookCover } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository, getUser } from '@/domain/repository'
@@ -58,7 +58,7 @@ export default function ListingDetailPage() {
   const unavailable = item.status !== 'available'
   const label = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }[item.status]
   return <AppShell title='商品详情' back className='detail-page'>
-    <View className='detail-gallery'>{localImages.length ? localImages.map((url, index) => <Image key={`${url}-${index}`} src={url} mode='aspectFill' />) : <BookCover listing={item} />}{unavailable && <Text>{label}</Text>}</View>
+    <View className='detail-gallery-shell'><Swiper className='detail-gallery' indicatorDots={localImages.length > 1} indicatorColor='rgba(255,255,255,.58)' indicatorActiveColor='#ffffff' autoplay={localImages.length > 1} circular={localImages.length > 1} interval={4000} duration={500}>{localImages.length ? localImages.map((url, index) => <SwiperItem key={`${url}-${index}`}><Image className='detail-slide' src={url} mode='aspectFit' /></SwiperItem>) : <SwiperItem><BookCover listing={item} /></SwiperItem>}</Swiper>{unavailable && <Text className='gallery-status'>{label}</Text>}</View>
     <View className='detail-card'><View className='detail-title'><View><Text className={`status-pill ${item.status}`}>{label}</Text><Text className='detail-heading'>{item.title}</Text><Text className='detail-author'>{item.author}</Text></View><Button id='e2e-detail-favorite' disabled={pendingAction === 'favorite'} onClick={toggleFavorite}><Glyph name='heart' />{favorite ? '✓' : ''}</Button></View><View className='detail-price'><Text className='detail-current-price'>¥{item.price.toFixed(2)}</Text><Text className='detail-original-price'>¥{item.originalPrice.toFixed(2)}</Text><Text className='detail-condition'>{item.condition}</Text></View><View className='detail-facts'><Text>⌖ {item.campus}校区</Text><Text>▥ {item.course}</Text><Text>ⓘ ISBN {item.isbn}</Text></View><View className='description-block'><Text className='description-title'>书籍简介</Text><Text className='description-copy'>{item.description}</Text><View>{item.tags.map((tag) => <Text key={tag}>#{tag}</Text>)}</View></View></View>
     <View className='seller-card'><Avatar user={seller} size={52} /><View><Text className='seller-name'>{seller.name} ◈</Text><Text className='seller-campus'>{seller.campus}校区 · 已完成校园认证</Text><Text className='seller-response'>{seller.responseTime}</Text></View><Button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系'}</Button></View>
     <View className='safety-note'><Glyph name='shield' />建议在校内公共场所当面验书，确认书况后再付款。</View>

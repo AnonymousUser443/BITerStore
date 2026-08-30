@@ -396,7 +396,30 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
     finally { setPendingAction(undefined); }
   };
   const contactLabel = ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系';
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{displayImages.length ? displayImages.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+}
+
+function DetailGallery({ images, book, unavailable }: { images: string[]; book: Book; unavailable: boolean }) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState(0)
+  const total = Math.max(images.length, 1)
+  const show = useCallback((index: number) => {
+    const next = (index + total) % total
+    setActive(next)
+    const viewport = viewportRef.current
+    if (viewport) viewport.scrollTo({ left: viewport.clientWidth * next, behavior: 'smooth' })
+  }, [total])
+  useEffect(() => {
+    if (total < 2) return
+    const timer = window.setInterval(() => setActive((current) => {
+      const next = (current + 1) % total
+      const viewport = viewportRef.current
+      if (viewport) viewport.scrollTo({ left: viewport.clientWidth * next, behavior: 'smooth' })
+      return next
+    }), 4000)
+    return () => window.clearInterval(timer)
+  }, [total])
+  return <div className="detail-gallery-shell"><div className="detail-gallery" ref={viewportRef} onScroll={(event) => { const width = event.currentTarget.clientWidth; if (width) setActive(Math.round(event.currentTarget.scrollLeft / width)) }}>{images.length ? images.map((image, index) => <img src={image} alt={`${book.title} 实拍图 ${index + 1}`} key={`${image.slice(-20)}-${index}`} />) : <BookCover book={book} />}</div>{unavailable && <span className="gallery-status">{statusLabel(book.status)}</span>}{total > 1 && <div className="gallery-dots" aria-label={`第 ${active + 1} 张，共 ${total} 张`}>{Array.from({ length: total }, (_, index) => <button className={active === index ? 'active' : ''} aria-label={`查看第 ${index + 1} 张图片`} onClick={() => show(index)} key={index} />)}</div>}</div>
 }
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {

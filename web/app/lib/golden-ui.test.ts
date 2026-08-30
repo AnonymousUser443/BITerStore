@@ -60,6 +60,15 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
   })
 
+  it('autoplays one detail image at a time and keeps actions at the bottom', () => {
+    const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(detailPage).toContain('function DetailGallery')
+    expect(detailPage).toContain('window.setInterval')
+    expect(detailPage).toContain('scrollTo')
+    expect(styles).toContain('scroll-snap-type: x mandatory')
+    expect(styles).toContain('.detail-cta { grid-row: 4; position: sticky;')
+  })
+
   it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {
     const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
     expect(myListingsPage).not.toContain('window.confirm')

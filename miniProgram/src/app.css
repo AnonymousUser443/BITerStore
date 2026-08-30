@@ -260,6 +260,8 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .inline-state.compact > image, .inline-state.compact > taro-image-core { width: 130px; height: 130px; }
 .detail-gallery > image { width: 100%; height: 275px; flex: 0 0 100%; overflow: hidden; border-radius: 19px; }
 .detail-gallery > image > img { width: 100%; height: 100%; object-fit: cover; }
+.detail-gallery swiper-item, .detail-gallery .detail-slide { width: 100%; height: 100%; }
+.detail-gallery .detail-slide > img { width: 100%; height: 100%; object-fit: contain; }
 .detail-cta > taro-button-core.report-action { display: flex; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; color: #777269; font-size: 10.5px; }
 .message-content { max-width: 72%; }
 .message-bubble { display: block; margin: 0; padding: 10px 12px; border: 1px solid #ded4be; border-radius: 6px 16px 16px 16px; background: rgba(255,253,248,.91); font-size: 11px; line-height: 1.6; }
