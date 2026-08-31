@@ -12,6 +12,9 @@ const KEYS = {
 const LIST_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:list:';
 const MY_LISTING_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:mine:';
 const FAVORITE_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:favorites:';
+const THREAD_LIST_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:threads:';
+const THREAD_DETAIL_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:thread:';
+const NOTIFICATION_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:notifications:';
 const knownBooks = new Map<string, Book>();
 const wait = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,6 +51,9 @@ export function filterBooks(books: Book[], filters: BookFilters): Book[] {
 function listSnapshotKey(filters: BookFilters) { return `${LIST_SNAPSHOT_PREFIX}${encodeURIComponent(JSON.stringify(filters))}`; }
 function myListingSnapshotKey() { return `${MY_LISTING_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
 function favoriteSnapshotKey() { return `${FAVORITE_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
+function threadListSnapshotKey() { return `${THREAD_LIST_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
+function threadDetailSnapshotKey(id: string) { return `${THREAD_DETAIL_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}:${encodeURIComponent(id)}`; }
+function notificationSnapshotKey() { return `${NOTIFICATION_SNAPSHOT_PREFIX}${encodeURIComponent(localRepository.getAuthenticatedSid())}`; }
 function remember(items: Book[]) { items.forEach((item) => knownBooks.set(item.id, item)); return items; }
 function updateSnapshots(update: (items: Book[]) => Book[], prefixes = [LIST_SNAPSHOT_PREFIX, MY_LISTING_SNAPSHOT_PREFIX, FAVORITE_SNAPSHOT_PREFIX]) {
   if (typeof window === 'undefined') return;
@@ -70,6 +76,17 @@ export function peekMyListings(): Book[] | undefined {
 export function peekFavorites(): Book[] | undefined {
   const cached = read<Book[] | undefined>(favoriteSnapshotKey(), undefined);
   return cached ? remember(cached) : undefined;
+}
+export function peekThreads(): ChatThread[] | undefined { return read<ChatThread[] | undefined>(threadListSnapshotKey(), undefined); }
+export function peekThread(id: string): ChatThread | undefined { return read<ChatThread | undefined>(threadDetailSnapshotKey(id), undefined); }
+export function peekNotifications(): Notification[] | undefined { return read<Notification[] | undefined>(notificationSnapshotKey(), undefined); }
+function enrichThread(value: ChatThread): ChatThread { return value.book ? value : { ...value, book: peekBook(value.bookId) }; }
+function writeThread(value: ChatThread) {
+  const enriched = enrichThread(value);
+  write(threadDetailSnapshotKey(enriched.id), enriched);
+  const threads = peekThreads() || [];
+  write(threadListSnapshotKey(), [enriched, ...threads.filter((thread) => thread.id !== enriched.id)]);
+  return enriched;
 }
 export function peekBook(id: string): Book | undefined {
   const known = knownBooks.get(id);
@@ -168,11 +185,18 @@ export const demoRepository: DemoRepository = {
   async updateListingStatus(id, status) { await activeRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },
   async deleteListing(id) { await activeRepository().deleteListing(id); knownBooks.delete(id); updateSnapshots((items) => items.filter((item) => item.id !== id)); },
   async listMyListings() { const items = remember(await activeRepository().listMyListings()); write(myListingSnapshotKey(), items); return items; },
-  listThreads: () => activeRepository().listThreads(),
-  listNotifications: () => activeRepository().listNotifications(),
-  getThread: (id) => activeRepository().getThread(id),
-  sendMessage: (threadId, text) => activeRepository().sendMessage(threadId, text),
-  ensureThread: (bookId) => activeRepository().ensureThread(bookId),
+  async listThreads() { const items = (await activeRepository().listThreads()).map(enrichThread); write(threadListSnapshotKey(), items); items.forEach((item) => write(threadDetailSnapshotKey(item.id), item)); return items; },
+  async listNotifications() { const items = await activeRepository().listNotifications(); write(notificationSnapshotKey(), items); return items; },
+  async getThread(id) { const item = await activeRepository().getThread(id); return item ? writeThread(item) : null; },
+  async sendMessage(threadId, text) { const message = await activeRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }); return message; },
+  async ensureThread(bookId) {
+    const id = await activeRepository().ensureThread(bookId);
+    if (!peekThread(id)) {
+      const book = peekBook(bookId);
+      if (book) writeThread({ id, participantId: book.sellerId, participant: book.seller, buyerId: localRepository.getAuthenticatedSid(), bookId, book, unread: 0, updatedAt: '刚刚', messages: [] });
+    }
+    return id;
+  },
   getProfile: () => activeRepository().getProfile(),
   isOnboardingComplete: () => localRepository.isOnboardingComplete(),
   completeOnboarding: () => localRepository.completeOnboarding(),

@@ -9,13 +9,14 @@ export class ConversationsService {
       where: { members: { some: { userId } } },
       orderBy: { lastMessageAt: 'desc' },
       include: {
-        listing: { select: { id: true, title: true, status: true } },
+        listing: { select: { id: true, title: true, author: true, isbn: true, category: true, course: true, priceCents: true, originalPriceCents: true, condition: true, campus: true, description: true, status: true, sellerId: true, createdAt: true, tags: true, images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' } }, orderBy: { sortOrder: 'asc' }, select: { id: true } } } },
         members: { include: { user: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } },
         messages: { orderBy: { id: 'desc' }, take: 1 }
       }
     })
     return conversations.map((conversation) => ({
       ...conversation,
+      listing: { ...conversation.listing, images: conversation.listing.images.map((image) => ({ ...image, url: `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/media/${encodeURIComponent(image.id)}` })) },
       members: conversation.members.map((member) => ({ ...member, lastReadMessageId: member.lastReadMessageId?.toString() ?? null })),
       messages: conversation.messages.map((message) => ({ ...message, id: message.id.toString() }))
     }))

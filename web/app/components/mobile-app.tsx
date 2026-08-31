@@ -21,7 +21,7 @@ import {
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
-import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings } from '../lib/repository';
+import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
@@ -49,6 +49,7 @@ const UI_ASSETS = [
 ] as const;
 
 const CurrentUserContext = createContext<User | undefined>(undefined);
+function warmAccountSnapshots() { return Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()]); }
 const PROFILE_SNAPSHOT_KEY = 'biterstore:v1:snapshot:profile';
 
 function readProfileSnapshot(): User | undefined {
@@ -271,6 +272,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
       const session = await loginWithCampusCookie(registrationToken);
       const profile = await getH5Profile();
       demoRepository.markAuthenticated(session.user.id);
+      void warmAccountSnapshots();
       onAuthenticated(profile);
       navigate('/home');
     } finally {
@@ -469,9 +471,9 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
 function FormField({ label, children, required, error }: { label: string; children: React.ReactNode; required?: boolean; error?: boolean }) { return <label className={`form-field ${error ? 'error' : ''}`}><span>{required && <em>*</em>}{label}</span>{children}</label>; }
 
 function MessagesPage({ navigate }: { navigate: (to: string) => void }) {
-  const [threads, setThreads] = useState<ChatThread[]>([]); const [items, setItems] = useState<Notification[]>([]);
-  useEffect(() => { Promise.all([demoRepository.listThreads(), demoRepository.listNotifications()]).then(([nextThreads, nextItems]) => { setThreads(nextThreads); setItems(nextItems); }); }, []);
-  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3><strong>{user.name}</strong><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
+  const [threads, setThreads] = useState<ChatThread[]>(() => peekThreads() || []); const [items, setItems] = useState<Notification[]>(() => peekNotifications() || []);
+  useEffect(() => { void demoRepository.listThreads().then(setThreads).catch(() => undefined); void demoRepository.listNotifications().then(setItems).catch(() => undefined); }, []);
+  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3><strong>{user.name}</strong><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || (thread.book ? `我想咨询《${thread.book.title}》` : '从一本书开始聊聊吧')}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
 }
 
 function NotificationDetailPage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
@@ -483,9 +485,14 @@ function NotificationDetailPage({ type, navigate }: { type: string; navigate: (t
   return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
 }
 
+function ConversationBookMessage({ thread, book, currentUser, user, navigate }: { thread: ChatThread; book: Book; currentUser?: User; user: User; navigate: (to: string) => void }) {
+  const mine = !thread.buyerId || thread.buyerId === currentUser?.id;
+  return <div className={`message-row ${mine ? 'mine' : ''}`}>{!mine && <Avatar user={user} size={37} />}<div><button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button><p>我想咨询这本书</p><time>会话关联商品</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>;
+}
+
 function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: (to: string) => void; notify: (text: string) => void }) {
   const currentUser = useContext(CurrentUserContext);
-  const [thread, setThread] = useState<ChatThread | null>(); const [text, setText] = useState(''); const [error, setError] = useState(''); const [attempt, setAttempt] = useState(0);
+  const [thread, setThread] = useState<ChatThread | null | undefined>(() => threadId.startsWith('new-') ? undefined : peekThread(threadId)); const [text, setText] = useState(''); const [error, setError] = useState(''); const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -495,6 +502,8 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
           if (active) navigate(`/messages/${id}`);
           return;
         }
+        const cached = peekThread(threadId);
+        if (active && cached) setThread(cached);
         const loaded = await demoRepository.getThread(threadId);
         if (!loaded) throw new Error('会话不存在或已不可访问');
         if (active) setThread(loaded);
@@ -508,9 +517,9 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
   }, [threadId, navigate, notify, attempt]);
   if (thread === undefined) return <AppShell navigate={navigate} title="消息" back noNav><InlineLoading /></AppShell>;
   if (thread === null) return <AppShell navigate={navigate} title="消息" back noNav><div className="inline-state large"><Image src="/assets/tobby-sad.webp" alt="会话加载失败" width={760} height={760} /><h3>会话加载失败</h3><p>{error}</p><button className="primary-button" onClick={() => { setThread(undefined); setError(''); setAttempt((value) => value + 1); }}>重新加载</button></div></AppShell>;
-  const user = thread.participant || getUser(thread.participantId); const book = seedBooks.find((item) => item.id === thread.bookId) ?? seedBooks[0];
+  const user = thread.participant || getUser(thread.participantId); const book = thread.book || peekBook(thread.bookId) || seedBooks.find((item) => item.id === thread.bookId) || seedBooks[0];
   const send = async () => { if (!text.trim()) return; const message = await demoRepository.sendMessage(thread.id, text.trim()); setThread({ ...thread, messages: [...thread.messages, message] }); setText(''); };
-  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
+  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream"><ConversationBookMessage thread={thread} book={book} currentUser={currentUser} user={user} navigate={navigate} />{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
 }
 
 function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
@@ -639,11 +648,12 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   useEffect(() => {
     let active = true;
     const sid = demoRepository.getAuthenticatedSid();
-    if (sid && sid !== 'guest') void Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings()]);
+    if (sid && sid !== 'guest') void warmAccountSnapshots();
     void restoreH5Session().then((user) => {
       if (!active) return;
       if (user?.campusStatus === 'VERIFIED') {
         demoRepository.markAuthenticated(user.id);
+        if (sid !== user.id) void warmAccountSnapshots();
         const profile = profileToUser(user);
         writeProfileSnapshot(profile);
         setCurrentUser(profile);

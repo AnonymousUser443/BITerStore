@@ -14,8 +14,8 @@ export interface DemoRepository {
   reportListing(id: string, reason: string): Promise<void>;
   saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
   updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; peekMyListings(): Listing[] | undefined;
-  listThreads(): Promise<ChatThread[]>; getThread(id: string): Promise<ChatThread>; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
-  listNotifications(): Promise<Notification[]>; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  listThreads(): Promise<ChatThread[]>; peekThreads(): ChatThread[] | undefined; getThread(id: string): Promise<ChatThread>; peekThread(id: string): ChatThread | undefined; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
+  listNotifications(): Promise<Notification[]>; peekNotifications(): Notification[] | undefined; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
@@ -41,10 +41,13 @@ const localRepository: DemoRepository = {
   async listMyListings() { return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID) },
   peekMyListings() { return listingCache.filter((item) => item.sellerId === CURRENT_USER_ID) },
   async listThreads() { return storageAdapter.get(KEYS.threads, seedThreads) },
+  peekThreads() { return storageAdapter.peek(KEYS.threads, seedThreads) },
   async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return thread },
+  peekThread(id) { return storageAdapter.peek(KEYS.threads, seedThreads).find((thread) => thread.id === id) },
   async sendMessage(threadId, text, mediaId) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), kind: mediaId ? 'image' : 'text', mediaId }; const threads = (await storageAdapter.get(KEYS.threads, seedThreads)).map((x) => x.id === threadId ? { ...x, updatedAt: message.createdAt, messages: [...x.messages, message] } : x); await storageAdapter.set(KEYS.threads, threads); return message },
   async ensureThread(listingId) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const existing = threads.find((x) => x.listingId === listingId); if (existing) return existing.id; const listing = await this.getListing(listingId); const thread: ChatThread = { id: `thread-${listingId}`, participantId: listing.sellerId, listingId, unread: 0, updatedAt: '刚刚', messages: [] }; await storageAdapter.set(KEYS.threads, [thread, ...threads]); return thread.id },
   async listNotifications() { return storageAdapter.get(KEYS.notifications, seedNotifications) },
+  peekNotifications() { return storageAdapter.peek(KEYS.notifications, seedNotifications) },
   async getProfile() { return storageAdapter.get<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   peekProfile() { return storageAdapter.peek<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   async updateProfile(profile) { const current = await this.getProfile(); const updated = { ...current, ...profile }; await storageAdapter.set('profile', updated); return updated },
@@ -69,5 +72,5 @@ export function getUser(id: string) { return users.find((x) => x.id === id) ?? u
 export const demoRepository: DemoRepository = typeof __API_URL__ !== 'undefined' && Boolean(__API_URL__) && !__BITERSTORE_E2E__ ? apiRepository : localRepository
 
 export async function warmAccountSnapshots() {
-  await Promise.allSettled([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
+  await Promise.allSettled([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()])
 }

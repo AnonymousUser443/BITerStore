@@ -75,7 +75,9 @@ export interface Message {
 export interface ChatThread {
   id: string;
   participantId: string;
+  buyerId?: string;
   bookId: string;
+  book?: Book;
   unread: number;
   updatedAt: string;
   messages: Message[];

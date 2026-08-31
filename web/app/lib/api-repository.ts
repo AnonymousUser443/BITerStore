@@ -43,8 +43,11 @@ interface ApiMember { userId: string; user?: ApiUser }
 interface ApiConversation {
   id: string;
   listingId: string;
+  buyerId?: string;
   sellerId: string;
   lastMessageAt: string;
+  createdAt?: string;
+  listing?: ApiListing;
   unread?: number;
   members?: ApiMember[];
   messages?: ApiMessage[];
@@ -100,10 +103,11 @@ function compactThreadTime(value: string) {
 
 function thread(value: ApiConversation): ChatThread {
   const other = (value.members || []).find((member) => member.userId !== currentUserId()) || (value.members || [])[0];
+  const conversationBook = value.listing ? book(value.listing) : undefined;
   return {
-    id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? user(other.user) : undefined,
+    id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? user(other.user) : undefined, buyerId: value.buyerId,
     bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: compactThreadTime(value.lastMessageAt),
-    messages: (value.messages || []).map(message),
+    book: conversationBook, messages: (value.messages || []).map(message),
   };
 }
 

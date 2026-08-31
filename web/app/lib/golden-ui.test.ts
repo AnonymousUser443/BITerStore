@@ -60,6 +60,17 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
   })
 
+  it('paints message snapshots immediately and anchors every chat to its listing', () => {
+    const messagesPage = mobileApp.slice(mobileApp.indexOf('function MessagesPage'), mobileApp.indexOf('function NotificationDetailPage'))
+    const chatPage = mobileApp.slice(mobileApp.indexOf('function ConversationBookMessage'), mobileApp.indexOf('function ProfilePage'))
+    expect(messagesPage).toContain('peekThreads() || []')
+    expect(messagesPage).toContain('peekNotifications() || []')
+    expect(chatPage).toContain('peekThread(threadId)')
+    expect(chatPage).toContain('我想咨询这本书')
+    expect(chatPage).toContain('会话关联商品')
+    expect(chatPage).toContain('navigate(`/books/${book.id}`)')
+  })
+
   it('autoplays one detail image at a time and keeps actions at the bottom', () => {
     const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
     expect(mobileApp).toContain("const hideNavigation = noNav || className === 'detail-page'")
