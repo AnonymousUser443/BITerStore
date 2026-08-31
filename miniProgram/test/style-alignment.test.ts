@@ -132,13 +132,29 @@ describe('Golden Reference style alignment', () => {
     expect(visual).toContain("type: 'fixed-compact-canvas'")
   })
 
-  it('injects the ignored local AppID into every WeApp build without committing it', () => {
+  it('injects the ignored local AppID and stable base-library version into every WeApp build', () => {
     const packageJson = read('package.json')
     const syncScript = read('scripts/sync-weapp-project-config.mjs')
     expect(packageJson.match(/node scripts\/sync-weapp-project-config\.mjs/g)).toHaveLength(2)
     expect(syncScript).toContain('project.private.config.json')
     expect(syncScript).toContain("dist', 'project.config.json")
+    expect(syncScript).toContain('outputConfig.libVersion = libVersion')
     expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
+  })
+
+  it('covers both required publish images before invoking the WeApp fixture assistant', () => {
+    const publish = read('src/pages/publish/index.tsx')
+    const e2e = read('scripts/weapp-e2e.mjs')
+    expect(publish).toContain("id='e2e-publish-isbn-media'")
+    expect(e2e).toContain("openStable('switchTab', '/pages/publish/index')")
+    expect(e2e).toContain("required(page, '#e2e-publish-isbn-media')")
+    expect(e2e).toContain("requiredEventually(page, '#e2e-publish-title')")
+    expect(e2e).toContain('route: lastKnownRoute')
+    expect(e2e).not.toContain('void app.currentPage().then')
+    expect(e2e).toContain("knownAutomationNoise.push({ kind: 'rawPath'")
+    expect(e2e).toContain('eventTime - noise.time <= 20000')
+    expect(e2e).toContain('duringRouteObservation')
+    expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
   })
 
   it('gives native navigation immediate feedback and keeps the card detail action wired', () => {
@@ -159,6 +175,14 @@ describe('Golden Reference style alignment', () => {
     expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
     expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
     expect(detail).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+  })
+
+  it('avoids the unsupported only-child selector in WeApp styles', () => {
+    const golden = read('src/golden.css')
+    const listings = read('src/pages/my-listings/index.tsx')
+    expect(golden).not.toContain(':only-child')
+    expect(golden).toContain('.manage-listing-actions.single-action > button')
+    expect(listings).toContain("['available', 'offline'].includes(item.status) ? '' : ' single-action'")
   })
 
   it('hides an empty course fact and enlarges campus and ISBN metadata', () => {
