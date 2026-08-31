@@ -72,6 +72,25 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('.messages-page .thread-list > button { animation: none; }')
   })
 
+  it('does not replay entrance motion when browser history returns to a page', () => {
+    expect(mobileApp).toContain("currentIndex < previousIndex ? 'back' : 'forward'")
+    expect(mobileApp).toContain('function initialRouteTransition()')
+    expect(mobileApp).toContain('ROUTE_HISTORY_INDEX_KEY')
+    expect(mobileApp).toContain('routeScrollPositions.get(locationKeyRef.current)')
+    expect(mobileApp).toContain('container.scrollTop = position')
+    expect(mobileApp).toContain('route-${routeTransition}')
+    expect(styles).toContain('.route-view.route-forward { animation: route-in')
+    expect(styles).toContain('.route-view:not(.route-back) .listing-card')
+    expect(styles).not.toContain('.route-view { animation: route-in')
+  })
+
+  it('keeps cached object references when a background refresh is unchanged', () => {
+    expect(mobileApp).toContain('function preserveSnapshot<T>')
+    expect(mobileApp).toContain('JSON.stringify(current) === JSON.stringify(next) ? current : next')
+    expect(mobileApp).toContain('setThreads((current) => preserveSnapshot(current, next))')
+    expect(mobileApp).toContain('setBooks((current) => preserveSnapshot(current, next))')
+  })
+
   it('uses the uploaded cover photo on book cards and keeps a text fallback', () => {
     const bookCover = mobileApp.slice(mobileApp.indexOf('function BookCover'), mobileApp.indexOf('function BottomNav'))
     expect(bookCover).toContain('book.images?.[0]')
@@ -90,6 +109,13 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('scroll-snap-type: x mandatory')
     expect(styles).toContain('.detail-cta { grid-row: 4; position: sticky;')
     expect(styles).toContain('.detail-page .content-scroll.no-nav { padding-bottom:')
+  })
+
+  it('hides an empty course fact and keeps campus and ISBN easy to read', () => {
+    const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(detailPage).toContain('book.course.trim() ? <span><BookOpen />{book.course}</span> : null')
+    expect(styles).toContain('.detail-facts span { display: flex; align-items: center; gap: 7px; color: #62675a; font-size: 13px;')
+    expect(styles).not.toContain('.detail-price span, .detail-facts span, .description-block span')
   })
 
   it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {

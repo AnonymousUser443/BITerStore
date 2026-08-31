@@ -6,6 +6,7 @@ import { Glyph } from '@/components/Glyph'
 import { demoRepository } from '@/domain/repository'
 import { bindWechat, logout } from '@/domain/auth'
 import { requireAccount } from '@/domain/access'
+import { preserveSnapshot } from '@/domain/snapshot'
 import type { Campus, ProfileUpdate, User } from '@/domain/types'
 import { avatarAdapter, feedbackAdapter, navigationAdapter } from '@/platform'
 
@@ -20,9 +21,9 @@ export default function ProfilePage() {
   const [draft, setDraft] = useState<ProfileUpdate>()
   const load = useCallback(async () => {
     await Promise.allSettled([
-      demoRepository.getProfile().then(setUser),
-      demoRepository.listFavorites().then((favorites) => setCounts((current) => [favorites.length, current[1], current[2]])),
-      demoRepository.listMyListings().then((listings) => setCounts((current) => [current[0], listings.length, current[2]]))
+      demoRepository.getProfile().then((next) => setUser((current) => preserveSnapshot(current, next))),
+      demoRepository.listFavorites().then((favorites) => setCounts((current) => preserveSnapshot(current, [favorites.length, current[1], current[2]]))),
+      demoRepository.listMyListings().then((listings) => setCounts((current) => preserveSnapshot(current, [current[0], listings.length, current[2]])))
     ])
   }, [])
   useDidShow(() => { void requireAccount('请先使用学号登录后查看“我的”').then((allowed) => { if (allowed) return load() }) })

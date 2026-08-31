@@ -4,13 +4,14 @@ import { useDidShow } from '@tarojs/taro'
 import { AppShell, ListingCard } from '@/components/ui'
 import { demoRepository } from '@/domain/repository'
 import { requireAccount } from '@/domain/access'
+import { preserveSnapshot } from '@/domain/snapshot'
 import type { Listing, ListingStatus } from '@/domain/types'
 import { feedbackAdapter, navigationAdapter } from '@/platform'
 
 export default function MyListingsPage() {
   const [tab, setTab] = useState<ListingStatus | 'all'>('all')
   const [items, setItems] = useState<Listing[] | undefined>(() => demoRepository.peekMyListings())
-  const load = useCallback(() => demoRepository.listMyListings().then(setItems), [])
+  const load = useCallback(() => demoRepository.listMyListings().then((next) => setItems((current) => preserveSnapshot(current, next))), [])
   useDidShow(() => { void requireAccount('请先使用学号登录后管理商品').then((allowed) => { if (allowed) return load() }) })
   const visible = useMemo(() => items === undefined ? undefined : tab === 'all' ? items : items.filter((item) => item.status === tab), [items, tab])
   const change = async (item: Listing) => { await demoRepository.updateListingStatus(item.id, item.status === 'available' ? 'sold' : 'available'); await load() }

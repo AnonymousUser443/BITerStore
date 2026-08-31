@@ -10,7 +10,7 @@ import {
   Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2,
   UserRound, WandSparkles, X,
 } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CURRENT_USER_ID, seedBooks } from '../lib/demo-data';
 import {
   destroyBitLoginChallenge,
@@ -51,6 +51,45 @@ const UI_ASSETS = [
 const CurrentUserContext = createContext<User | undefined>(undefined);
 function warmAccountSnapshots() { return Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()]); }
 const PROFILE_SNAPSHOT_KEY = 'biterstore:v1:snapshot:profile';
+const routeScrollPositions = new Map<string, number>();
+const ROUTE_HISTORY_INDEX_KEY = '__biterstoreHistoryIndex';
+let latestRouteHistoryIndex: number | undefined;
+
+function preserveSnapshot<T>(current: T, next: T): T {
+  if (current === next) return current;
+  try { return JSON.stringify(current) === JSON.stringify(next) ? current : next; } catch { return next; }
+}
+
+function currentLocationKey() { return `${window.location.pathname}${window.location.search}`; }
+
+function routeHistoryIndex() {
+  const value = window.history.state?.[ROUTE_HISTORY_INDEX_KEY];
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
+  const next = latestRouteHistoryIndex ?? 0;
+  const state = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+  window.history.replaceState({ ...state, [ROUTE_HISTORY_INDEX_KEY]: next }, '', currentLocationKey());
+  return next;
+}
+
+function initialRouteTransition(): 'forward' | 'back' {
+  const current = routeHistoryIndex();
+  const transition = latestRouteHistoryIndex !== undefined && current < latestRouteHistoryIndex ? 'back' : 'forward';
+  latestRouteHistoryIndex = current;
+  return transition;
+}
+
+function pushRoute(to: string) {
+  const current = routeHistoryIndex();
+  const next = Math.max(current, latestRouteHistoryIndex ?? current) + 1;
+  const state = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+  window.history.pushState({ ...state, [ROUTE_HISTORY_INDEX_KEY]: next }, '', to);
+  latestRouteHistoryIndex = next;
+}
+
+function rememberRouteScroll(locationKey: string) {
+  const container = document.querySelector<HTMLElement>('.content-scroll');
+  routeScrollPositions.set(locationKey, container?.scrollTop ?? window.scrollY);
+}
 
 function readProfileSnapshot(): User | undefined {
   try { return JSON.parse(window.localStorage.getItem(PROFILE_SNAPSHOT_KEY) || 'null') as User | undefined; } catch { return undefined; }
@@ -318,7 +357,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
   const [books, setBooks] = useState<Book[] | undefined>(() => peekBooks(defaultFilters));
-  useEffect(() => { demoRepository.listBooks(defaultFilters).then(setBooks).catch(() => setBooks([])); }, []);
+  useEffect(() => { demoRepository.listBooks(defaultFilters).then((next) => setBooks((current) => preserveSnapshot(current, next))).catch(() => setBooks([])); }, []);
   return (
     <AppShell active="/home" navigate={navigate} className="home-page">
       <button className="search-box" onClick={() => navigate('/category')}><Search size={21} /><span>搜索书名、作者或 ISBN</span><SlidersHorizontal size={18} /></button>
@@ -345,7 +384,7 @@ function CategoryPage({ navigate, notify }: { navigate: (to: string) => void; no
   useEffect(() => {
     let active = true;
     demoRepository.listBooks(filters).then((result) => {
-      if (active) { setBooks(result); setLoading(false); }
+      if (active) { setBooks((current) => preserveSnapshot(current, result)); setLoading(false); }
     });
     return () => { active = false; };
   }, [filters]);
@@ -368,7 +407,7 @@ function InlineEmpty({ navigate }: { navigate: (to: string) => void }) { return 
 function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: string) => void; notify: (text: string) => void }) {
   const currentUser = useContext(CurrentUserContext);
   const [book, setBook] = useState<Book | null | undefined>(() => peekBook(id)); const [favorite, setFavorite] = useState(false); const [images, setImages] = useState<string[]>([]); const [pendingAction, setPendingAction] = useState<'favorite' | 'contact'>();
-  useEffect(() => { demoRepository.getBook(id).then((value) => { setBook(value); if (value?.imageStoreKey) getImages(value.imageStoreKey).then(setImages); }); }, [id]);
+  useEffect(() => { demoRepository.getBook(id).then((value) => { setBook((current) => preserveSnapshot(current, value)); if (value?.imageStoreKey) getImages(value.imageStoreKey).then((next) => setImages((current) => preserveSnapshot(current, next))); }); }, [id]);
   useEffect(() => {
     let active = true;
     if (!currentUser) return;
@@ -402,7 +441,7 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
     finally { setPendingAction(undefined); }
   };
   const contactLabel = ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系';
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span>{book.course.trim() ? <span><BookOpen />{book.course}</span> : null}<span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
 }
 
 function DetailGallery({ images, book, unavailable }: { images: string[]; book: Book; unavailable: boolean }) {
@@ -475,14 +514,14 @@ function FormField({ label, children, required, error }: { label: string; childr
 
 function MessagesPage({ navigate }: { navigate: (to: string) => void }) {
   const [threads, setThreads] = useState<ChatThread[]>(() => peekThreads() || []); const [items, setItems] = useState<Notification[]>(() => peekNotifications() || []);
-  useEffect(() => { void demoRepository.listThreads().then(setThreads).catch(() => undefined); void demoRepository.listNotifications().then(setItems).catch(() => undefined); }, []);
+  useEffect(() => { void demoRepository.listThreads().then((next) => setThreads((current) => preserveSnapshot(current, next))).catch(() => undefined); void demoRepository.listNotifications().then((next) => setItems((current) => preserveSnapshot(current, next))).catch(() => undefined); }, []);
   return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3><strong>{user.name}</strong><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || (thread.book ? `我想咨询《${thread.book.title}》` : '从一本书开始聊聊吧')}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
 }
 
 function NotificationDetailPage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
   const notificationType = (['like', 'comment', 'system', 'follow'].includes(type) ? type : 'system') as Notification['type'];
   const [items, setItems] = useState<Notification[]>();
-  useEffect(() => { demoRepository.listNotifications().then((values) => setItems(values.filter((item) => item.type === notificationType))); }, [notificationType]);
+  useEffect(() => { demoRepository.listNotifications().then((values) => { const next = values.filter((item) => item.type === notificationType); setItems((current) => preserveSnapshot(current, next)); }); }, [notificationType]);
   const summary = items?.[0] ?? { id: notificationType, type: notificationType, title: { like: '赞与收藏', comment: '评论与回复', system: '系统通知', follow: '新的关注' }[notificationType], subtitle: '暂无新通知', unread: 0 };
   const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[notificationType];
   return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
@@ -506,10 +545,10 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
           return;
         }
         const cached = peekThread(threadId);
-        if (active && cached) setThread(cached);
+        if (active && cached) setThread((current) => preserveSnapshot(current, cached));
         const loaded = await demoRepository.getThread(threadId);
         if (!loaded) throw new Error('会话不存在或已不可访问');
-        if (active) setThread(loaded);
+        if (active) setThread((current) => preserveSnapshot(current, loaded));
       } catch (cause) {
         if (!active) return;
         const message = cause instanceof Error ? cause.message : '会话加载失败，请稍后重试';
@@ -528,7 +567,7 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
 function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
   const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(() => peekFavorites()?.length || 0); const [listings, setListings] = useState(() => peekMyListings()?.length || 0);
   useEffect(() => {
-    void getH5Profile().then((student) => { const user = profileToUser(student); setProfile(user); onProfileUpdated(user); }).catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+    void getH5Profile().then((student) => { const user = profileToUser(student); setProfile((current) => preserveSnapshot(current, user)); onProfileUpdated(user); }).catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
     void demoRepository.listFavorites().then((favoriteBooks) => setFavorites(favoriteBooks.length)).catch(() => undefined);
     void demoRepository.listMyListings().then((myBooks) => setListings(myBooks.length)).catch(() => undefined);
   }, [notify, onProfileUpdated]);
@@ -585,12 +624,12 @@ function ProfileEditPage({ navigate, notify, currentUser, onProfileUpdated }: { 
 function MenuButton({ icon: Icon, label, detail, onClick, danger }: { icon: typeof Heart; label: string; detail: string; onClick: () => void; danger?: boolean }) { return <button className={danger ? 'danger' : ''} onClick={onClick}><span><Icon /></span><div><strong>{label}</strong><small>{detail}</small></div><ChevronRight /></button>; }
 
 function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [books, setBooks] = useState<Book[] | undefined>(() => peekFavorites()); useEffect(() => { demoRepository.listFavorites().then(setBooks); }, []);
+  const [books, setBooks] = useState<Book[] | undefined>(() => peekFavorites()); useEffect(() => { demoRepository.listFavorites().then((next) => setBooks((current) => preserveSnapshot(current, next))); }, []);
   return <AppShell navigate={navigate} title="我的收藏" back className="simple-list-page">{books === undefined ? <InlineLoading /> : books.length ? <div className="listing-stack">{books.map((book) => <BookListCard book={book} navigate={navigate} favorite onFavorite={async () => { await demoRepository.toggleFavorite(book.id); setBooks(books.filter((item) => item.id !== book.id)); notify('已取消收藏'); }} key={book.id} />)}</div> : <div className="inline-state large"><Image src="/assets/tobby-question.webp" alt="收藏为空" width={760} height={760} /><h3>收藏夹还空空的</h3><p>看到心仪的书，点一下爱心就能在这里找到它。</p><button className="primary-button" onClick={() => navigate('/category')}>去发现好书</button></div>}</AppShell>;
 }
 
 function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const [deleteTarget, setDeleteTarget] = useState<Book | null>(null); const [deletingId, setDeletingId] = useState<string>(); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
+  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const [deleteTarget, setDeleteTarget] = useState<Book | null>(null); const [deletingId, setDeletingId] = useState<string>(); const load = useCallback(() => { demoRepository.listMyListings().then((next) => setBooks((current) => preserveSnapshot(current, next))); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
   const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
   const remove = (book: Book) => setDeleteTarget(book);
@@ -628,9 +667,38 @@ function StatePage({ type, navigate }: { type: string; navigate: (to: string) =>
 
 export function MobileApp({ initialPath }: { initialPath: string }) {
   const hasCurrentAssetBundle = () => window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
-  const [path, setPath] = useState(initialPath || '/'); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'authenticated' | 'guest' | 'anonymous'>(() => { const sid = demoRepository.getAuthenticatedSid(); return sid === 'guest' ? 'guest' : sid ? 'authenticated' : 'anonymous'; }); const [currentUser, setCurrentUser] = useState<User | undefined>(readProfileSnapshot);
-  const navigate = useCallback((to: string) => { window.history.pushState({}, '', to); setPath(to.split('?')[0] || '/'); }, []);
-  useEffect(() => { const handler = () => setPath(window.location.pathname); window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler); }, []);
+  const [path, setPath] = useState(initialPath || '/'); const [routeTransition, setRouteTransition] = useState<'forward' | 'back'>(initialRouteTransition); const [toast, setToast] = useState(''); const [assetProgress, setAssetProgress] = useState(() => hasCurrentAssetBundle() ? 100 : 0); const [assetsReady, setAssetsReady] = useState(hasCurrentAssetBundle); const [authMode, setAuthMode] = useState<'authenticated' | 'guest' | 'anonymous'>(() => { const sid = demoRepository.getAuthenticatedSid(); return sid === 'guest' ? 'guest' : sid ? 'authenticated' : 'anonymous'; }); const [currentUser, setCurrentUser] = useState<User | undefined>(readProfileSnapshot); const locationKeyRef = useRef(currentLocationKey());
+  const navigate = useCallback((to: string) => { rememberRouteScroll(locationKeyRef.current); pushRoute(to); locationKeyRef.current = currentLocationKey(); setRouteTransition('forward'); setPath(to.split('?')[0] || '/'); }, []);
+  useEffect(() => {
+    const handler = () => {
+      rememberRouteScroll(locationKeyRef.current);
+      locationKeyRef.current = currentLocationKey();
+      const previousIndex = latestRouteHistoryIndex;
+      const currentIndex = routeHistoryIndex();
+      latestRouteHistoryIndex = currentIndex;
+      setRouteTransition(previousIndex !== undefined && currentIndex < previousIndex ? 'back' : 'forward');
+      setPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+  useLayoutEffect(() => {
+    if (routeTransition !== 'back') return;
+    const restoreScroll = () => {
+      const position = routeScrollPositions.get(locationKeyRef.current) ?? 0;
+      const container = document.querySelector<HTMLElement>('.content-scroll');
+      if (container) {
+        const inlineBehavior = container.style.scrollBehavior;
+        container.style.scrollBehavior = 'auto';
+        container.scrollTop = position;
+        if (inlineBehavior) container.style.scrollBehavior = inlineBehavior;
+        else container.style.removeProperty('scroll-behavior');
+      } else window.scrollTo(0, position);
+    };
+    restoreScroll();
+    const frame = window.requestAnimationFrame(restoreScroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [path, routeTransition]);
   useEffect(() => { if (!toast || /正在上传并发布\s+(?:[0-9]|[1-9][0-9])%$/.test(toast)) return; const timer = setTimeout(() => setToast(''), 2200); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => {
     let active = true;
@@ -666,7 +734,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     return () => { active = false; };
   }, []);
   const notify = useCallback((text: string) => setToast(text), []);
-  const updateCurrentUser = useCallback((profile: User) => { writeProfileSnapshot(profile); setCurrentUser(profile); }, []);
+  const updateCurrentUser = useCallback((profile: User) => { setCurrentUser((current) => { const next = preserveSnapshot(current, profile); if (next !== current) writeProfileSnapshot(profile); return next; }); }, []);
   const clearCurrentUser = useCallback(() => { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }, []);
   const toastProgress = Number(toast.match(/正在上传并发布\s+(\d+)%$/)?.[1] || 0);
   if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
@@ -693,5 +761,5 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;
   else if (effectivePath.startsWith('/states/')) page = <StatePage type={effectivePath.split('/')[2]} navigate={navigate} />;
   else page = <StatePage type="404" navigate={navigate} />;
-  return <CurrentUserContext.Provider value={currentUser}><main className="app-stage"><div className="route-view" key={effectivePath}>{page}</div>{toast && <div className={`toast ${toastProgress ? 'progress-toast' : ''}`} role="status"><Leaf size={17} /><span>{toast}</span>{toastProgress > 0 && <progress max="100" value={toastProgress} />}</div>}</main></CurrentUserContext.Provider>;
+  return <CurrentUserContext.Provider value={currentUser}><main className="app-stage"><div className={`route-view route-${routeTransition}`} key={effectivePath}>{page}</div>{toast && <div className={`toast ${toastProgress ? 'progress-toast' : ''}`} role="status"><Leaf size={17} /><span>{toast}</span>{toastProgress > 0 && <progress max="100" value={toastProgress} />}</div>}</main></CurrentUserContext.Provider>;
 }

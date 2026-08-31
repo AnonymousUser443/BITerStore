@@ -5,6 +5,7 @@ import { AppShell, Avatar } from '@/components/ui'
 import { Glyph, type GlyphName } from '@/components/Glyph'
 import { demoRepository, getUser } from '@/domain/repository'
 import { requireAccount } from '@/domain/access'
+import { preserveSnapshot } from '@/domain/snapshot'
 import type { ChatThread, Notification } from '@/domain/types'
 import { navigationAdapter } from '@/platform'
 
@@ -13,7 +14,7 @@ const noticeGlyphs: Record<Notification['type'], GlyphName> = { like: 'heart', c
 export default function MessagesPage() {
   const [threads, setThreads] = useState<ChatThread[]>(() => demoRepository.peekThreads() || [])
   const [notices, setNotices] = useState<Notification[]>(() => demoRepository.peekNotifications() || [])
-  const load = useCallback(() => { void demoRepository.listThreads().then(setThreads); void demoRepository.listNotifications().then(setNotices) }, [])
+  const load = useCallback(() => { void demoRepository.listThreads().then((next) => setThreads((current) => preserveSnapshot(current, next))); void demoRepository.listNotifications().then((next) => setNotices((current) => preserveSnapshot(current, next))) }, [])
   useDidShow(() => { void requireAccount('登录后才能查看消息').then((allowed) => { if (allowed) return load() }) })
   return <AppShell title='消息' active='messages' className='messages-page'>
     <View className='notification-grid'>{notices.map((notice) => <Button id={`e2e-notification-${notice.type}`} key={notice.id} onClick={() => navigationAdapter.go(`/pages/notification/detail?type=${notice.type}`)}><View className={`notice-icon ${notice.type}`}><Glyph name={noticeGlyphs[notice.type]} /></View><View className='notice-copy'><Text className='notice-title'>{notice.title}</Text><Text className='notice-subtitle'>{notice.subtitle}</Text><Text className='notice-link'>点击查看详情</Text></View><Glyph name='chevron' className='notice-chevron' />{notice.unread > 0 && <Text className='notice-count'>{notice.unread}</Text>}</Button>)}</View>

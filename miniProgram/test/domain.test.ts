@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { preserveSnapshot } from '@/domain/snapshot'
 import Taro from '@tarojs/taro'
 import { apiRequest } from '@/domain/api'
 import { defaultFilters, filterListings } from '@/domain/filters'
@@ -20,6 +21,12 @@ vi.mock('@tarojs/taro', () => ({ default: {
   navigateTo: vi.fn(), switchTab: vi.fn(), navigateBack: vi.fn(), getCurrentInstance: vi.fn(() => ({ router: { path: '' } })), setClipboardData: vi.fn()
 } }))
 describe('domain', () => {
+  it('keeps the current reference when a refreshed snapshot is unchanged', () => {
+    const current = [{ id: 'book-a', title: '高等数学' }]
+    expect(preserveSnapshot(current, [{ id: 'book-a', title: '高等数学' }])).toBe(current)
+    expect(preserveSnapshot(current, [{ id: 'book-a', title: '线性代数' }])).not.toBe(current)
+  })
+
   beforeEach(() => { memory.clear(); vi.stubGlobal('__API_URL__', 'http://api.test'); vi.mocked(Taro.request).mockClear() })
   it('无请求体的写请求会发送空 JSON 对象', async () => { await apiRequest('/empty', { method: 'POST' }); expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', data: {} })) })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })

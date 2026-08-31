@@ -21,6 +21,7 @@ describe('Golden Reference style alignment', () => {
     expect(h5Pages).toHaveLength(14)
     expect(h5Pages.every((file) => fs.readFileSync(file, 'utf8').includes("from '@/h5/GoldenRoute'"))).toBe(true)
     expect(read('src/h5/GoldenRoute.tsx')).toContain("from '../../../web/app/components/mobile-app'")
+    expect(read('src/h5/GoldenRoute.tsx')).not.toContain('scrollTo(0, 0)')
     expect(config).toContain("path.resolve(__dirname, '../../web/app')")
     expect(config).toContain(".set('lucide-react$'")
     expect(config).toContain(".set('next/image'")
@@ -158,5 +159,12 @@ describe('Golden Reference style alignment', () => {
     expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
     expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
     expect(detail).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+  })
+
+  it('hides an empty course fact and enlarges campus and ISBN metadata', () => {
+    const detail = read('src/pages/listing/detail.tsx')
+    const adapter = read('src/app.css')
+    expect(detail).toContain("item.course.trim() ? <Text>▥ {item.course}</Text> : null")
+    expect(adapter).toContain("font-size: 13px; line-height: 1.5;")
   })
 })

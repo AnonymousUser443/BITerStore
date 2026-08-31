@@ -1,4 +1,3 @@
-import { useLayoutEffect } from 'react'
 import { MobileApp } from '../../../web/app/components/mobile-app'
 
 function goldenPath() {
@@ -17,14 +16,5 @@ function goldenPath() {
 }
 
 export default function GoldenRoute() {
-  useLayoutEffect(() => {
-    const resetScroll = () => {
-      globalThis.scrollTo(0, 0)
-      document.querySelectorAll<HTMLElement>('.taro_router, .taro_page, .content-scroll').forEach((element) => { element.scrollTop = 0 })
-    }
-    resetScroll()
-    const frame = globalThis.requestAnimationFrame(resetScroll)
-    return () => globalThis.cancelAnimationFrame(frame)
-  }, [])
   return <MobileApp initialPath={goldenPath()} />
 }

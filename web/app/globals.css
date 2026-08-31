@@ -371,8 +371,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .detail-price del { color: #a6a195; font-size: 11px; }
 .detail-price span { margin-left: auto; padding: 5px 8px; border: 1px solid #d8cfb5; border-radius: 8px; color: #657054; font-size: 10px; }
 .detail-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.detail-facts span { display: flex; align-items: center; gap: 5px; color: #6d7065; font-size: 10px; }
-.detail-facts svg { width: 15px; }
+.detail-facts span { display: flex; align-items: center; gap: 7px; color: #62675a; font-size: 13px; line-height: 1.5; }
+.detail-facts svg { width: 17px; height: 17px; flex: 0 0 17px; }
 .detail-facts span:last-child { grid-column: 1 / -1; }
 .description-block { margin-top: 19px; padding-top: 15px; border-top: 1px dashed var(--border); }
 .description-block h2 { margin: 0; font: 700 15px "Noto Serif SC", serif; }
@@ -668,18 +668,18 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .profile-reminder button svg { width: 13px; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .route-view { animation: route-in .26s cubic-bezier(.2,.72,.24,1) both; }
+  .route-view.route-forward { animation: route-in .26s cubic-bezier(.2,.72,.24,1) both; }
   .toast { animation: toast-pop .28s cubic-bezier(.18,.89,.32,1.22) both; }
   .sheet-layer { animation: fade-in .18s ease-out both; }
   .filter-sheet { animation: sheet-rise .28s cubic-bezier(.2,.78,.2,1) both; }
   .guide-card, .onboarding-panel > img { animation: guide-in .32s cubic-bezier(.2,.78,.2,1) both; }
-  .listing-card, .thread-list > button, .notification-grid > button { animation: card-rise .3s cubic-bezier(.2,.72,.24,1) both; }
-  .listing-stack > :nth-child(2), .thread-list > :nth-child(2), .notification-grid > :nth-child(2) { animation-delay: 35ms; }
-  .listing-stack > :nth-child(3), .thread-list > :nth-child(3), .notification-grid > :nth-child(3) { animation-delay: 70ms; }
-  .listing-stack > :nth-child(4), .thread-list > :nth-child(4), .notification-grid > :nth-child(4) { animation-delay: 105ms; }
+  .route-view:not(.route-back) .listing-card, .route-view:not(.route-back) .thread-list > button, .route-view:not(.route-back) .notification-grid > button { animation: card-rise .3s cubic-bezier(.2,.72,.24,1) both; }
+  .route-view:not(.route-back) .listing-stack > :nth-child(2), .route-view:not(.route-back) .thread-list > :nth-child(2), .route-view:not(.route-back) .notification-grid > :nth-child(2) { animation-delay: 35ms; }
+  .route-view:not(.route-back) .listing-stack > :nth-child(3), .route-view:not(.route-back) .thread-list > :nth-child(3), .route-view:not(.route-back) .notification-grid > :nth-child(3) { animation-delay: 70ms; }
+  .route-view:not(.route-back) .listing-stack > :nth-child(4), .route-view:not(.route-back) .thread-list > :nth-child(4), .route-view:not(.route-back) .notification-grid > :nth-child(4) { animation-delay: 105ms; }
   .messages-page .thread-list > button { animation: none; }
-  .message-row { animation: message-in .24s cubic-bezier(.2,.72,.24,1) both; }
-  .publish-page .upload-card, .publish-page .ai-card, .publish-page .form-card, .publish-page .publish-preview { animation: card-rise .28s ease-out both; }
+  .route-view:not(.route-back) .message-row { animation: message-in .24s cubic-bezier(.2,.72,.24,1) both; }
+  .route-view:not(.route-back) .publish-page .upload-card, .route-view:not(.route-back) .publish-page .ai-card, .route-view:not(.route-back) .publish-page .form-card, .route-view:not(.route-back) .publish-page .publish-preview { animation: card-rise .28s ease-out both; }
   .nav-item.publish::after { animation: sparkle 2.4s ease-in-out infinite; }
   .search-tobby-hint img { animation: hint-float 3.6s ease-in-out infinite; }
   button:not(.nav-item), .listing-card, .thread-list > button, .profile-menu > button, .book-tile { transition: transform .18s cubic-bezier(.2,.72,.24,1), border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
@@ -815,7 +815,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .sheet-title button, .filter-group button { font-size: 11px; }
 .range-label, .filter-group > strong, .switch-row { font-size: 12.5px; }
 .detail-title p, .detail-price del, .description-block p { font-size: 12px; }
-.detail-price span, .detail-facts span, .description-block span, .seller-card p, .safety-note, .detail-cta > button:first-child { font-size: 10.5px; }
+.detail-price span, .description-block span, .seller-card p, .safety-note, .detail-cta > button:first-child { font-size: 10.5px; }
 .seller-card span { font-size: 9.5px; }
 .stepper p { font-size: 10px; }
 .add-image span, .ai-card span { font-size: 9.5px; }
