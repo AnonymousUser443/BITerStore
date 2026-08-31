@@ -21,6 +21,7 @@ describe('Golden Reference style alignment', () => {
     expect(h5Pages).toHaveLength(14)
     expect(h5Pages.every((file) => fs.readFileSync(file, 'utf8').includes("from '@/h5/GoldenRoute'"))).toBe(true)
     expect(read('src/h5/GoldenRoute.tsx')).toContain("from '../../../web/app/components/mobile-app'")
+    expect(read('src/h5/GoldenRoute.tsx')).not.toContain('scrollTo(0, 0)')
     expect(config).toContain("path.resolve(__dirname, '../../web/app')")
     expect(config).toContain(".set('lucide-react$'")
     expect(config).toContain(".set('next/image'")

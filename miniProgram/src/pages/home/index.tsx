@@ -5,6 +5,7 @@ import { AppShell, BookTile, RankItem } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository } from '@/domain/repository'
 import { defaultFilters } from '@/domain/filters'
+import { preserveSnapshot } from '@/domain/snapshot'
 import type { Listing } from '@/domain/types'
 import { navigationAdapter } from '@/platform'
 
@@ -12,7 +13,7 @@ const categories = ['全部', '教材教辅', '专业课', '考研考公', '文�
 
 export default function HomePage() {
   const [items, setItems] = useState<Listing[]>()
-  const load = useCallback(() => demoRepository.listListings().then(setItems), [])
+  const load = useCallback(() => demoRepository.listListings().then((next) => setItems((current) => preserveSnapshot(current, next))), [])
   useDidShow(() => { void load() })
   const openSearch = (filters = defaultFilters) => {
     // saveFilters updates its in-memory hand-off synchronously. Navigation can

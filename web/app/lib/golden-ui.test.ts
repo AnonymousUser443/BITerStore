@@ -72,6 +72,25 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('.messages-page .thread-list > button { animation: none; }')
   })
 
+  it('does not replay entrance motion when browser history returns to a page', () => {
+    expect(mobileApp).toContain("currentIndex < previousIndex ? 'back' : 'forward'")
+    expect(mobileApp).toContain('function initialRouteTransition()')
+    expect(mobileApp).toContain('ROUTE_HISTORY_INDEX_KEY')
+    expect(mobileApp).toContain('routeScrollPositions.get(locationKeyRef.current)')
+    expect(mobileApp).toContain('container.scrollTop = position')
+    expect(mobileApp).toContain('route-${routeTransition}')
+    expect(styles).toContain('.route-view.route-forward { animation: route-in')
+    expect(styles).toContain('.route-view:not(.route-back) .listing-card')
+    expect(styles).not.toContain('.route-view { animation: route-in')
+  })
+
+  it('keeps cached object references when a background refresh is unchanged', () => {
+    expect(mobileApp).toContain('function preserveSnapshot<T>')
+    expect(mobileApp).toContain('JSON.stringify(current) === JSON.stringify(next) ? current : next')
+    expect(mobileApp).toContain('setThreads((current) => preserveSnapshot(current, next))')
+    expect(mobileApp).toContain('setBooks((current) => preserveSnapshot(current, next))')
+  })
+
   it('uses the uploaded cover photo on book cards and keeps a text fallback', () => {
     const bookCover = mobileApp.slice(mobileApp.indexOf('function BookCover'), mobileApp.indexOf('function BottomNav'))
     expect(bookCover).toContain('book.images?.[0]')
