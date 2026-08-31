@@ -80,7 +80,10 @@ export function peekFavorites(): Book[] | undefined {
 export function peekThreads(): ChatThread[] | undefined { return read<ChatThread[] | undefined>(threadListSnapshotKey(), undefined); }
 export function peekThread(id: string): ChatThread | undefined { return read<ChatThread | undefined>(threadDetailSnapshotKey(id), undefined); }
 export function peekNotifications(): Notification[] | undefined { return read<Notification[] | undefined>(notificationSnapshotKey(), undefined); }
-function enrichThread(value: ChatThread): ChatThread { return value.book ? value : { ...value, book: peekBook(value.bookId) }; }
+function enrichThread(value: ChatThread): ChatThread {
+  if (value.book) { knownBooks.set(value.book.id, value.book); return value; }
+  return { ...value, book: peekBook(value.bookId) };
+}
 function writeThread(value: ChatThread) {
   const enriched = enrichThread(value);
   write(threadDetailSnapshotKey(enriched.id), enriched);
@@ -164,7 +167,7 @@ function activeRepository() {
 
 export const demoRepository: DemoRepository = {
   async listBooks(filters = defaultFilters) { const items = remember(await activeRepository().listBooks(filters)); write(listSnapshotKey(filters), items); return items; },
-  async getBook(id) { const item = await activeRepository().getBook(id); if (item) knownBooks.set(item.id, item); return item; },
+  async getBook(id) { const cached = peekBook(id); const item = await activeRepository().getBook(id); if (item) knownBooks.set(item.id, item); return item || cached || null; },
   async toggleFavorite(id) {
     const enabled = await activeRepository().toggleFavorite(id);
     const current = peekFavorites() || [];

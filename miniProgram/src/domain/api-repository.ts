@@ -18,7 +18,7 @@ function profile(value: any): User { return { id: value.id, studentNumber: value
 
 export const apiRepository: DemoRepository = {
   async listListings(filters = defaultFilters) { const data = await apiRequest<{ items: any[] }>('/listings' + apiQuery({ q: filters.query, category: filters.category, campus: filters.campus, limit: 50 })); return data.items.map(listing).map(remember).filter((item) => item.price >= filters.minPrice && item.price <= filters.maxPrice) },
-  async getListing(id) { return remember(listing(await apiRequest(`/listings/${id}`))) }, peekListing(id) { return listingCache.get(id) },
+  async getListing(id) { try { return remember(listing(await apiRequest(`/listings/${id}`))) } catch (cause) { const cached = listingCache.get(id); if (cached) return cached; throw cause } }, peekListing(id) { return listingCache.get(id) },
   async toggleFavorite(id) { const enabled = !favoriteIds.has(id); await apiRequest(`/listings/${id}/favorite`, { method: enabled ? 'PUT' : 'DELETE' }); if (enabled) favoriteIds.add(id); else favoriteIds.delete(id); const current = readSnapshot<Listing[]>('favorites') || []; const cached = listingCache.get(id); await writeSnapshot('favorites', enabled && cached ? [cached, ...current.filter((item) => item.id !== id)] : current.filter((item) => item.id !== id)); return enabled },
   async listFavorites() { const items = (await apiRequest<any[]>('/listings/favorites/mine')).map(listing).map(remember); favoriteIds.clear(); items.forEach((item) => favoriteIds.add(item.id)); await writeSnapshot('favorites', items); return items },
   peekFavorites() { return readSnapshot<Listing[]>('favorites') },

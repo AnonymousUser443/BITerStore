@@ -99,6 +99,8 @@ describe('demoRepository persistence', () => {
     expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', updatedAt: '8月29日', book: { id: 'real-listing', title: '真实教材' } });
     expect(peekThreads()?.[0].id).toBe('thread-real');
     expect(peekThread('thread-real')?.book?.title).toBe('真实教材');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
+    expect(await demoRepository.getBook('real-listing')).toMatchObject({ id: 'real-listing', title: '真实教材' });
     vi.useRealTimers();
   });
 });

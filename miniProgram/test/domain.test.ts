@@ -43,6 +43,8 @@ describe('domain', () => {
     expect(apiRepository.peekThreads()?.[0]).toMatchObject({ id: 'thread-a', buyerId: 'user-a', listing: { id: 'book-a' } })
     expect(apiRepository.peekThread('thread-a')?.listing?.title).toBe('缓存书籍')
     expect(apiRepository.peekNotifications()?.[0].id).toBe('notice-a')
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 404, data: { message: '商品不存在' } } as never)
+    await expect(apiRepository.getListing('book-a')).resolves.toMatchObject({ id: 'book-a', title: '缓存书籍' })
     memory.set('biterstore:taro:v1:api-session', { ...session, user: { ...session.user, id: 'user-b' } })
     expect(apiRepository.peekProfile()).toBeUndefined()
     expect(apiRepository.peekFavorites()).toBeUndefined()

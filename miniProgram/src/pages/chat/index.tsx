@@ -20,7 +20,7 @@ export default function ChatPage() {
   const send = async () => { if (!text.trim()) return; await demoRepository.sendMessage(id, text.trim()); setText(''); await load() }
   const sendImage = async () => { if (__API_URL__ && !__BITERSTORE_E2E__) return feedbackAdapter.toast('图片消息暂未开放'); const files = await mediaAdapter.persist(await mediaAdapter.pick()); if (files[0]) { await demoRepository.sendMessage(id, '[图片]', files[0].id); await load() } }
   const user = thread ? thread.participant || getUser(thread.participantId) : undefined
-  const listing = thread?.listing || demoRepository.peekListing(thread?.listingId || '') || seedListings.find((item) => item.id === thread?.listingId) || seedListings[0]
+  const listing = thread?.listing || demoRepository.peekListing(thread?.listingId || '') || seedListings.find((item) => item.id === thread?.listingId) || { ...seedListings[0], id: thread?.listingId || seedListings[0].id, title: '会话关联商品' }
   const contextMine = !thread?.buyerId || thread.buyerId === currentUserId
   return <AppShell title={user?.name || '消息'} back noNav className='chat-page'>
     {user && <View className='chat-user'><Avatar user={user} size={40} /><Text>{user.campus}校区 · 在线</Text></View>}
