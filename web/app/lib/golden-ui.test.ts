@@ -69,6 +69,7 @@ describe('authenticated Golden H5', () => {
     expect(chatPage).toContain('我想咨询这本书')
     expect(chatPage).toContain('会话关联商品')
     expect(chatPage).toContain('navigate(`/books/${book.id}`)')
+    expect(styles).toContain('.messages-page .thread-list > button { animation: none; }')
   })
 
   it('autoplays one detail image at a time and keeps actions at the bottom', () => {

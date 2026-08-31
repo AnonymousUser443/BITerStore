@@ -674,6 +674,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .listing-stack > :nth-child(2), .thread-list > :nth-child(2), .notification-grid > :nth-child(2) { animation-delay: 35ms; }
   .listing-stack > :nth-child(3), .thread-list > :nth-child(3), .notification-grid > :nth-child(3) { animation-delay: 70ms; }
   .listing-stack > :nth-child(4), .thread-list > :nth-child(4), .notification-grid > :nth-child(4) { animation-delay: 105ms; }
+  .messages-page .thread-list > button { animation: none; }
   .message-row { animation: message-in .24s cubic-bezier(.2,.72,.24,1) both; }
   .publish-page .upload-card, .publish-page .ai-card, .publish-page .form-card, .publish-page .publish-preview { animation: card-rise .28s ease-out both; }
   .nav-item.publish::after { animation: sparkle 2.4s ease-in-out infinite; }
