@@ -165,6 +165,8 @@ describe('Golden Reference style alignment', () => {
     const detail = read('src/pages/listing/detail.tsx')
     const adapter = read('src/app.css')
     expect(detail).toContain("item.course.trim() ? <Text>▥ {item.course}</Text> : null")
+    expect(detail).not.toContain('detail-original-price')
     expect(adapter).toContain("font-size: 13px; line-height: 1.5;")
+    expect(adapter).not.toContain('.detail-original-price')
   })
 })
