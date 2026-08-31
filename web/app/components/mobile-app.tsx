@@ -132,11 +132,14 @@ function Avatar({ user, size = 42 }: { user: User; size?: number }) {
 }
 
 function BookCover({ book, compact = false }: { book: Book; compact?: boolean }) {
+  const cover = book.images?.[0];
   return (
-    <div className={`book-cover ${book.tone} ${compact ? 'compact' : ''}`}>
-      <span className="cover-leaf">❧</span>
-      <strong>{book.title}</strong>
-      {!compact && <small>BITerStore 校园藏书</small>}
+    <div className={`book-cover ${book.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>
+      {cover ? <img className="book-cover-image" src={cover} alt={`${book.title} 封面`} /> : <>
+        <span className="cover-leaf">❧</span>
+        <strong>{book.title}</strong>
+        {!compact && <small>BITerStore 校园藏书</small>}
+      </>}
     </div>
   );
 }

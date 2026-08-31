@@ -58,6 +58,24 @@ describe('demoRepository persistence', () => {
     expect(thread?.messages.at(-1)?.text).toBe('新的测试消息');
   });
 
+  it('保持仅查看会话在消息列表中的原顺序', async () => {
+    const order = (await demoRepository.listThreads()).map((thread) => thread.id);
+    const secondThreadId = order[1];
+
+    await demoRepository.getThread(secondThreadId);
+
+    expect(peekThreads()?.map((thread) => thread.id)).toEqual(order);
+  });
+
+  it('发送消息后将对应会话置顶', async () => {
+    const order = (await demoRepository.listThreads()).map((thread) => thread.id);
+    const secondThreadId = order[1];
+
+    await demoRepository.sendMessage(secondThreadId, '用于验证置顶的消息');
+
+    expect(peekThreads()?.[0].id).toBe(secondThreadId);
+  });
+
   it('stores only the authenticated student id', () => {
     demoRepository.markAuthenticated('1120230000');
     expect(demoRepository.getAuthenticatedSid()).toBe('1120230000');

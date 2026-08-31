@@ -84,11 +84,15 @@ function enrichThread(value: ChatThread): ChatThread {
   if (value.book) { knownBooks.set(value.book.id, value.book); return value; }
   return { ...value, book: peekBook(value.bookId) };
 }
-function writeThread(value: ChatThread) {
+function writeThread(value: ChatThread, promote = false) {
   const enriched = enrichThread(value);
   write(threadDetailSnapshotKey(enriched.id), enriched);
   const threads = peekThreads() || [];
-  write(threadListSnapshotKey(), [enriched, ...threads.filter((thread) => thread.id !== enriched.id)]);
+  const index = threads.findIndex((thread) => thread.id === enriched.id);
+  const next = promote || index < 0
+    ? [enriched, ...threads.filter((thread) => thread.id !== enriched.id)]
+    : threads.map((thread) => thread.id === enriched.id ? enriched : thread);
+  write(threadListSnapshotKey(), next);
   return enriched;
 }
 export function peekBook(id: string): Book | undefined {
@@ -191,12 +195,12 @@ export const demoRepository: DemoRepository = {
   async listThreads() { const items = (await activeRepository().listThreads()).map(enrichThread); write(threadListSnapshotKey(), items); items.forEach((item) => write(threadDetailSnapshotKey(item.id), item)); return items; },
   async listNotifications() { const items = await activeRepository().listNotifications(); write(notificationSnapshotKey(), items); return items; },
   async getThread(id) { const item = await activeRepository().getThread(id); return item ? writeThread(item) : null; },
-  async sendMessage(threadId, text) { const message = await activeRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }); return message; },
+  async sendMessage(threadId, text) { const message = await activeRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }, true); return message; },
   async ensureThread(bookId) {
     const id = await activeRepository().ensureThread(bookId);
     if (!peekThread(id)) {
       const book = peekBook(bookId);
-      if (book) writeThread({ id, participantId: book.sellerId, participant: book.seller, buyerId: localRepository.getAuthenticatedSid(), bookId, book, unread: 0, updatedAt: '刚刚', messages: [] });
+      if (book) writeThread({ id, participantId: book.sellerId, participant: book.seller, buyerId: localRepository.getAuthenticatedSid(), bookId, book, unread: 0, updatedAt: '刚刚', messages: [] }, true);
     }
     return id;
   },

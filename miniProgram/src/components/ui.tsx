@@ -45,7 +45,8 @@ export function Tobby({ mood = 'hello', caption, className = '' }: { mood?: Tobb
 export function StatusTag({ status }: { status: ListingStatus }) { const labels: Record<ListingStatus, string> = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }; return <Text className={`status-tag ${status}`}>{labels[status]}</Text> }
 
 export function BookCover({ listing, compact = false }: { listing: Listing; compact?: boolean }) {
-  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''}`}><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</View>
+  const cover = listing.imageUrls?.[0]
+  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <Image className='book-cover-image' src={cover} mode='aspectFill' /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</>}</View>
 }
 
 export function BookTile({ listing, href, onTap }: { listing: Listing; href?: string; onTap?: () => void }) {
