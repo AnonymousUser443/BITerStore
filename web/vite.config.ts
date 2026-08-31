@@ -8,7 +8,7 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
 
 const { d1, r2 } = hostingConfig;
-const bitLoginUrl = (process.env.NEXT_PUBLIC_BIT_LOGIN_URL ?? 'https://login.bit101.flwfdd.xyz').replace(/\/$/, '');
+const bitLoginUrl = (process.env.NEXT_PUBLIC_BIT_LOGIN_URL ?? '/bit-login').replace(/\/$/, '');
 const apiUrl = (process.env.NEXT_PUBLIC_BITERSTORE_API_URL ?? '/api/v1').replace(/\/$/, '');
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.

@@ -60,7 +60,7 @@ services:
       dockerfile: miniProgram/Dockerfile.h5
       args:
         BITERSTORE_API_URL: /api/v1
-        BIT_LOGIN_URL: "${BIT_LOGIN_URL:-https://login.bit101.flwfdd.xyz}"
+        BIT_LOGIN_URL: "${BIT_LOGIN_URL:-/bit-login}"
     restart: unless-stopped
   admin:
     build: ../admin

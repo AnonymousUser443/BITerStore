@@ -142,6 +142,17 @@ describe('Golden Reference style alignment', () => {
     expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
   })
 
+  it('builds WeApp API requests through domains already allowed by the WeChat project', () => {
+    const config = read('config/index.ts')
+    const example = read('.env.example')
+    expect(config).toContain("const productionBitLoginUrl = 'https://store.young581.com/bit-login'")
+    expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, '../.env.weapp.local'))")
+    expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, `../.env.${mode}`))")
+    expect(config).toContain("__API_URL__: JSON.stringify(isE2E ? '' :")
+    expect(example).toContain('BIT_LOGIN_URL=https://store.young581.com/bit-login')
+    expect(config).not.toContain('login.bit101.flwfdd.xyz')
+  })
+
   it('covers both required publish images before invoking the WeApp fixture assistant', () => {
     const publish = read('src/pages/publish/index.tsx')
     const e2e = read('scripts/weapp-e2e.mjs')
@@ -155,6 +166,9 @@ describe('Golden Reference style alignment', () => {
     expect(e2e).toContain('eventTime - noise.time <= 20000')
     expect(e2e).toContain('duringRouteObservation')
     expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
+    expect(e2e).toContain("scenario('bit-login-request-domain'")
+    expect(e2e).toContain("url: 'https://store.young581.com/bit-login/openapi.json'")
+    expect(e2e).toContain('response?.statusCode !== 200')
   })
 
   it('gives native navigation immediate feedback and keeps the card detail action wired', () => {

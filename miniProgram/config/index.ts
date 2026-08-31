@@ -1,5 +1,7 @@
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
+import fs from 'node:fs'
 import path from 'node:path'
+import { parse as parseDotenv } from 'dotenv'
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin'
 import devConfig from './dev'
 import prodConfig from './prod'
@@ -7,8 +9,24 @@ import prodConfig from './prod'
 const assetPerformanceBudget = 384 * 1024
 const h5EntrypointPerformanceBudget = 400 * 1024
 const miniEntrypointPerformanceBudget = 640 * 1024
+const productionBitLoginUrl = 'https://store.young581.com/bit-login'
+
+function readEnvironmentFile(file: string): Record<string, string> {
+  return fs.existsSync(file) ? parseDotenv(fs.readFileSync(file)) : {}
+}
+
+function buildEnvironment(): Record<string, string> {
+  const mode = process.env.NODE_ENV || 'production'
+  const modeEnvironment = readEnvironmentFile(path.resolve(__dirname, `../.env.${mode}`))
+  const weappEnvironment = process.env.TARO_ENV === 'weapp'
+    ? readEnvironmentFile(path.resolve(__dirname, '../.env.weapp.local'))
+    : {}
+  return { ...modeEnvironment, ...weappEnvironment, ...process.env } as Record<string, string>
+}
 
 export default defineConfig<'webpack5'>(async (merge) => {
+  const environment = buildEnvironment()
+  const isE2E = environment.BITERSTORE_E2E === '1'
   const baseConfig: UserConfigExport<'webpack5'> = {
     projectName: 'BITerStore', date: '2026-08-26', designWidth: 390,
     deviceRatio: { 390: 2, 750: 1 }, sourceRoot: 'src', outputRoot: 'dist',
@@ -16,9 +34,9 @@ export default defineConfig<'webpack5'>(async (merge) => {
     compiler: { type: 'webpack5', prebundle: { exclude: ['lucide-react'] } },
     cache: { enable: true },
     defineConstants: {
-      __BITERSTORE_E2E__: JSON.stringify(process.env.BITERSTORE_E2E === '1'),
-      __API_URL__: JSON.stringify((process.env.BITERSTORE_API_URL || '').replace(/\/$/, '')),
-      __BIT_LOGIN_URL__: JSON.stringify((process.env.BIT_LOGIN_URL || 'https://login.bit101.flwfdd.xyz').replace(/\/$/, ''))
+      __BITERSTORE_E2E__: JSON.stringify(isE2E),
+      __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || '').replace(/\/$/, '')),
+      __BIT_LOGIN_URL__: JSON.stringify((environment.BIT_LOGIN_URL || productionBitLoginUrl).replace(/\/$/, ''))
     },
     copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
     mini: {

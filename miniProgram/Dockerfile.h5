@@ -7,7 +7,7 @@ COPY miniProgram/ ./
 COPY web/ /workspace/web/
 ENV NODE_ENV=production
 ARG BITERSTORE_API_URL=/api/v1
-ARG BIT_LOGIN_URL=https://login.bit101.flwfdd.xyz
+ARG BIT_LOGIN_URL=/bit-login
 ENV BITERSTORE_API_URL=$BITERSTORE_API_URL
 ENV BIT_LOGIN_URL=$BIT_LOGIN_URL
 RUN npm run build:h5
