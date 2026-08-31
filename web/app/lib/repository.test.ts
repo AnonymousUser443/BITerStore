@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedBooks } from './demo-data';
-import { defaultFilters, demoRepository, filterBooks, peekBooks, peekMyListings } from './repository';
+import { defaultFilters, demoRepository, filterBooks, peekBooks, peekFavorites, peekMyListings, peekThread, peekThreads } from './repository';
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -35,7 +35,9 @@ describe('demoRepository persistence', () => {
   it('toggles and returns favorites', async () => {
     expect(await demoRepository.toggleFavorite('math-7')).toBe(true);
     expect((await demoRepository.listFavorites()).map((book) => book.id)).toContain('math-7');
+    expect(peekFavorites()?.map((book) => book.id)).toContain('math-7');
     expect(await demoRepository.toggleFavorite('math-7')).toBe(false);
+    expect(peekFavorites()).toEqual([]);
   });
 
   it('saves a draft and publishes a local listing', async () => {
@@ -54,6 +56,24 @@ describe('demoRepository persistence', () => {
     await demoRepository.sendMessage('thread-lin', '新的测试消息');
     const thread = await demoRepository.getThread('thread-lin');
     expect(thread?.messages.at(-1)?.text).toBe('新的测试消息');
+  });
+
+  it('保持仅查看会话在消息列表中的原顺序', async () => {
+    const order = (await demoRepository.listThreads()).map((thread) => thread.id);
+    const secondThreadId = order[1];
+
+    await demoRepository.getThread(secondThreadId);
+
+    expect(peekThreads()?.map((thread) => thread.id)).toEqual(order);
+  });
+
+  it('发送消息后将对应会话置顶', async () => {
+    const order = (await demoRepository.listThreads()).map((thread) => thread.id);
+    const secondThreadId = order[1];
+
+    await demoRepository.sendMessage(secondThreadId, '用于验证置顶的消息');
+
+    expect(peekThreads()?.[0].id).toBe(secondThreadId);
   });
 
   it('stores only the authenticated student id', () => {
@@ -86,14 +106,19 @@ describe('demoRepository persistence', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-30T00:00:00Z'));
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{
-      id: 'thread-real', listingId: 'real-listing', sellerId: 'seller-real', lastMessageAt: '2026-08-29T12:24:07.770Z',
+      id: 'thread-real', listingId: 'real-listing', buyerId: 'user-real', sellerId: 'seller-real', lastMessageAt: '2026-08-29T12:24:07.770Z',
       unread: 0, members: [{ userId: 'user-real', user: { id: 'user-real', nickname: '自己', campus: null } }, { userId: 'seller-real', user: { id: 'seller-real', nickname: '卖家', campus: null } }],
+      listing: { id: 'real-listing', title: '真实教材', author: '真实作者', priceCents: 1800, condition: '九成新', campus: '良乡', status: 'ACTIVE', sellerId: 'seller-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] },
     }]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const threads = await demoRepository.listThreads();
 
-    expect(threads[0]).toMatchObject({ id: 'thread-real', updatedAt: '8月29日' });
+    expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', updatedAt: '8月29日', book: { id: 'real-listing', title: '真实教材' } });
+    expect(peekThreads()?.[0].id).toBe('thread-real');
+    expect(peekThread('thread-real')?.book?.title).toBe('真实教材');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
+    expect(await demoRepository.getBook('real-listing')).toMatchObject({ id: 'real-listing', title: '真实教材' });
     vi.useRealTimers();
   });
 });

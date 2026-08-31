@@ -28,6 +28,14 @@ const NOT_FOUND_CACHE_SECONDS = 24 * 60 * 60
 let zxingReady: Promise<unknown> | undefined
 
 const CHINESE_METADATA_OVERRIDES: Record<string, Omit<BookMetadata, 'isbn'>> = {
+  '9787020110292': {
+    title: '四世同堂',
+    author: '老舍 / 丁聪 绘',
+    publisher: '人民文学出版社',
+    publishDate: '2016-1',
+    coverUrl: '',
+    subjects: ['中国文学', '长篇小说']
+  },
   '9787111544937': {
     title: '深入理解计算机系统（原书第3版）',
     author: '[美] 兰德尔·E. 布莱恩特 / 戴维·R. 奥哈拉伦',
@@ -136,7 +144,7 @@ export class BooksService {
     if (!isValidIsbn(isbn)) throw new BadRequestException('ISBN 格式或校验位不正确')
     const corrected = chineseMetadataOverride(isbn)
     if (corrected) return corrected
-    const cacheKey = `book-metadata:v3:${isbn}`
+    const cacheKey = `book-metadata:v4:${isbn}`
     await this.redis.ensureConnected()
     const cached = await this.redis.client.get(cacheKey)
     if (cached === 'NOT_FOUND') throw new NotFoundException('没有查到这本书，请手动填写信息')

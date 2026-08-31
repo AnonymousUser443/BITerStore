@@ -185,9 +185,10 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .required-image-button > text:last-child { margin-top: 2px; color: var(--muted); font-size: 8px; }
 .required-image .upload-preview { width: 100%; height: 100%; aspect-ratio: 1.28; }
 .image-role { position: absolute; left: 5px; bottom: 5px; padding: 3px 6px; border-radius: 8px; background: rgba(69,79,55,.84); color: white; font-size: 8px; }
-.optional-images { margin-top: 12px; }
+.optional-images { margin: 16px -15px -15px; padding: 14px 15px 15px; border-top: 1px dashed var(--border); background: rgba(247,244,234,.72); }
 .optional-images > text { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; }
 .optional-images .image-grid { grid-template-columns: repeat(4, 1fr); }
+.optional-images .upload-preview image, .optional-image-preview { width: 100%; height: 100%; object-fit: contain; background: #e7ebdc; }
 .ai-card button[disabled] { opacity: .48; }
 .tobby-tip > image, .tobby-tip > taro-image-core { flex: 0 0 126px; width: 126px; height: 110px; margin-left: -7px; object-fit: contain; filter: drop-shadow(0 8px 8px rgba(69,71,53,.12)); }
 .tobby-tip > taro-image-core > img { object-fit: contain; }
@@ -259,6 +260,8 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .inline-state.compact > image, .inline-state.compact > taro-image-core { width: 130px; height: 130px; }
 .detail-gallery > image { width: 100%; height: 275px; flex: 0 0 100%; overflow: hidden; border-radius: 19px; }
 .detail-gallery > image > img { width: 100%; height: 100%; object-fit: cover; }
+.detail-gallery swiper-item, .detail-gallery .detail-slide { width: 100%; height: 100%; }
+.detail-gallery .detail-slide > img { width: 100%; height: 100%; object-fit: contain; }
 .detail-cta > taro-button-core.report-action { display: flex; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; color: #777269; font-size: 10.5px; }
 .message-content { max-width: 72%; }
 .message-bubble { display: block; margin: 0; padding: 10px 12px; border: 1px solid #ded4be; border-radius: 6px 16px 16px 16px; background: rgba(255,253,248,.91); font-size: 11px; line-height: 1.6; }

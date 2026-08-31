@@ -54,6 +54,15 @@ describe('Golden Reference style alignment', () => {
     expect(app).not.toContain('leaf-action')
   })
 
+  it('商品卡优先显示上传的封面照片', () => {
+    const ui = read('src/components/ui.tsx')
+    const css = read('src/golden.css')
+    expect(ui).toContain('listing.imageUrls?.[0]')
+    expect(ui).toContain("className='book-cover-image'")
+    expect(ui).toContain('BITerStore 校园藏书')
+    expect(css).toContain('.book-cover-image { width: 100%; height: 100%; display: block; object-fit: cover; }')
+  })
+
   it('宽屏页面不显示额外的浏览器或内容滚动条', () => {
     const h5Css = read('../web/app/globals.css')
     expect(h5Css).toContain('html, body { width: 100%; height: 100%; margin: 0; overflow: hidden;')
@@ -142,6 +151,9 @@ describe('Golden Reference style alignment', () => {
 
   it('gives native detail actions explicit owner and request-error feedback', () => {
     const detail = read('src/pages/listing/detail.tsx')
+    const ui = read('src/components/ui.tsx')
+    expect(ui).toContain("const hideNavigation = noNav || className === 'detail-page'")
+    expect(ui).toContain('{!hideNavigation && <AppNavigation active={active} />}')
     expect(detail).toContain("feedbackAdapter.toast('不能收藏自己的商品')")
     expect(detail).toContain("feedbackAdapter.toast('不能联系自己发布的商品')")
     expect(detail).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")

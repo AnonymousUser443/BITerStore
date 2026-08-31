@@ -11,7 +11,7 @@ import {
   type BitLoginChallenge
 } from '@/domain/bit-login'
 import { continueAsGuest, loginWithCampus, loginWithWechat, pollWebLogin } from '@/domain/auth'
-import { demoRepository } from '@/domain/repository'
+import { demoRepository, warmAccountSnapshots } from '@/domain/repository'
 import { externalNavigationAdapter, navigationAdapter } from '@/platform'
 
 export default function LoginPage() {
@@ -28,7 +28,7 @@ export default function LoginPage() {
     if (!state || Taro.getCurrentInstance().router?.params.wechat !== 'complete') return
     setLoading(true)
     void pollWebLogin(state)
-      .then(() => navigationAdapter.switchTab('/pages/home/index'))
+      .then(() => { void warmAccountSnapshots(); return navigationAdapter.switchTab('/pages/home/index') })
       .catch((cause) => setError(cause instanceof Error ? cause.message : '微信登录确认失败'))
       .finally(() => setLoading(false))
   }, [])
@@ -37,6 +37,7 @@ export default function LoginPage() {
     try {
       const registrationToken = await getRegistrationToken(value)
       await loginWithCampus(registrationToken)
+      void warmAccountSnapshots()
       await destroyBitLoginChallenge(value)
       setPassword('')
       await navigationAdapter.switchTab('/pages/home/index')
@@ -82,7 +83,7 @@ export default function LoginPage() {
     setError('')
     try {
       const result = await loginWithWechat()
-      if ('accessToken' in result) await navigationAdapter.switchTab('/pages/home/index')
+      if ('accessToken' in result) { void warmAccountSnapshots(); await navigationAdapter.switchTab('/pages/home/index') }
       else if (result.authorizeUrl) await externalNavigationAdapter.open(result.authorizeUrl)
       else setError('微信网站登录尚未配置，请先使用学号登录')
     } catch (cause) {

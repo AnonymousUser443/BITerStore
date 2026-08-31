@@ -38,6 +38,17 @@ describe('book metadata', () => {
     expect(store.ensureConnected).not.toHaveBeenCalled()
   })
 
+  it('returns verified metadata for 四世同堂 without relying on incomplete free indexes', async () => {
+    const store = redis()
+    await expect(new BooksService(store as never).lookup('9787020110292')).resolves.toMatchObject({
+      title: '四世同堂',
+      author: '老舍 / 丁聪 绘',
+      publisher: '人民文学出版社',
+      publishDate: '2016-1'
+    })
+    expect(store.ensureConnected).not.toHaveBeenCalled()
+  })
+
   it('returns a cached normalized result without an upstream request', async () => {
     const value = { isbn, title: '缓存教材', author: '', publisher: '', publishDate: '', coverUrl: '', subjects: [] }
     const store = redis(JSON.stringify(value))
@@ -56,7 +67,7 @@ describe('book metadata', () => {
     const result = await new BooksService(store as never).lookup(isbn)
     expect(result).toMatchObject({ isbn, title: '高等数学', author: '同济大学' })
     expect(fetchMock).toHaveBeenCalledWith(`https://metadata.example.test/isbn/${isbn}`, expect.objectContaining({ headers: { Authorization: 'Bearer shared-secret' } }))
-    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v3:${isbn}`, expect.any(String), 'EX', 2592000)
+    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v4:${isbn}`, expect.any(String), 'EX', 2592000)
   })
 
   it('does not autofill a romanized title for a mainland Chinese ISBN', async () => {

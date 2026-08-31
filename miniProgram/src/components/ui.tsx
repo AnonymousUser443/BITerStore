@@ -36,7 +36,8 @@ export function AppShell({ children, title, back, backTo, active, className = ''
   const shouldGoBack = back || active === 'publish'
   const destination = backTo || (active === 'publish' ? '/pages/home/index' : undefined)
   const nativeChrome = process.env.TARO_ENV === 'weapp'
-  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}<View className={`content-scroll page-scroll ${noNav ? 'no-nav' : ''}`}>{children}</View>{!noNav && <AppNavigation active={active} />}</View>
+  const hideNavigation = noNav || className === 'detail-page'
+  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}<View className={`content-scroll page-scroll ${hideNavigation ? 'no-nav' : ''}`}>{children}</View>{!hideNavigation && <AppNavigation active={active} />}</View>
 }
 
 export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'
@@ -44,7 +45,8 @@ export function Tobby({ mood = 'hello', caption, className = '' }: { mood?: Tobb
 export function StatusTag({ status }: { status: ListingStatus }) { const labels: Record<ListingStatus, string> = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }; return <Text className={`status-tag ${status}`}>{labels[status]}</Text> }
 
 export function BookCover({ listing, compact = false }: { listing: Listing; compact?: boolean }) {
-  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''}`}><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</View>
+  const cover = listing.imageUrls?.[0]
+  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <Image className='book-cover-image' src={cover} mode='aspectFill' /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</>}</View>
 }
 
 export function BookTile({ listing, href, onTap }: { listing: Listing; href?: string; onTap?: () => void }) {

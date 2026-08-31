@@ -13,12 +13,18 @@ const campuses: Campus[] = ['中关村', '良乡', '西山', '珠海']
 
 export default function ProfilePage() {
   const demoMode = !__API_URL__ || __BITERSTORE_E2E__
-  const [user, setUser] = useState<User>()
-  const [counts, setCounts] = useState([0, 0, 0])
+  const [user, setUser] = useState<User | undefined>(() => demoRepository.peekProfile())
+  const [counts, setCounts] = useState(() => [demoRepository.peekFavorites()?.length || 0, demoRepository.peekMyListings()?.length || 0, 0])
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<ProfileUpdate>()
-  const load = useCallback(() => Promise.all([demoRepository.getProfile(), demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads()]).then(([profile, favorites, listings, threads]) => { setUser(profile); setCounts([favorites.length, listings.length, threads.length]) }), [])
+  const load = useCallback(async () => {
+    await Promise.allSettled([
+      demoRepository.getProfile().then(setUser),
+      demoRepository.listFavorites().then((favorites) => setCounts((current) => [favorites.length, current[1], current[2]])),
+      demoRepository.listMyListings().then((listings) => setCounts((current) => [current[0], listings.length, current[2]]))
+    ])
+  }, [])
   useDidShow(() => { void requireAccount('请先使用学号登录后查看“我的”').then((allowed) => { if (allowed) return load() }) })
   const bindCurrentWechat = async () => {
     try {

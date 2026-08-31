@@ -23,7 +23,7 @@ export interface PublishDraft {
 export interface BookMetadata { isbn: string; title: string; author: string; publisher: string; publishDate: string; coverUrl: string; subjects: string[] }
 export interface ListingAIDraft { title: string; description: string; tags: string[] }
 export interface Message { id: string; senderId: string; text: string; createdAt: string; kind: 'text' | 'listing' | 'image'; listingId?: string; mediaId?: string }
-export interface ChatThread { id: string; participantId: string; participant?: User; listingId: string; unread: number; updatedAt: string; messages: Message[] }
+export interface ChatThread { id: string; participantId: string; participant?: User; buyerId?: string; listingId: string; listing?: Listing; unread: number; updatedAt: string; messages: Message[] }
 export interface Notification { id: string; type: 'like' | 'comment' | 'system' | 'follow'; title: string; subtitle: string; unread: number }
 export type AppErrorCode = 'STORAGE_READ' | 'STORAGE_WRITE' | 'MEDIA_PICK' | 'MEDIA_PERSIST' | 'VALIDATION' | 'NOT_FOUND' | 'BIT_LOGIN' | 'API'
 export class AppError extends Error { constructor(public code: AppErrorCode, message: string, public cause?: unknown) { super(message) } }

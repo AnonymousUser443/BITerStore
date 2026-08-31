@@ -60,6 +60,54 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
   })
 
+  it('paints message snapshots immediately and anchors every chat to its listing', () => {
+    const messagesPage = mobileApp.slice(mobileApp.indexOf('function MessagesPage'), mobileApp.indexOf('function NotificationDetailPage'))
+    const chatPage = mobileApp.slice(mobileApp.indexOf('function ConversationBookMessage'), mobileApp.indexOf('function ProfilePage'))
+    expect(messagesPage).toContain('peekThreads() || []')
+    expect(messagesPage).toContain('peekNotifications() || []')
+    expect(chatPage).toContain('peekThread(threadId)')
+    expect(chatPage).toContain('我想咨询这本书')
+    expect(chatPage).toContain('会话关联商品')
+    expect(chatPage).toContain('navigate(`/books/${book.id}`)')
+    expect(styles).toContain('.messages-page .thread-list > button { animation: none; }')
+  })
+
+  it('uses the uploaded cover photo on book cards and keeps a text fallback', () => {
+    const bookCover = mobileApp.slice(mobileApp.indexOf('function BookCover'), mobileApp.indexOf('function BottomNav'))
+    expect(bookCover).toContain('book.images?.[0]')
+    expect(bookCover).toContain('className="book-cover-image"')
+    expect(bookCover).toContain('BITerStore 校园藏书')
+    expect(styles).toContain('.book-cover-image { width: 100%; height: 100%; display: block; object-fit: cover; }')
+  })
+
+  it('autoplays one detail image at a time and keeps actions at the bottom', () => {
+    const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(mobileApp).toContain("const hideNavigation = noNav || className === 'detail-page'")
+    expect(mobileApp).toContain("!hideNavigation && <BottomNav")
+    expect(detailPage).toContain('function DetailGallery')
+    expect(detailPage).toContain('window.setInterval')
+    expect(detailPage).toContain('scrollTo')
+    expect(styles).toContain('scroll-snap-type: x mandatory')
+    expect(styles).toContain('.detail-cta { grid-row: 4; position: sticky;')
+    expect(styles).toContain('.detail-page .content-scroll.no-nav { padding-bottom:')
+  })
+
+  it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {
+    const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
+    expect(myListingsPage).not.toContain('window.confirm')
+    expect(myListingsPage).toContain('role="alertdialog"')
+    expect(myListingsPage).toContain('className="dialog-scrim"')
+    expect(styles).toContain('.confirm-dialog')
+  })
+
+  it('keeps optional publish photos fully visible across aspect ratios', () => {
+    const publishPage = mobileApp.slice(mobileApp.indexOf('function PublishPage'), mobileApp.indexOf('function ProfileEditPage'))
+    expect(publishPage).toContain('className="optional-images"')
+    expect(styles).toContain('.optional-images .upload-preview img')
+    expect(styles).toContain('object-fit: contain')
+    expect(styles).toContain('.publish-page .upload-card { flex: 0 0 auto; overflow: visible; }')
+  })
+
   it('reflows continuously from narrow phones through ultra-wide H5 windows', () => {
     expect(styles).toContain('@media (max-width: 340px)')
     expect(styles).toContain('@media (min-width: 480px) and (max-width: 699px)')

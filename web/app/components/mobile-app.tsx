@@ -21,7 +21,7 @@ import {
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
-import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekMyListings } from '../lib/repository';
+import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
@@ -49,6 +49,7 @@ const UI_ASSETS = [
 ] as const;
 
 const CurrentUserContext = createContext<User | undefined>(undefined);
+function warmAccountSnapshots() { return Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()]); }
 const PROFILE_SNAPSHOT_KEY = 'biterstore:v1:snapshot:profile';
 
 function readProfileSnapshot(): User | undefined {
@@ -131,11 +132,14 @@ function Avatar({ user, size = 42 }: { user: User; size?: number }) {
 }
 
 function BookCover({ book, compact = false }: { book: Book; compact?: boolean }) {
+  const cover = book.images?.[0];
   return (
-    <div className={`book-cover ${book.tone} ${compact ? 'compact' : ''}`}>
-      <span className="cover-leaf">❧</span>
-      <strong>{book.title}</strong>
-      {!compact && <small>BITerStore 校园藏书</small>}
+    <div className={`book-cover ${book.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>
+      {cover ? <img className="book-cover-image" src={cover} alt={`${book.title} 封面`} /> : <>
+        <span className="cover-leaf">❧</span>
+        <strong>{book.title}</strong>
+        {!compact && <small>BITerStore 校园藏书</small>}
+      </>}
     </div>
   );
 }
@@ -166,12 +170,13 @@ function Topbar({ title, back, navigate }: { title?: string; back?: boolean; nav
 
 function AppShell({ children, active, navigate, title, back = false, noNav = false, className = '' }: { children: React.ReactNode; active?: string; navigate: (to: string) => void; title?: string; back?: boolean; noNav?: boolean; className?: string }) {
   const shouldGoBack = back || active === '/publish';
+  const hideNavigation = noNav || className === 'detail-page';
   return (
     <section className={`phone-shell ${className}`}>
       <div className="paper-texture" aria-hidden="true" />
       <Topbar title={title} back={shouldGoBack} navigate={navigate} />
-      <div className={`content-scroll ${noNav ? 'no-nav' : ''}`}>{children}</div>
-      {!noNav && <BottomNav active={active ?? ''} navigate={navigate} />}
+      <div className={`content-scroll ${hideNavigation ? 'no-nav' : ''}`}>{children}</div>
+      {!hideNavigation && <BottomNav active={active ?? ''} navigate={navigate} />}
     </section>
   );
 }
@@ -270,6 +275,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
       const session = await loginWithCampusCookie(registrationToken);
       const profile = await getH5Profile();
       demoRepository.markAuthenticated(session.user.id);
+      void warmAccountSnapshots();
       onAuthenticated(profile);
       navigate('/home');
     } finally {
@@ -396,7 +402,30 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
     finally { setPendingAction(undefined); }
   };
   const contactLabel = ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系';
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><div className="detail-gallery">{displayImages.length ? displayImages.map((image) => <img src={image} alt={`${book.title} 实拍图`} key={image.slice(-20)} />) : <BookCover book={book} />}{unavailable && <span>{statusLabel(book.status)}</span>}</div><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><del>¥{formatPrice(book.originalPrice)}</del><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span><span><BookOpen />{book.course}</span><span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+}
+
+function DetailGallery({ images, book, unavailable }: { images: string[]; book: Book; unavailable: boolean }) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState(0)
+  const total = Math.max(images.length, 1)
+  const show = useCallback((index: number) => {
+    const next = (index + total) % total
+    setActive(next)
+    const viewport = viewportRef.current
+    if (viewport) viewport.scrollTo({ left: viewport.clientWidth * next, behavior: 'smooth' })
+  }, [total])
+  useEffect(() => {
+    if (total < 2) return
+    const timer = window.setInterval(() => setActive((current) => {
+      const next = (current + 1) % total
+      const viewport = viewportRef.current
+      if (viewport) viewport.scrollTo({ left: viewport.clientWidth * next, behavior: 'smooth' })
+      return next
+    }), 4000)
+    return () => window.clearInterval(timer)
+  }, [total])
+  return <div className="detail-gallery-shell"><div className="detail-gallery" ref={viewportRef} onScroll={(event) => { const width = event.currentTarget.clientWidth; if (width) setActive(Math.round(event.currentTarget.scrollLeft / width)) }}>{images.length ? images.map((image, index) => <img src={image} alt={`${book.title} 实拍图 ${index + 1}`} key={`${image.slice(-20)}-${index}`} />) : <BookCover book={book} />}</div>{unavailable && <span className="gallery-status">{statusLabel(book.status)}</span>}{total > 1 && <div className="gallery-dots" aria-label={`第 ${active + 1} 张，共 ${total} 张`}>{Array.from({ length: total }, (_, index) => <button className={active === index ? 'active' : ''} aria-label={`查看第 ${index + 1} 张图片`} onClick={() => show(index)} key={index} />)}</div>}</div>
 }
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
@@ -445,9 +474,9 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
 function FormField({ label, children, required, error }: { label: string; children: React.ReactNode; required?: boolean; error?: boolean }) { return <label className={`form-field ${error ? 'error' : ''}`}><span>{required && <em>*</em>}{label}</span>{children}</label>; }
 
 function MessagesPage({ navigate }: { navigate: (to: string) => void }) {
-  const [threads, setThreads] = useState<ChatThread[]>([]); const [items, setItems] = useState<Notification[]>([]);
-  useEffect(() => { Promise.all([demoRepository.listThreads(), demoRepository.listNotifications()]).then(([nextThreads, nextItems]) => { setThreads(nextThreads); setItems(nextItems); }); }, []);
-  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3><strong>{user.name}</strong><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || '从一本书开始聊聊吧'}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
+  const [threads, setThreads] = useState<ChatThread[]>(() => peekThreads() || []); const [items, setItems] = useState<Notification[]>(() => peekNotifications() || []);
+  useEffect(() => { void demoRepository.listThreads().then(setThreads).catch(() => undefined); void demoRepository.listNotifications().then(setItems).catch(() => undefined); }, []);
+  return <AppShell active="/messages" navigate={navigate} title="消息" className="messages-page"><div className="notification-grid">{items.map((item) => { const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[item.type]; return <button onClick={() => navigate(`/messages/notifications/${item.type}`)} aria-label={`查看${item.title}详情`} key={item.id}><span className={`notice-icon ${item.type}`}><Icon /></span><div><strong>{item.title}</strong><p>{item.subtitle}</p><small>点击查看详情</small></div><ChevronRight className="notice-chevron" />{item.unread > 0 && <b>{item.unread}</b>}</button>; })}</div><div className="section-title message-title"><h2>私聊消息</h2><span><Check size={14} />站内消息</span></div><div className="thread-list">{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); return <button onClick={() => navigate(`/messages/${thread.id}`)} key={thread.id}><Avatar user={user} size={54} /><div><h3><strong>{user.name}</strong><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`}</span></h3><p>{last?.text || (thread.book ? `我想咨询《${thread.book.title}》` : '从一本书开始聊聊吧')}</p></div><time>{thread.updatedAt}</time>{thread.unread > 0 && <b>{thread.unread}</b>}</button>; })}</div>{threads.length === 0 && <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无私聊消息" width={760} height={760} /><h3>还没有私聊消息</h3><p>从一本感兴趣的书开始聊聊吧。</p></div>}<div className="tobby-banner"><Image src="/assets/tobby-hello.webp" alt="Tobby 消息提醒" width={760} height={760} /><span><strong>Tobby 提醒：</strong>及时回复消息，能提升成交率哦～</span></div></AppShell>;
 }
 
 function NotificationDetailPage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
@@ -459,9 +488,14 @@ function NotificationDetailPage({ type, navigate }: { type: string; navigate: (t
   return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
 }
 
+function ConversationBookMessage({ thread, book, currentUser, user, navigate }: { thread: ChatThread; book: Book; currentUser?: User; user: User; navigate: (to: string) => void }) {
+  const mine = !thread.buyerId || thread.buyerId === currentUser?.id;
+  return <div className={`message-row ${mine ? 'mine' : ''}`}>{!mine && <Avatar user={user} size={37} />}<div><button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button><p>我想咨询这本书</p><time>会话关联商品</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>;
+}
+
 function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: (to: string) => void; notify: (text: string) => void }) {
   const currentUser = useContext(CurrentUserContext);
-  const [thread, setThread] = useState<ChatThread | null>(); const [text, setText] = useState(''); const [error, setError] = useState(''); const [attempt, setAttempt] = useState(0);
+  const [thread, setThread] = useState<ChatThread | null | undefined>(() => threadId.startsWith('new-') ? undefined : peekThread(threadId)); const [text, setText] = useState(''); const [error, setError] = useState(''); const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -471,6 +505,8 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
           if (active) navigate(`/messages/${id}`);
           return;
         }
+        const cached = peekThread(threadId);
+        if (active && cached) setThread(cached);
         const loaded = await demoRepository.getThread(threadId);
         if (!loaded) throw new Error('会话不存在或已不可访问');
         if (active) setThread(loaded);
@@ -484,20 +520,17 @@ function ChatPage({ threadId, navigate, notify }: { threadId: string; navigate: 
   }, [threadId, navigate, notify, attempt]);
   if (thread === undefined) return <AppShell navigate={navigate} title="消息" back noNav><InlineLoading /></AppShell>;
   if (thread === null) return <AppShell navigate={navigate} title="消息" back noNav><div className="inline-state large"><Image src="/assets/tobby-sad.webp" alt="会话加载失败" width={760} height={760} /><h3>会话加载失败</h3><p>{error}</p><button className="primary-button" onClick={() => { setThread(undefined); setError(''); setAttempt((value) => value + 1); }}>重新加载</button></div></AppShell>;
-  const user = thread.participant || getUser(thread.participantId); const book = seedBooks.find((item) => item.id === thread.bookId) ?? seedBooks[0];
+  const user = thread.participant || getUser(thread.participantId); const book = thread.book || peekBook(thread.bookId) || seedBooks.find((item) => item.id === thread.bookId) || { ...seedBooks[0], id: thread.bookId, title: '会话关联商品' };
   const send = async () => { if (!text.trim()) return; const message = await demoRepository.sendMessage(thread.id, text.trim()); setThread({ ...thread, messages: [...thread.messages, message] }); setText(''); };
-  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream">{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
+  return <AppShell navigate={navigate} title={user.name} back noNav className="chat-page"><div className="chat-user"><Avatar user={user} size={40} /><span>{user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`} · 站内用户</span></div><div className="chat-safety"><ShieldCheck />站内沟通更安全 · 当面交易请确认书况</div><div className="message-stream"><ConversationBookMessage thread={thread} book={book} currentUser={currentUser} user={user} navigate={navigate} />{thread.messages.map((message) => { const mine = message.senderId === currentUser?.id; return <div className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>{!mine && <Avatar user={user} size={37} />}<div>{message.kind === 'book' && <button className="shared-book" onClick={() => navigate(`/books/${book.id}`)}><BookCover book={book} compact /><span><strong>{book.title}</strong><small>{book.author}</small><b>¥{book.price}</b></span></button>}<p>{message.text}</p><time>{message.createdAt}</time></div>{mine && currentUser && <Avatar user={currentUser} size={37} />}</div>; })}</div><div className="trade-tip">❧ 交易小贴士：请在校内当面交易，确认书况后再付款哦～ ❧</div><div className="chat-composer"><button onClick={() => notify('图片消息暂未开放')}><ImagePlus /></button><button onClick={() => notify('商品链接分享暂未开放')}><Bookmark /></button><input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void send(); }} placeholder="输入消息…" aria-label="输入消息" /><button className="send-button" onClick={send}>发送</button></div></AppShell>;
 }
 
 function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout }: { navigate: (to: string) => void; notify: (text: string) => void; currentUser?: User; onProfileUpdated: (profile: User) => void; onLogout: () => void }) {
-  const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(0); const [listings, setListings] = useState(0);
+  const [profile, setProfile] = useState<User | undefined>(currentUser); const [favorites, setFavorites] = useState(() => peekFavorites()?.length || 0); const [listings, setListings] = useState(() => peekMyListings()?.length || 0);
   useEffect(() => {
-    Promise.all([getH5Profile(), demoRepository.listFavorites(), demoRepository.listMyListings()])
-      .then(([student, favoriteBooks, myBooks]) => {
-        const user = profileToUser(student);
-        setProfile(user); onProfileUpdated(user); setFavorites(favoriteBooks.length); setListings(myBooks.length);
-      })
-      .catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+    void getH5Profile().then((student) => { const user = profileToUser(student); setProfile(user); onProfileUpdated(user); }).catch((cause) => notify(cause instanceof Error ? cause.message : '个人资料加载失败'));
+    void demoRepository.listFavorites().then((favoriteBooks) => setFavorites(favoriteBooks.length)).catch(() => undefined);
+    void demoRepository.listMyListings().then((myBooks) => setListings(myBooks.length)).catch(() => undefined);
   }, [notify, onProfileUpdated]);
   if (!profile) return <AppShell active="/profile" navigate={navigate}><InlineLoading /></AppShell>;
   return <AppShell active="/profile" navigate={navigate} title="我的" className="profile-page">
@@ -552,23 +585,27 @@ function ProfileEditPage({ navigate, notify, currentUser, onProfileUpdated }: { 
 function MenuButton({ icon: Icon, label, detail, onClick, danger }: { icon: typeof Heart; label: string; detail: string; onClick: () => void; danger?: boolean }) { return <button className={danger ? 'danger' : ''} onClick={onClick}><span><Icon /></span><div><strong>{label}</strong><small>{detail}</small></div><ChevronRight /></button>; }
 
 function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [books, setBooks] = useState<Book[]>(); useEffect(() => { demoRepository.listFavorites().then(setBooks); }, []);
+  const [books, setBooks] = useState<Book[] | undefined>(() => peekFavorites()); useEffect(() => { demoRepository.listFavorites().then(setBooks); }, []);
   return <AppShell navigate={navigate} title="我的收藏" back className="simple-list-page">{books === undefined ? <InlineLoading /> : books.length ? <div className="listing-stack">{books.map((book) => <BookListCard book={book} navigate={navigate} favorite onFavorite={async () => { await demoRepository.toggleFavorite(book.id); setBooks(books.filter((item) => item.id !== book.id)); notify('已取消收藏'); }} key={book.id} />)}</div> : <div className="inline-state large"><Image src="/assets/tobby-question.webp" alt="收藏为空" width={760} height={760} /><h3>收藏夹还空空的</h3><p>看到心仪的书，点一下爱心就能在这里找到它。</p><button className="primary-button" onClick={() => navigate('/category')}>去发现好书</button></div>}</AppShell>;
 }
 
 function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
+  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const [deleteTarget, setDeleteTarget] = useState<Book | null>(null); const [deletingId, setDeletingId] = useState<string>(); const load = useCallback(() => { demoRepository.listMyListings().then(setBooks); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
   const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
-  const remove = async (book: Book) => {
-    if (!window.confirm(`确定删除《${book.title}》吗？删除后不会再公开展示。`)) return;
+  const remove = (book: Book) => setDeleteTarget(book);
+  const confirmRemove = async () => {
+    if (!deleteTarget || deletingId) return;
+    const book = deleteTarget;
+    setDeletingId(book.id);
     try {
       await demoRepository.deleteListing(book.id);
       setBooks((current) => current.filter((item) => item.id !== book.id));
-      notify('已删除这本书'); load();
+      setDeleteTarget(null); notify('已删除这本书'); load();
     } catch (cause) { notify(cause instanceof Error ? cause.message : '删除失败，请稍后重试'); }
+    finally { setDeletingId(undefined); }
   };
-  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button></AppShell>;
+  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button>{deleteTarget && <div className="dialog-layer"><button className="dialog-scrim" onClick={() => !deletingId && setDeleteTarget(null)} aria-label="取消删除" /><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title"><div className="confirm-dialog-copy"><span><CircleAlert /></span><div><h2 id="delete-dialog-title">确认删除这本书？</h2><p>《{deleteTarget.title}》删除后不会再公开展示。</p></div></div><div className="confirm-dialog-actions"><button className="secondary-button" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(null)}>取消</button><button className="danger-button" disabled={Boolean(deletingId)} onClick={() => void confirmRemove()}>{deletingId ? <><RefreshCw className="spin" />删除中</> : <><Trash2 />确认删除</>}</button></div></section></div>}</AppShell>;
 }
 
 const stateContent: Record<string, { title: string; text: string; image: string; button: string }> = {
@@ -613,10 +650,13 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   }, []);
   useEffect(() => {
     let active = true;
+    const sid = demoRepository.getAuthenticatedSid();
+    if (sid && sid !== 'guest') void warmAccountSnapshots();
     void restoreH5Session().then((user) => {
       if (!active) return;
       if (user?.campusStatus === 'VERIFIED') {
         demoRepository.markAuthenticated(user.id);
+        if (sid !== user.id) void warmAccountSnapshots();
         const profile = profileToUser(user);
         writeProfileSnapshot(profile);
         setCurrentUser(profile);
