@@ -111,6 +111,13 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('.detail-page .content-scroll.no-nav { padding-bottom:')
   })
 
+  it('hides an empty course fact and keeps campus and ISBN easy to read', () => {
+    const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
+    expect(detailPage).toContain('book.course.trim() ? <span><BookOpen />{book.course}</span> : null')
+    expect(styles).toContain('.detail-facts span { display: flex; align-items: center; gap: 7px; color: #62675a; font-size: 13px;')
+    expect(styles).not.toContain('.detail-price span, .detail-facts span, .description-block span')
+  })
+
   it('uses an in-app delete confirmation instead of the browser confirm dialog', () => {
     const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
     expect(myListingsPage).not.toContain('window.confirm')

@@ -100,7 +100,7 @@ const authenticatedFixture = `(() => {
   const seller = { ...user, id: 'qa-seller', nickname: '巡检卖家', campus: null };
   const listing = {
     id: 'math-7', title: '高等数学（第七版）', author: '同济大学数学系', isbn: '9787040396638',
-    category: '教材教辅', course: '高等数学', priceCents: 2800, originalPriceCents: 5680,
+    category: '教材教辅', course: '', priceCents: 2800, originalPriceCents: 5680,
     condition: '九成新', campus: '良乡', description: '页面巡检用商品', status: 'ACTIVE',
     sellerId: seller.id, seller, createdAt: '2026-08-29T08:00:00.000Z', tags: ['教材'], images: [], version: 1
   };
