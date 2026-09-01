@@ -128,6 +128,15 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('.confirm-dialog')
   })
 
+  it('requires an explicit second click before marking a listing as sold', () => {
+    const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
+    expect(myListingsPage).toContain('setConfirmingSoldId(book.id)')
+    expect(myListingsPage).toContain('确认已售')
+    expect(myListingsPage).toContain("updateStatus(book, 'sold')")
+    expect(myListingsPage).toContain('setConfirmingSoldId(undefined)')
+    expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '状态更新失败，请稍后重试'")
+  })
+
   it('keeps optional publish photos fully visible across aspect ratios', () => {
     const publishPage = mobileApp.slice(mobileApp.indexOf('function PublishPage'), mobileApp.indexOf('function ProfileEditPage'))
     expect(publishPage).toContain('className="optional-images"')
