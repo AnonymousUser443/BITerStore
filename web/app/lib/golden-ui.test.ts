@@ -114,7 +114,9 @@ describe('authenticated Golden H5', () => {
   it('hides an empty course fact and keeps campus and ISBN easy to read', () => {
     const detailPage = mobileApp.slice(mobileApp.indexOf('function BookDetailPage'), mobileApp.indexOf('function PublishPage'))
     expect(detailPage).toContain('book.course.trim() ? <span><BookOpen />{book.course}</span> : null')
+    expect(detailPage).not.toContain('<del>')
     expect(styles).toContain('.detail-facts span { display: flex; align-items: center; gap: 7px; color: #62675a; font-size: 13px;')
+    expect(styles).not.toContain('.detail-price del')
     expect(styles).not.toContain('.detail-price span, .detail-facts span, .description-block span')
   })
 

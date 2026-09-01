@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { preserveSnapshot } from '@/domain/snapshot'
 import Taro from '@tarojs/taro'
-import { apiRequest } from '@/domain/api'
+import { apiRequest, sessionStore } from '@/domain/api'
 import { defaultFilters, filterListings } from '@/domain/filters'
 import { seedListings } from '@/domain/seed'
 import { listingAssistant } from '@/domain/assistant'
@@ -27,13 +27,77 @@ describe('domain', () => {
     expect(preserveSnapshot(current, [{ id: 'book-a', title: '线性代数' }])).not.toBe(current)
   })
 
-  beforeEach(() => { memory.clear(); vi.stubGlobal('__API_URL__', 'http://api.test'); vi.mocked(Taro.request).mockClear() })
+  beforeEach(async () => {
+    memory.clear()
+    vi.stubGlobal('__API_URL__', 'http://api.test')
+    vi.mocked(Taro.request).mockReset().mockResolvedValue({ statusCode: 200, data: { ok: true } } as never)
+    await sessionStore.clear()
+  })
   it('无请求体的写请求会发送空 JSON 对象', async () => { await apiRequest('/empty', { method: 'POST' }); expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', data: {} })) })
+  it('登录会话写入后下一次请求立即携带访问令牌', async () => {
+    const session = { accessToken: 'access-now', refreshToken: 'refresh-now', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    await apiRequest('/me')
+    expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ header: expect.objectContaining({ Authorization: 'Bearer access-now' }) }))
+  })
+  it('访问令牌失效时并发请求只刷新一次并使用新令牌重试', async () => {
+    const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    let refreshRequests = 0
+    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+      if (options.url.endsWith('/auth/refresh')) {
+        refreshRequests += 1
+        await Promise.resolve()
+        return { statusCode: 200, data: { ...session, accessToken: 'access-new', refreshToken: 'refresh-new' } } as never
+      }
+      return options.header?.Authorization === 'Bearer access-new'
+        ? { statusCode: 200, data: { ok: true } } as never
+        : { statusCode: 401, data: { message: '登录已失效' } } as never
+    })
+    await expect(Promise.all([apiRequest('/me'), apiRequest('/notifications')])).resolves.toEqual([{ ok: true }, { ok: true }])
+    expect(refreshRequests).toBe(1)
+  })
+  it('访问令牌即将过期时先刷新再请求受保护接口', async () => {
+    const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 1, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+      if (options.url.endsWith('/auth/refresh')) {
+        return { statusCode: 200, data: { ...session, accessToken: 'access-new', refreshToken: 'refresh-new', expiresIn: 3600 } } as never
+      }
+      return { statusCode: 200, data: { authorization: options.header?.Authorization } } as never
+    })
+    await expect(apiRequest<{ authorization?: string }>('/me')).resolves.toEqual({ authorization: 'Bearer access-new' })
+    expect(Taro.request).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(Taro.request).mock.calls[0]?.[0]).toMatchObject({ url: 'http://api.test/auth/refresh' })
+  })
+  it('较慢请求返回旧令牌 401 时复用已刷新的会话', async () => {
+    const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    let releaseDelayed: ((value: { statusCode: number; data: { message: string } }) => void) | undefined
+    let refreshRequests = 0
+    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+      if (options.url.endsWith('/auth/refresh')) {
+        refreshRequests += 1
+        return { statusCode: 200, data: { ...session, accessToken: 'access-new', refreshToken: 'refresh-new' } } as never
+      }
+      if (options.url.endsWith('/notifications') && options.header?.Authorization === 'Bearer access-old') {
+        return await new Promise((resolve) => { releaseDelayed = resolve }) as never
+      }
+      return options.header?.Authorization === 'Bearer access-new'
+        ? { statusCode: 200, data: { ok: true } } as never
+        : { statusCode: 401, data: { message: '登录已失效' } } as never
+    })
+    const delayed = apiRequest<{ ok: boolean }>('/notifications')
+    await expect(apiRequest('/me')).resolves.toEqual({ ok: true })
+    releaseDelayed?.({ statusCode: 401, data: { message: '登录已失效' } })
+    await expect(delayed).resolves.toEqual({ ok: true })
+    expect(refreshRequests).toBe(1)
+  })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
   it('收藏能够持久化并取消', async () => { expect(await demoRepository.toggleFavorite('math-7')).toBe(true); expect((await demoRepository.listFavorites()).map((x) => x.id)).toEqual(['math-7']); expect(await demoRepository.toggleFavorite('math-7')).toBe(false) })
   it('真实 API 的个人数据快照按账号隔离', async () => {
     const session = { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
-    memory.set('biterstore:taro:v1:api-session', session)
+    await sessionStore.set(session)
     vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { id: 'user-a', studentNumber: '1120240001', nickname: '同学 A', campus: '良乡', campusStatus: 'VERIFIED' } } as never)
     await apiRepository.getProfile()
     vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: [{ id: 'book-a', title: '缓存书籍', author: '作者', isbn: '', category: '教材', course: '', priceCents: 1000, condition: '九成新', campus: '良乡', description: '', status: 'ACTIVE', sellerId: 'seller', createdAt: '2026-08-31T00:00:00.000Z', tags: [], images: [] }] } as never)
@@ -52,7 +116,7 @@ describe('domain', () => {
     expect(apiRepository.peekNotifications()?.[0].id).toBe('notice-a')
     vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 404, data: { message: '商品不存在' } } as never)
     await expect(apiRepository.getListing('book-a')).resolves.toMatchObject({ id: 'book-a', title: '缓存书籍' })
-    memory.set('biterstore:taro:v1:api-session', { ...session, user: { ...session.user, id: 'user-b' } })
+    await sessionStore.set({ ...session, user: { ...session.user, id: 'user-b' } })
     expect(apiRepository.peekProfile()).toBeUndefined()
     expect(apiRepository.peekFavorites()).toBeUndefined()
     expect(apiRepository.peekMyListings()).toBeUndefined()

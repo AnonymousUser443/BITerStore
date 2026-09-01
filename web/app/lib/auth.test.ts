@@ -69,6 +69,26 @@ describe('Golden H5 authentication', () => {
     }));
   });
 
+  it('shares one refresh across concurrent requests when the access cookie expires', async () => {
+    const profile = { id: 'student-1', nickname: 'BITer1120230000' };
+    let profileRequests = 0;
+    let refreshRequests = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/auth/refresh')) {
+        refreshRequests += 1;
+        await Promise.resolve();
+        return jsonResponse({ expiresIn: 900, user: { id: 'student-1', role: 'USER', campusStatus: 'VERIFIED' } });
+      }
+      profileRequests += 1;
+      return profileRequests <= 2 ? jsonResponse({ message: 'expired' }, 401) : jsonResponse(profile);
+    });
+
+    await expect(Promise.all([h5ApiRequest('/me'), h5ApiRequest('/me')])).resolves.toEqual([profile, profile]);
+    expect(refreshRequests).toBe(1);
+    expect(profileRequests).toBe(4);
+  });
+
   it('updates nickname, avatar, campus and bio through the real profile API', async () => {
     const input = { nickname: 'New BITer', avatarUrl: 'data:image/jpeg;base64,YQ==', campus: '良乡', bio: 'Hello' };
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ id: 'student-1', ...input }));

@@ -49,13 +49,16 @@ export class AuthController {
   ) {
     if (transport !== 'cookie') return result
     const secure = process.env.NODE_ENV === 'production'
-    // Remove the access cookie issued at `/` by the pre-cookie-transport API.
+    // Remove cookies issued by earlier transports before writing the current
+    // first-party session. Lax blocks cookies on cross-site subrequests while
+    // working in embedded browsers and after entry through external links.
     reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'lax', path: '/' })
+    reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'strict', path: '/api/v1/auth' })
     reply.setCookie('biterstore_access', result.accessToken, {
-      httpOnly: true, secure, sameSite: 'strict', path: '/api/v1', maxAge: result.expiresIn
+      httpOnly: true, secure, sameSite: 'lax', path: '/api/v1', maxAge: result.expiresIn
     })
     reply.setCookie('biterstore_refresh', result.refreshToken, {
-      httpOnly: true, secure, sameSite: 'strict', path: '/api/v1/auth',
+      httpOnly: true, secure, sameSite: 'lax', path: '/api/v1',
       maxAge: Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 86400
     })
     return { expiresIn: result.expiresIn, user: result.user }
@@ -64,7 +67,8 @@ export class AuthController {
   private clearSessionCookies(reply: FastifyReply) {
     const secure = process.env.NODE_ENV === 'production'
     reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'lax', path: '/' })
-    reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'strict', path: '/api/v1' })
+    reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'lax', path: '/api/v1' })
     reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'strict', path: '/api/v1/auth' })
+    reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'lax', path: '/api/v1' })
   }
 }

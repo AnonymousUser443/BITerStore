@@ -30,6 +30,14 @@ describe('Golden Reference style alignment', () => {
     expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
   })
 
+  it('H5 在应用加载前把生产 HTTP 入口切换到 HTTPS', () => {
+    const html = read('src/index.html')
+    expect(html).toContain("location.protocol === 'http:'")
+    expect(html).toContain("location.hostname === 'store.young581.com'")
+    expect(html).toContain("location.replace('https://store.young581.com' + location.pathname + location.search + location.hash)")
+    expect(html.indexOf("location.protocol === 'http:'")).toBeLessThan(html.indexOf("var path = location.pathname"))
+  })
+
   it('H5 内容高度跟随应用外壳并覆盖短横屏布局', () => {
     const goldenCss = read('../web/app/globals.css')
     expect(goldenCss).toContain('.content-scroll { position: relative; height: calc(100% - 76px);')
@@ -132,13 +140,43 @@ describe('Golden Reference style alignment', () => {
     expect(visual).toContain("type: 'fixed-compact-canvas'")
   })
 
-  it('injects the ignored local AppID into every WeApp build without committing it', () => {
+  it('injects the ignored local AppID and stable base-library version into every WeApp build', () => {
     const packageJson = read('package.json')
     const syncScript = read('scripts/sync-weapp-project-config.mjs')
     expect(packageJson.match(/node scripts\/sync-weapp-project-config\.mjs/g)).toHaveLength(2)
     expect(syncScript).toContain('project.private.config.json')
     expect(syncScript).toContain("dist', 'project.config.json")
+    expect(syncScript).toContain('outputConfig.libVersion = libVersion')
     expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
+  })
+
+  it('builds WeApp API requests through domains already allowed by the WeChat project', () => {
+    const config = read('config/index.ts')
+    const example = read('.env.example')
+    expect(config).toContain("const productionBitLoginUrl = 'https://store.young581.com/bit-login'")
+    expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, '../.env.weapp.local'))")
+    expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, `../.env.${mode}`))")
+    expect(config).toContain("__API_URL__: JSON.stringify(isE2E ? '' :")
+    expect(example).toContain('BIT_LOGIN_URL=https://store.young581.com/bit-login')
+    expect(config).not.toContain('login.bit101.flwfdd.xyz')
+  })
+
+  it('covers both required publish images before invoking the WeApp fixture assistant', () => {
+    const publish = read('src/pages/publish/index.tsx')
+    const e2e = read('scripts/weapp-e2e.mjs')
+    expect(publish).toContain("id='e2e-publish-isbn-media'")
+    expect(e2e).toContain("openStable('switchTab', '/pages/publish/index')")
+    expect(e2e).toContain("required(page, '#e2e-publish-isbn-media')")
+    expect(e2e).toContain("requiredEventually(page, '#e2e-publish-title')")
+    expect(e2e).toContain('route: lastKnownRoute')
+    expect(e2e).not.toContain('void app.currentPage().then')
+    expect(e2e).toContain("knownAutomationNoise.push({ kind: 'rawPath'")
+    expect(e2e).toContain('eventTime - noise.time <= 20000')
+    expect(e2e).toContain('duringRouteObservation')
+    expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
+    expect(e2e).toContain("scenario('bit-login-request-domain'")
+    expect(e2e).toContain("url: 'https://store.young581.com/bit-login/openapi.json'")
+    expect(e2e).toContain('response?.statusCode !== 200')
   })
 
   it('gives native navigation immediate feedback and keeps the card detail action wired', () => {
@@ -161,10 +199,20 @@ describe('Golden Reference style alignment', () => {
     expect(detail).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
   })
 
+  it('avoids the unsupported only-child selector in WeApp styles', () => {
+    const golden = read('src/golden.css')
+    const listings = read('src/pages/my-listings/index.tsx')
+    expect(golden).not.toContain(':only-child')
+    expect(golden).toContain('.manage-listing-actions.single-action > button')
+    expect(listings).toContain("['available', 'offline'].includes(item.status) ? '' : ' single-action'")
+  })
+
   it('hides an empty course fact and enlarges campus and ISBN metadata', () => {
     const detail = read('src/pages/listing/detail.tsx')
     const adapter = read('src/app.css')
     expect(detail).toContain("item.course.trim() ? <Text>▥ {item.course}</Text> : null")
+    expect(detail).not.toContain('detail-original-price')
     expect(adapter).toContain("font-size: 13px; line-height: 1.5;")
+    expect(adapter).not.toContain('.detail-original-price')
   })
 })

@@ -345,7 +345,6 @@ button::after { border: 0; }
 .detail-author { display: block; color: #77766e; font-size: 12px; }
 .detail-price { display: flex; align-items: center; margin: 15px 0; }
 .detail-current-price { color: #c56e3b; font-family: Georgia, serif; font-size: 27px; font-weight: 700; }
-.detail-original-price { margin-left: 10px; color: #a6a195; font-size: 12px; text-decoration: line-through; }
 .detail-condition { margin-left: auto; padding: 5px 8px; border: 1px solid #d8cfb5; border-radius: 8px; color: #657054; font-size: 11px; }
 .detail-facts { display: flex; flex-wrap: wrap; }
 .detail-facts > text { width: 50%; box-sizing: border-box; margin-bottom: 8px; color: #6d7065; font-size: 11px; }

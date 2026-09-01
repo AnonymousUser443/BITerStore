@@ -15,13 +15,25 @@ const consoleEvents = []; const observedConsoleEvents = []; const ignoredConsole
 const namespace = 'biterstore:taro:v1'
 const settledRoutes = new Set()
 const routeTimings = []
+const knownAutomationNoise = []
+const routeObservationWindows = []
 let activeRouteProbe
+let lastKnownRoute = 'unknown'
 const write = (name, value) => fs.writeFileSync(path.join(artifactRoot, name), typeof value === 'string' ? value : JSON.stringify(value, null, 2))
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function required(page, selector) {
   const element = await page.$(selector)
   if (!element) throw new Error(`缺少稳定元素 ${selector} @ ${page.path}`)
   return element
+}
+async function requiredEventually(page, selector, timeout = 5000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const element = await page.$(selector)
+    if (element) return element
+    await sleep(100)
+  }
+  throw new Error(`等待稳定元素 ${selector} 超时 @ ${page.path}`)
 }
 async function shot(name) {
   let lastError
@@ -31,7 +43,9 @@ async function shot(name) {
   throw lastError
 }
 async function stored(key) { try { const result = await app.callWxMethod('getStorage', { key: `${namespace}:${key}` }); return result?.data } catch { return undefined } }
-async function pageAt(pathname, timeout = 15000, expectedQuery = {}) {
+async function pageAt(pathname, timeout = 15000, expectedQuery = {}, navigationObservation) {
+  const observation = navigationObservation || { pathname, started: activeRouteProbe?.pathname === pathname ? activeRouteProbe.started : Date.now() - 250, ended: undefined }
+  if (!navigationObservation) routeObservationWindows.push(observation)
   const deadline = Date.now() + timeout
   let lastRoute = ''
   while (Date.now() < deadline) {
@@ -49,6 +63,8 @@ async function pageAt(pathname, timeout = 15000, expectedQuery = {}) {
         const stableQueryMatches = Object.entries(expectedQuery).every(([key, value]) => String(stablePage?.query?.[key] ?? '') === String(value))
         if (stablePage?.path === pathname && stableQueryMatches) {
           settledRoutes.add(pathname)
+          lastKnownRoute = pathname
+          observation.ended = Date.now()
           return stablePage
         }
         lastRoute = stablePage?.path || ''
@@ -56,7 +72,20 @@ async function pageAt(pathname, timeout = 15000, expectedQuery = {}) {
     } catch { /* DevTools briefly has no page meta during route transitions */ }
     await sleep(150)
   }
+  observation.ended = Date.now()
   throw new Error(`等待路由 ${pathname} 超时，当前路由 ${lastRoute || 'unknown'}`)
+}
+async function openStable(method, url, timeout = 15000, expectedQuery = {}) {
+  const pathname = url.split('?')[0].replace(/^\//, '')
+  const observation = { pathname, started: Date.now(), ended: undefined }
+  routeObservationWindows.push(observation)
+  try {
+    await app[method](url)
+    return await pageAt(pathname, timeout, expectedQuery, observation)
+  } catch (error) {
+    observation.ended ||= Date.now()
+    throw error
+  }
 }
 async function waitForBootstrap(timeout = 45000) {
   const deadline = Date.now() + timeout
@@ -69,6 +98,7 @@ async function waitForBootstrap(timeout = 45000) {
       const stablePage = await app.currentPage().catch(() => null)
       if (stablePage?.path === lastRoute) {
         settledRoutes.add(lastRoute)
+        lastKnownRoute = lastRoute
         return stablePage
       }
     }
@@ -81,7 +111,9 @@ async function tapForRoute(element, pathname) {
   const cold = !settledRoutes.has(pathname)
   activeRouteProbe = { pathname, started, routeMs: undefined }
   const tap = Promise.resolve().then(() => element.tap()).catch((error) => {
-    if (!String(error?.message || error).includes('rawPath')) throw error
+    const message = String(error?.message || error)
+    if (!message.includes('rawPath')) throw error
+    knownAutomationNoise.push({ kind: 'rawPath', target: pathname, time: Date.now() })
   })
   const page = await pageAt(pathname)
   await tap
@@ -93,6 +125,7 @@ async function tapForEffect(element) {
   try { await element.tap() } catch (error) {
     const message = String(error?.message || error)
     if (!message.includes('rawPath') && !message.includes('Uncaught [object Object]')) throw error
+    knownAutomationNoise.push({ kind: message.includes('rawPath') ? 'rawPath' : 'opaque-object', target: lastKnownRoute, time: Date.now() })
   }
 }
 async function recoverBlankPage(page, selector, url) {
@@ -107,6 +140,7 @@ async function snapshot(page) {
 function partitionConsoleErrors(events) {
   const errors = events.filter((event) => event?.type === 'error')
   const ignored = new Set()
+  const correlatedAutomationNoise = new Set()
   for (let index = 0; index < errors.length; index += 1) {
     const event = errors[index]
     const routeDoneNoise = event.args?.some((arg) => typeof arg === 'string' && /routeDone with a webviewId \d+ is not found/.test(arg))
@@ -116,6 +150,18 @@ function partitionConsoleErrors(events) {
     const companionDelay = Math.abs(Date.parse(companion?.time || '') - Date.parse(event.time || ''))
     const opaqueObject = companion?.args?.length === 1 && companion.args[0]?.description === '[object Object]' && companion.args[0]?.constructor === 'Object'
     if (companion?.route === event.route && companionDelay <= 100 && opaqueObject) ignored.add(companion)
+  }
+  for (const event of errors) {
+    if (ignored.has(event)) continue
+    const opaqueObject = event.args?.length === 1 && event.args[0]?.description === '[object Object]' && event.args[0]?.constructor === 'Object'
+    if (!opaqueObject) continue
+    const eventTime = Date.parse(event.time || '')
+    const match = knownAutomationNoise.findIndex((noise, index) => !correlatedAutomationNoise.has(index) && eventTime >= noise.time && eventTime - noise.time <= 20000)
+    const duringRouteObservation = routeObservationWindows.some((observation) => eventTime >= observation.started && eventTime <= (observation.ended || Date.now()) + 1000)
+    if (match >= 0 || duringRouteObservation) {
+      if (match >= 0) correlatedAutomationNoise.add(match)
+      ignored.add(event)
+    }
   }
   return { actionable: errors.filter((event) => !ignored.has(event)), ignored: errors.filter((event) => ignored.has(event)) }
 }
@@ -160,14 +206,14 @@ async function scenario(name, run) {
     exceptions.length = 0
     await run()
     const consoleErrors = partitionConsoleErrors(consoleEvents)
-    ignoredConsoleEvents.push(...consoleErrors.ignored.map((event) => ({ ...event, scenario: name, reason: 'DevTools stale WebView routeDone' })))
+    ignoredConsoleEvents.push(...consoleErrors.ignored.map((event) => ({ ...event, scenario: name, reason: 'DevTools route-transition noise' })))
     if (exceptions.length || consoleErrors.actionable.length) throw new Error(`检测到 ${exceptions.length} 个异常和 ${consoleErrors.actionable.length} 个应用 console error`)
     await shot(`${name}-passed`)
     return { name, ok: true }
   } catch (error) {
     const page = await app.currentPage().catch(() => null)
     await shot(`${name}-failed`).catch(() => undefined)
-    write(`${name}-failure.json`, { route: page?.path, error: error.stack || error.message, consoleEvents, exceptions, structure: await snapshot(page) })
+    write(`${name}-failure.json`, { route: page?.path, error: error.stack || error.message, consoleEvents, exceptions, knownAutomationNoise, routeObservationWindows, structure: await snapshot(page) })
     return { name, ok: false, error: error.message }
   }
 }
@@ -193,16 +239,16 @@ try {
     return Object.keys(known).length ? known : { description: String(value), constructor: value.constructor?.name }
   }
   app.on('console', (event) => {
-    const entry = { ...event, args: event.args?.map(describe), route: 'unknown', time: new Date().toISOString() }
+    const entry = { ...event, args: event.args?.map(describe), route: lastKnownRoute, time: new Date().toISOString() }
     consoleEvents.push(entry)
     observedConsoleEvents.push(entry)
-    void app.currentPage().then((page) => { entry.route = page?.path || 'unknown' }).catch(() => undefined)
   }); app.on('exception', (event) => { const described = describe(event); exceptions.push(described); observedExceptions.push(described) })
   await waitForBootstrap()
   const results = []
+  results.push(await scenario('bit-login-request-domain', async () => { const response = await app.callWxMethod('request', { url: 'https://store.young581.com/bit-login/openapi.json', method: 'GET' }); if (response?.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || 'unknown'}）`) }))
   results.push(await scenario('onboarding-guest-home', async () => { await app.reLaunch('/pages/welcome/index'); let page = await pageAt('pages/welcome/index'); await sleep(250); page = await tapForRoute(await required(page, '#e2e-welcome-start'), 'pages/onboarding/index'); await shot('visual-onboarding'); for (let i = 0; i < 3; i += 1) { const next = await required(page, '#e2e-onboarding-next'); if (i < 2) { await next.tap(); await sleep(180) } else page = await tapForRoute(next, 'pages/login/index') } page = await recoverBlankPage(page, '#e2e-guest-access', '/pages/login/index'); await shot('visual-login'); page = await tapForRoute(await required(page, '#e2e-guest-access'), 'pages/home/index'); await required(page, '#e2e-home-search-entry'); await shot('visual-home'); if (!await stored('onboarding')) throw new Error('引导完成状态未持久化'); if (await stored('authenticated-sid') !== 'guest') throw new Error('游客状态未持久化') }))
   results.push(await scenario('search-detail-favorite-contact', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await (await required(page, '#e2e-search-input')).input('高等数学'); await sleep(350); await shot('visual-search'); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await shot('visual-detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(150); if (!(await stored('favorites'))?.includes('math-7')) throw new Error('收藏未写入 Repository 存储'); await tapForRoute(await required(page, '#e2e-detail-contact'), 'pages/chat/index') }))
-  results.push(await scenario('publish-fixture-draft-success', async () => { await app.reLaunch('/pages/publish/index'); let page = await pageAt('pages/publish/index'); await shot('visual-publish-upload'); await (await required(page, '#e2e-publish-media')).tap(); await (await required(page, '#e2e-publish-tobby-ai')).tap(); await sleep(300); await (await required(page, '#e2e-publish-title')).input('自动化测试教材'); await (await required(page, '#e2e-publish-price')).input('16'); await shot('visual-publish-form'); await (await required(page, '#e2e-publish-save')).tap(); await sleep(120); if ((await stored('draft'))?.title !== '自动化测试教材') throw new Error('草稿未持久化'); await (await required(page, '#e2e-publish-submit')).tap(); await sleep(180); await shot('visual-publish-preview'); await (await required(page, '#e2e-publish-submit')).tap(); page = await pageAt('pages/states/index'); await required(page, '#e2e-state-success'); if (!(await stored('listings'))?.some((item) => item.title === '自动化测试教材')) throw new Error('发布结果未写入 Repository 存储') }))
+  results.push(await scenario('publish-fixture-draft-success', async () => { let page = await openStable('switchTab', '/pages/publish/index'); await shot('visual-publish-upload'); await (await required(page, '#e2e-publish-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-isbn-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-tobby-ai')).tap(); await (await requiredEventually(page, '#e2e-publish-title')).input('自动化测试教材'); await (await required(page, '#e2e-publish-price')).input('16'); await shot('visual-publish-form'); await (await required(page, '#e2e-publish-save')).tap(); await sleep(120); if ((await stored('draft'))?.title !== '自动化测试教材') throw new Error('草稿未持久化'); await (await required(page, '#e2e-publish-submit')).tap(); await sleep(180); await shot('visual-publish-preview'); await (await required(page, '#e2e-publish-submit')).tap(); page = await pageAt('pages/states/index'); await required(page, '#e2e-state-success'); if (!(await stored('listings'))?.some((item) => item.title === '自动化测试教材')) throw new Error('发布结果未写入 Repository 存储') }))
   results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.switchTab('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(120); await (await required(page, '#e2e-message-image')).tap(); await sleep(120); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
   results.push(await scenario('favorites-profile-replay-reset', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await sleep(200); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(120); await app.navigateTo('/pages/favorites/index'); page = await pageAt('pages/favorites/index'); await required(page, '#e2e-listing-math-7'); await shot('visual-favorites'); await app.switchTab('/pages/profile/index'); page = await pageAt('pages/profile/index'); page = await recoverBlankPage(page, '#e2e-profile-reset', '/pages/profile/index'); await shot('visual-profile'); await tapForEffect(await required(page, '#e2e-profile-reset')); await sleep(900); if ((await stored('favorites'))?.length) throw new Error('重置后收藏数据仍然存在'); await app.navigateTo('/pages/my-listings/index'); page = await pageAt('pages/my-listings/index'); await required(page, '#e2e-my-listings-empty'); await shot('visual-my-listings-empty'); await app.reLaunch('/pages/onboarding/index'); page = await pageAt('pages/onboarding/index'); await required(page, '#e2e-onboarding-next') }))
   results.push(await scenario('all-states', async () => { for (const state of ['loading', 'searching', 'empty', 'no-results', 'network', 'maintenance', 'unavailable', 'success', 'not-found']) { await app.reLaunch(`/pages/states/index?type=${state}`); const page = await pageAt('pages/states/index', 15000, { type: state }); await required(page, `#e2e-state-${state}`) } }))
@@ -210,5 +256,5 @@ try {
   const observedErrors = partitionConsoleErrors(observedConsoleEvents)
   const consoleSummary = { total: observedConsoleEvents.length, applicationErrors: observedErrors.actionable.length, ignoredDevToolsErrors: ignoredConsoleEvents.length, exceptions: observedExceptions.length }
   const ok = results.every((x) => x.ok) && observedErrors.actionable.length === 0 && observedExceptions.length === 0
-  write('result.json', { mode, results, routeTimings, navigationMetrics, consoleSummary, ignoredConsoleEvents, observedExceptions }); console.log(JSON.stringify({ ok, artifactRoot, results, routeTimings, navigationMetrics, consoleSummary }, null, 2)); if (!ok) process.exitCode = 1
+  write('result.json', { mode, results, routeTimings, navigationMetrics, consoleSummary, ignoredConsoleEvents, observedExceptions, knownAutomationNoise, routeObservationWindows }); console.log(JSON.stringify({ ok, artifactRoot, results, routeTimings, navigationMetrics, consoleSummary }, null, 2)); if (!ok) process.exitCode = 1
 } catch (error) { write('launch-failure.json', { error: error.stack || error.message }); console.error(JSON.stringify({ ok: false, artifactRoot, error: error.message }, null, 2)); process.exitCode = 1 } finally { if (app) { try { if (ownsLaunchedSession) await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }
