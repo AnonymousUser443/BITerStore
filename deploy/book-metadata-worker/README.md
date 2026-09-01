@@ -7,11 +7,12 @@
 ```sh
 npm install
 npx wrangler secret put PROXY_TOKEN
+# 推荐：npx wrangler secret put ISBN_WORK_APP_KEY
 # 推荐：npx wrangler secret put GOOGLE_BOOKS_API_KEY
 npm run deploy
 ```
 
-将部署输出的 Worker 地址写入服务端 `BOOK_METADATA_PROXY_URL`，将同一密钥写入 `BOOK_METADATA_PROXY_TOKEN`。不要把密钥提交到 Git。
+将部署输出的 Worker 地址写入服务端 `BOOK_METADATA_PROXY_URL`，将同一密钥写入 `BOOK_METADATA_PROXY_TOKEN`。`ISBN_WORK_APP_KEY` 用于优先查询 isbn.work 的中文书目数据；未配置、查询失败或没有精确匹配时，Worker 会继续查询其他来源。不要把任何密钥提交到 Git。
 
 如果使用 API Token 自动部署，最小账户权限为 `Workers Scripts: Edit`；也可以直接执行 `npx wrangler login` 走浏览器授权。官方权限表见 <https://developers.cloudflare.com/fundamentals/api/reference/permissions/>。
 

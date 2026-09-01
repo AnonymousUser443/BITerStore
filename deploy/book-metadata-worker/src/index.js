@@ -8,9 +8,62 @@ const json = (body, status, ttl) => new Response(JSON.stringify(body), {
 })
 
 function validIsbn(isbn) {
-  if (!/^\d{13}$/.test(isbn)) return false
-  const sum = [...isbn.slice(0, 12)].reduce((total, value, index) => total + Number(value) * (index % 2 ? 3 : 1), 0)
-  return (10 - sum % 10) % 10 === Number(isbn[12])
+  if (/^\d{13}$/.test(isbn)) {
+    const sum = [...isbn.slice(0, 12)].reduce((total, value, index) => total + Number(value) * (index % 2 ? 3 : 1), 0)
+    return (10 - sum % 10) % 10 === Number(isbn[12])
+  }
+  if (/^\d{9}[\dX]$/.test(isbn)) {
+    const sum = [...isbn].reduce((total, value, index) => total + (value === 'X' ? 10 : Number(value)) * (10 - index), 0)
+    return sum % 11 === 0
+  }
+  return false
+}
+
+function normalizeIsbn(value) {
+  return String(value || '').replace(/[^0-9Xx]/g, '').toUpperCase()
+}
+
+function isbn13From(value) {
+  const normalized = normalizeIsbn(value)
+  if (/^\d{13}$/.test(normalized)) return normalized
+  if (!/^\d{9}[\dX]$/.test(normalized)) return ''
+  const stem = `978${normalized.slice(0, 9)}`
+  const sum = [...stem].reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0)
+  return `${stem}${(10 - sum % 10) % 10}`
+}
+
+function containsExactIsbn(values, isbn) {
+  const candidates = Array.isArray(values) ? values : [values]
+  return candidates.some((value) => isbn13From(typeof value === 'object' ? value?.identifier : value) === isbn13From(isbn))
+}
+
+function isbnWorkCover(value) {
+  let pictures = value
+  if (typeof pictures === 'string') {
+    try {
+      pictures = JSON.parse(pictures)
+    } catch {
+      pictures = [pictures]
+    }
+  }
+  return (Array.isArray(pictures) ? pictures : [])
+    .map(String)
+    .find((url) => /^https:\/\//i.test(url)) || ''
+}
+
+function isbnWorkBook(isbn, value) {
+  const book = value?.data
+  if (value?.code !== 0 || value?.success === false || !book?.bookName?.trim() || !containsExactIsbn(book.isbn, isbn)) return null
+  const publishDate = Array.isArray(book.pressDate) ? book.pressDate.join('-') : String(book.pressDate || '')
+  return {
+    isbn,
+    title: book.bookName.trim(),
+    author: String(book.author || '').trim(),
+    publisher: String(book.press || '').trim(),
+    publishDate,
+    coverUrl: isbnWorkCover(book.pictures),
+    subjects: [book.clcName, book.clcCode].map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5),
+  }
 }
 
 function openLibraryBook(isbn, value) {
@@ -27,8 +80,10 @@ function openLibraryBook(isbn, value) {
 }
 
 function googleBook(isbn, value) {
-  const book = value?.items?.[0]?.volumeInfo
-  if (!book?.title) return null
+  const book = (value?.items || [])
+    .map((item) => item.volumeInfo)
+    .find((candidate) => candidate?.title && containsExactIsbn(candidate.industryIdentifiers, isbn))
+  if (!book) return null
   return {
     isbn,
     title: book.title,
@@ -41,8 +96,8 @@ function googleBook(isbn, value) {
 }
 
 function openLibrarySearchBook(isbn, value) {
-  const book = value?.docs?.[0]
-  if (!book?.title) return null
+  const book = (value?.docs || []).find((candidate) => candidate?.title && containsExactIsbn(candidate.isbn, isbn))
+  if (!book) return null
   return {
     isbn,
     title: book.title,
@@ -55,7 +110,7 @@ function openLibrarySearchBook(isbn, value) {
 }
 
 function crossrefBook(isbn, value) {
-  const book = (value?.message?.items || []).find((item) => (item.ISBN || []).map((candidate) => String(candidate).replace(/[^0-9Xx]/g, '')).includes(isbn))
+  const book = (value?.message?.items || []).find((item) => containsExactIsbn(item.ISBN, isbn))
   const title = book?.title?.[0]
   if (!title) return null
   const dateParts = book.published?.['date-parts']?.[0] || []
@@ -80,6 +135,12 @@ async function fetchJson(url, headers) {
 }
 
 async function fetchBook(isbn, env) {
+  if (env.ISBN_WORK_APP_KEY) {
+    const isbnWork = await fetchJson(`https://data.isbn.work/openApi/getInfoByIsbn?isbn=${encodeURIComponent(isbn)}&appKey=${encodeURIComponent(env.ISBN_WORK_APP_KEY)}`)
+    const found = isbnWorkBook(isbn, isbnWork)
+    if (found) return found
+  }
+
   if (env.GOOGLE_BOOKS_API_KEY) {
     const google = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=3&key=${encodeURIComponent(env.GOOGLE_BOOKS_API_KEY)}`)
     const found = googleBook(isbn, google)
@@ -92,7 +153,7 @@ async function fetchBook(isbn, env) {
   const direct = openLibraryBook(isbn, openLibrary?.[key])
   if (direct) return direct
 
-  const search = await fetchJson(`https://openlibrary.org/search.json?isbn=${encodeURIComponent(isbn)}&fields=title,author_name,publisher,first_publish_year,cover_i,subject&limit=1`, headers)
+  const search = await fetchJson(`https://openlibrary.org/search.json?isbn=${encodeURIComponent(isbn)}&fields=title,author_name,publisher,first_publish_year,cover_i,subject,isbn&limit=3`, headers)
   const searched = openLibrarySearchBook(isbn, search)
   if (searched) return searched
 
@@ -104,11 +165,11 @@ export default {
   async fetch(request, env, context) {
     if (request.method !== 'GET') return json({ message: 'Method not allowed' }, 405, 0)
     if (env.PROXY_TOKEN && request.headers.get('authorization') !== `Bearer ${env.PROXY_TOKEN}`) return json({ message: 'Unauthorized' }, 401, 0)
-    const match = new URL(request.url).pathname.match(/^\/isbn\/(\d{13})$/)
+    const match = new URL(request.url).pathname.match(/^\/isbn\/([0-9]{9}[0-9X]|[0-9]{13})$/)
     if (!match || !validIsbn(match[1])) return json({ message: 'Invalid ISBN' }, 400, 0)
 
     const cache = caches.default
-    const cacheKey = new Request(`https://book-metadata-cache.invalid/v2/isbn/${match[1]}`)
+    const cacheKey = new Request(`https://book-metadata-cache.invalid/v3/isbn/${match[1]}`)
     const cached = await cache.match(cacheKey)
     if (cached) return cached
 

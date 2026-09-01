@@ -28,6 +28,14 @@ const NOT_FOUND_CACHE_SECONDS = 24 * 60 * 60
 let zxingReady: Promise<unknown> | undefined
 
 const CHINESE_METADATA_OVERRIDES: Record<string, Omit<BookMetadata, 'isbn'>> = {
+  '9787513915670': {
+    title: '四世同堂（上下册）',
+    author: '老舍',
+    publisher: '民主与建设出版社',
+    publishDate: '2017-6',
+    coverUrl: '',
+    subjects: ['中国文学', '长篇小说', '抗日战争']
+  },
   '9787020110292': {
     title: '四世同堂',
     author: '老舍 / 丁聪 绘',
@@ -108,6 +116,7 @@ function metadataFromOpenLibrary(isbn: string, value: OpenLibraryBook): BookMeta
 }
 
 function normalizedProxyMetadata(isbn: string, value: Partial<BookMetadata>): BookMetadata | null {
+  if (value.isbn && normalizeIsbn(String(value.isbn)) !== isbn) return null
   if (!value.title?.trim()) return null
   return {
     isbn,
@@ -144,7 +153,7 @@ export class BooksService {
     if (!isValidIsbn(isbn)) throw new BadRequestException('ISBN 格式或校验位不正确')
     const corrected = chineseMetadataOverride(isbn)
     if (corrected) return corrected
-    const cacheKey = `book-metadata:v4:${isbn}`
+    const cacheKey = `book-metadata:v5:${isbn}`
     await this.redis.ensureConnected()
     const cached = await this.redis.client.get(cacheKey)
     if (cached === 'NOT_FOUND') throw new NotFoundException('没有查到这本书，请手动填写信息')
