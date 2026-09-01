@@ -21,11 +21,12 @@ describe('H5 cookie sessions', () => {
 
   afterEach(() => { process.env = { ...originalEnv } })
 
-  it('sets strict HttpOnly cookies without returning tokens to H5', async () => {
+  it('sets embedded-browser-compatible HttpOnly cookies without returning tokens to H5', async () => {
     const result = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'cookie' }, reply)
     expect(result).toEqual({ expiresIn: 900, user: session.user })
-    expect(reply.setCookie).toHaveBeenCalledWith('biterstore_access', 'access-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'strict', path: '/api/v1' }))
-    expect(reply.setCookie).toHaveBeenCalledWith('biterstore_refresh', 'refresh-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'strict', path: '/api/v1/auth', maxAge: 2592000 }))
+    expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ sameSite: 'strict', path: '/api/v1/auth' }))
+    expect(reply.setCookie).toHaveBeenCalledWith('biterstore_access', 'access-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1' }))
+    expect(reply.setCookie).toHaveBeenCalledWith('biterstore_refresh', 'refresh-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1', maxAge: 2592000 }))
   })
 
   it('keeps the token response for non-browser clients', async () => {
@@ -42,5 +43,6 @@ describe('H5 cookie sessions', () => {
     expect(auth.logout).toHaveBeenCalledWith('refresh-token')
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_access', expect.objectContaining({ path: '/api/v1' }))
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1/auth' }))
+    expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1' }))
   })
 })

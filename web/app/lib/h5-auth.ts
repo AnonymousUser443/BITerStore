@@ -20,6 +20,7 @@ export interface H5Profile extends H5SessionUser {
 }
 
 type H5Session = { expiresIn: number; user: H5SessionUser };
+let refreshSessionPromise: Promise<boolean> | undefined;
 
 function messageOf(body: unknown, fallback: string) {
   if (body && typeof body === 'object' && 'message' in body) {
@@ -42,13 +43,19 @@ async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<{ re
   return { response, body };
 }
 
+function refreshH5Session(): Promise<boolean> {
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = rawRequest<H5Session>('/auth/refresh', {
+      method: 'POST', body: JSON.stringify({ sessionTransport: 'cookie' })
+    }).then(({ response }) => response.ok).finally(() => { refreshSessionPromise = undefined; });
+  }
+  return refreshSessionPromise;
+}
+
 export async function h5ApiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   let result = await rawRequest<T>(path, init);
   if (result.response.status === 401 && retry && path !== '/auth/refresh') {
-    const refreshed = await rawRequest<H5Session>('/auth/refresh', {
-      method: 'POST', body: JSON.stringify({ sessionTransport: 'cookie' })
-    });
-    if (refreshed.response.ok) result = await rawRequest<T>(path, init);
+    if (await refreshH5Session()) result = await rawRequest<T>(path, init);
   }
   if (!result.response.ok) throw new Error(messageOf(result.body, `请求失败（${result.response.status}）`));
   return result.body as T;
