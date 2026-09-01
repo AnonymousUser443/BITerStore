@@ -30,6 +30,14 @@ describe('Golden Reference style alignment', () => {
     expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
   })
 
+  it('H5 在应用加载前把生产 HTTP 入口切换到 HTTPS', () => {
+    const html = read('src/index.html')
+    expect(html).toContain("location.protocol === 'http:'")
+    expect(html).toContain("location.hostname === 'store.young581.com'")
+    expect(html).toContain("location.replace('https://store.young581.com' + location.pathname + location.search + location.hash)")
+    expect(html.indexOf("location.protocol === 'http:'")).toBeLessThan(html.indexOf("var path = location.pathname"))
+  })
+
   it('H5 内容高度跟随应用外壳并覆盖短横屏布局', () => {
     const goldenCss = read('../web/app/globals.css')
     expect(goldenCss).toContain('.content-scroll { position: relative; height: calc(100% - 76px);')
