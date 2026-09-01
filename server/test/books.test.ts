@@ -49,6 +49,17 @@ describe('book metadata', () => {
     expect(store.ensureConnected).not.toHaveBeenCalled()
   })
 
+  it('returns verified metadata for the scanned 四世同堂 edition', async () => {
+    const store = redis()
+    await expect(new BooksService(store as never).lookup('9787513915670')).resolves.toMatchObject({
+      title: '四世同堂（上下册）',
+      author: '老舍',
+      publisher: '民主与建设出版社',
+      publishDate: '2017-6'
+    })
+    expect(store.ensureConnected).not.toHaveBeenCalled()
+  })
+
   it('returns a cached normalized result without an upstream request', async () => {
     const value = { isbn, title: '缓存教材', author: '', publisher: '', publishDate: '', coverUrl: '', subjects: [] }
     const store = redis(JSON.stringify(value))
@@ -67,7 +78,21 @@ describe('book metadata', () => {
     const result = await new BooksService(store as never).lookup(isbn)
     expect(result).toMatchObject({ isbn, title: '高等数学', author: '同济大学' })
     expect(fetchMock).toHaveBeenCalledWith(`https://metadata.example.test/isbn/${isbn}`, expect.objectContaining({ headers: { Authorization: 'Bearer shared-secret' } }))
-    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v4:${isbn}`, expect.any(String), 'EX', 2592000)
+    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v5:${isbn}`, expect.any(String), 'EX', 2592000)
+  })
+
+  it('rejects proxy metadata returned for a different ISBN', async () => {
+    process.env.BOOK_METADATA_PROXY_URL = 'https://metadata.example.test/'
+    const store = redis()
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      isbn: '9787513915670',
+      title: '错误书名'
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(new BooksService(store as never).lookup(isbn)).rejects.toMatchObject({
+      message: '没有查到这本书，请手动填写信息'
+    })
+    expect(store.client.set).toHaveBeenCalledWith(`book-metadata:v5:${isbn}`, 'NOT_FOUND', 'EX', 86400)
   })
 
   it('does not autofill a romanized title for a mainland Chinese ISBN', async () => {
