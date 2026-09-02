@@ -109,8 +109,8 @@
 
 ### 已知依赖风险
 
-- [ ] 本机实际 Node 为 25.2.1，高于仓库锁定的 Node 22.13.x；本轮 lint/test/H5/WeApp/自动化全部通过，但团队与 CI 仍应统一回 Node 22 LTS，避免 Taro/automator 的非预期兼容差异。
-- [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
+- [x] Node 引擎范围已调整为 `>=22.13.0 <23`，允许 Node 22 LTS 安全补丁更新，同时继续阻止未经验证的跨主版本运行时。
+- [ ] Taro 4.2.1 精确锁定的 Webpack 与无修复版本的 CLI 依赖仍有 8 个上游 advisory；已升级其他可修复依赖，并由 `npm run audit:dependencies` 对例外编号、数量和复核期限实施门禁。禁止 `--force` 绕过 Taro peer 约束，待 Taro 发布兼容版本后解除例外。
 - [ ] 直接复用 Golden Reference 后的 H5 生产入口为 369.1 KiB，已低于 400 KiB 预算；正式上线前仍应继续按真实网络指标做缓存与加载优化。
 - [ ] Open Library 对中文教材覆盖率有限；灰度期需统计命中率，再决定是否增加国家图书馆数据源或部署本地 OCR/条码识别兜底。
 - [ ] R2 已上线，历史已完成对象已迁移至 `media/`；生命周期脚本已提供，但当前 R2 S3 凭据缺少 Bucket Settings 权限（403），仍需使用 Cloudflare 账户 API 令牌为未完成的 `pending/` 对象配置 1 天清理规则，并部署新版多源书目 Worker。

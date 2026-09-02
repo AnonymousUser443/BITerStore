@@ -7,10 +7,10 @@
 3. 在 `miniProgram/` 复制 `.env.example` 为 `.env.weapp.local`，填写开发者工具显示的 HTTP 服务端口。
 4. 如需真机调试，在忽略提交的 `miniProgram/project.private.config.json` 中配置本机真实 AppID；公共 `project.config.json` 始终使用 `touristappid`。
 
-请使用项目锁定的 Node 22.13.x。若使用便携版 Node，可在 PowerShell 当前会话执行：
+请使用 Node 22 LTS（最低 22.13.0，允许同一主版本内的安全补丁更新）。若使用便携版 Node，可在 PowerShell 当前会话执行：
 
 ```powershell
-$env:Path='<Node 22.13.x 目录>;'+$env:Path
+$env:Path='<Node 22（>=22.13.0）目录>;'+$env:Path
 ```
 
 ## 检查与运行

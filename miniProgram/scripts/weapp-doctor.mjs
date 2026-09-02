@@ -6,7 +6,8 @@ import { assertLocalPaths, automationPort, cliPath, projectPath, root, servicePo
 
 const checks = []; const add = (name, ok, detail, blocking = true) => checks.push({ name, ok, detail, blocking })
 try { assertLocalPaths(); add('paths', true, `${cliPath} | ${projectPath}`) } catch (error) { add('paths', false, error.message) }
-add('node', process.versions.node.startsWith('22.13.'), process.versions.node); add('service-port', servicePort > 0, servicePort ? String(servicePort) : '未配置 WECHAT_DEVTOOLS_SERVICE_PORT')
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number)
+add('node', nodeMajor === 22 && nodeMinor >= 13, process.versions.node); add('service-port', servicePort > 0, servicePort ? String(servicePort) : '未配置 WECHAT_DEVTOOLS_SERVICE_PORT')
 const project = JSON.parse(fs.readFileSync(path.join(root, 'project.config.json'), 'utf8')); add('public-appid', project.appid === 'touristappid', project.appid)
 const privatePath = path.join(root, 'project.private.config.json')
 const privateProject = fs.existsSync(privatePath) ? JSON.parse(fs.readFileSync(privatePath, 'utf8')) : {}

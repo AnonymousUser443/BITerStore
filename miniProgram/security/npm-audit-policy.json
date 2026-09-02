@@ -1,0 +1,44 @@
+{
+  "reviewAfter": "2026-12-03",
+  "maximumCounts": {
+    "low": 2,
+    "moderate": 2,
+    "high": 5,
+    "critical": 1,
+    "total": 10
+  },
+  "acceptedAdvisories": [
+    {
+      "source": 1093404,
+      "reason": "git-clone 0.2.0 is the latest release and is only reached by Taro CLI project scaffolding."
+    },
+    {
+      "source": 1099351,
+      "reason": "Taro 4.2.1 requires webpack 5.91.0 exactly; buildHttp is not configured."
+    },
+    {
+      "source": 1113041,
+      "reason": "Taro 4.2.1 requires webpack 5.91.0 exactly; the H5 publicPath is explicitly '/'."
+    },
+    {
+      "source": 1113042,
+      "reason": "Taro 4.2.1 requires webpack 5.91.0 exactly; the H5 publicPath is explicitly '/'."
+    },
+    {
+      "source": 1105440,
+      "reason": "html-minifier 4.0.0 is the latest release and is pulled by the Taro webpack runner."
+    },
+    {
+      "source": 1122670,
+      "reason": "decompress 4.2.1 is the latest release and is only reached by Taro CLI template downloads."
+    },
+    {
+      "source": 1130126,
+      "reason": "decompress 4.2.1 is the latest release and is only reached by Taro CLI template downloads."
+    },
+    {
+      "source": 1139405,
+      "reason": "decompress 4.2.1 is the latest release and is only reached by Taro CLI template downloads."
+    }
+  ]
+}
