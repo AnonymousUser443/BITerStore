@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { bundledAsset } from '@/assets'
 import type { StoredMedia } from '@/domain/types'
 import { AppError } from '@/domain/types'
 import type { BitLoginChallenge } from '@/domain/bit-login'
@@ -145,7 +146,7 @@ async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
 export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]> }
 export const mediaAdapter: MediaAdapter = {
   async pick(options = {}) {
-    if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: '/assets/tobby-guide-publish.webp', mime: 'image/webp', size: 1024 }]
+    if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: bundledAsset('tobby-guide-publish'), mime: process.env.TARO_ENV === 'weapp' ? 'image/png' : 'image/webp', size: 1024 }]
     try {
       const result = await Taro.chooseMedia({ count: options.count || 6, mediaType: ['image'], sourceType: options.cameraOnly ? ['camera'] : ['album', 'camera'] })
       return result.tempFiles.map((file, index) => ({ id: `media-${Date.now()}-${index}`, uri: file.tempFilePath, mime: 'image/jpeg', size: file.size || 0 }))

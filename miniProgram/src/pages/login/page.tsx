@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { Button, Image, Input, Text, View } from '@tarojs/components'
+import { bundledAsset } from '@/assets'
 import { Brand } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import {
@@ -103,10 +104,10 @@ export default function LoginPage() {
   }
 
   return <View className='phone-shell login-page'>
-    <Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />
+    <Image className='paper-texture' src={bundledAsset('paper-bg')} mode='aspectFill' />
     <View className='login-brand'><Brand /><Text><Glyph name='shield' /></Text></View>
     <View className='login-hero'>
-      <Image src='/assets/tobby-hello.webp' mode='aspectFit' />
+      <Image src={bundledAsset('tobby-hello')} mode='aspectFit' />
       <View>
         <Text className='eyebrow'>BIT CAMPUS ACCOUNT</Text>
         <Text className='login-title'>{challenge ? '确认是你本人' : '北理同学，你好'}</Text>

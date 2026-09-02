@@ -27,6 +27,13 @@ function buildEnvironment(): Record<string, string> {
 export default defineConfig<'webpack5'>(async (merge) => {
   const environment = buildEnvironment()
   const isE2E = environment.BITERSTORE_E2E === '1'
+  const isWeapp = process.env.TARO_ENV === 'weapp'
+  const assetPatterns = isWeapp
+    ? [
+        { from: 'src/assets-weapp', to: 'dist/assets' },
+        { from: 'src/assets/tabbar', to: 'dist/assets/tabbar' }
+      ]
+    : [{ from: 'src/assets', to: 'dist/assets' }]
   const baseConfig: UserConfigExport<'webpack5'> = {
     projectName: 'BITerStore', date: '2026-08-26', designWidth: 390,
     deviceRatio: { 390: 2, 750: 1 }, sourceRoot: 'src', outputRoot: 'dist',
@@ -38,7 +45,10 @@ export default defineConfig<'webpack5'>(async (merge) => {
       __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || '').replace(/\/$/, '')),
       __BIT_LOGIN_URL__: JSON.stringify((environment.BIT_LOGIN_URL || productionBitLoginUrl).replace(/\/$/, ''))
     },
-    copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
+    copy: {
+      patterns: [...assetPatterns, ...(!isWeapp ? [{ from: 'src/hosting/_redirects', to: 'dist' }] : [])],
+      options: {}
+    },
     mini: {
       postcss: { pxtransform: { enable: true, config: {} }, cssModules: { enable: false } },
       webpackChain(chain) {

@@ -1,5 +1,6 @@
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react'
 import { Button, Image, Input, Navigator, Text, View } from '@tarojs/components'
+import { bundledAsset, isNetworkWebp } from '@/assets'
 import { demoRepository, getUser } from '@/domain/repository'
 import { CURRENT_USER_ID } from '@/domain/seed'
 import { beginNavigationFeedback, markNavigationReady, navigationAdapter } from '@/platform'
@@ -22,8 +23,8 @@ export function BrandHeader({ title, back = false, backTo, action }: { title?: s
 }
 
 export function Avatar({ user, size = 42 }: { user: ReturnType<typeof getUser>; size?: number }) {
-  const source = user.id === CURRENT_USER_ID ? '/assets/tobby-hello.webp' : user.avatar
-  return <View className={`avatar avatar-${user.avatarTone || 'sage'} ${user.id === CURRENT_USER_ID ? 'image-avatar' : ''}`} style={{ width: `${size}px`, height: `${size}px` }}>{source ? <Image className='avatar-image' src={source} mode={user.id === CURRENT_USER_ID ? 'aspectFit' : 'aspectFill'} /> : <Text className='avatar-initial'>{user.name.slice(0, 1)}</Text>}</View>
+  const source = user.id === CURRENT_USER_ID ? bundledAsset('tobby-hello') : user.avatar
+  return <View className={`avatar avatar-${user.avatarTone || 'sage'} ${user.id === CURRENT_USER_ID ? 'image-avatar' : ''}`} style={{ width: `${size}px`, height: `${size}px` }}>{source ? <Image className='avatar-image' src={source} webp={isNetworkWebp(source)} mode={user.id === CURRENT_USER_ID ? 'aspectFit' : 'aspectFill'} /> : <Text className='avatar-initial'>{user.name.slice(0, 1)}</Text>}</View>
 }
 
 const appTabs: ReadonlyArray<readonly [string, string, string]> = [['home', '首页', 'home'], ['search', '分类', 'grid'], ['publish', '发布', 'send'], ['messages', '消息', 'chat'], ['profile', '我的', 'user']]
@@ -42,16 +43,16 @@ export function AppShell({ children, title, back, backTo, active, className = ''
   const content = scrollIntoView
     ? <ChatScroll className={contentClassName} scrollIntoView={scrollIntoView}>{children}</ChatScroll>
     : <View className={contentClassName}>{children}</View>
-  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}{content}{overlay}{!hideNavigation && <AppNavigation active={active} />}</View>
+  return <View className={`phone-shell app-shell ${nativeChrome ? 'native-chrome' : ''} ${className}`}><Image className='paper-texture' src={bundledAsset('paper-bg')} mode='aspectFill' />{!nativeChrome && <BrandHeader title={title} back={shouldGoBack} backTo={destination} />}{content}{overlay}{!hideNavigation && <AppNavigation active={active} />}</View>
 }
 
 export type TobbyMood = 'hello' | 'search' | 'heart' | 'question' | 'sad' | 'maintenance' | 'cheer' | 'guide-search' | 'guide-publish' | 'guide-trade' | 'unavailable' | 'master' | 'master-transparent' | 'news'
-export function Tobby({ mood = 'hello', caption, className = '' }: { mood?: TobbyMood; caption?: string; className?: string }) { return <View className={`tobby ${className}`}><Image mode='aspectFit' src={`/assets/tobby-${mood}.webp`} />{caption && <Text>{caption}</Text>}</View> }
+export function Tobby({ mood = 'hello', caption, className = '' }: { mood?: TobbyMood; caption?: string; className?: string }) { return <View className={`tobby ${className}`}><Image mode='aspectFit' src={bundledAsset(`tobby-${mood}`)} />{caption && <Text>{caption}</Text>}</View> }
 export function StatusTag({ status }: { status: ListingStatus }) { const labels: Record<ListingStatus, string> = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }; return <Text className={`status-tag ${status}`}>{labels[status]}</Text> }
 
 export function BookCover({ listing, compact = false }: { listing: Listing; compact?: boolean }) {
   const cover = listing.imageUrls?.[0]
-  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <Image className='book-cover-image' src={cover} mode='aspectFill' /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</>}</View>
+  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <Image className='book-cover-image' src={cover} webp={isNetworkWebp(cover)} mode='aspectFill' /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>BITerStore 校园藏书</Text>}</>}</View>
 }
 
 export function BookTile({ listing, href, onTap }: { listing: Listing; href?: string; onTap?: () => void }) {
@@ -61,7 +62,8 @@ export function BookTile({ listing, href, onTap }: { listing: Listing; href?: st
 
 export function ListingCard({ listing, href, onTap, favorite = false, onFavorite, onContact, ownerView = false }: { listing: Listing; href?: string; onTap?: () => void; favorite?: boolean; onFavorite?: () => void; onContact?: () => void; ownerView?: boolean }) {
   const seller = listing.seller || getUser(listing.sellerId)
-  const main = <><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Glyph name='more' className='more-glyph' /></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={seller.avatar || '/assets/avatar-jian.webp'} mode='aspectFill' /><Text>{seller.name}</Text><Glyph name='shield' /><Text>{seller.verified ? '已认证' : '校园用户'}</Text></View></View></>
+  const sellerAvatar = seller.avatar || bundledAsset('avatar-jian')
+  const main = <><BookCover listing={listing} compact /><View className='listing-copy'><View className='listing-heading'><Text className='listing-title'>{listing.title}</Text><Glyph name='more' className='more-glyph' /></View><Text className='listing-author'>{listing.author}</Text><View className='listing-price'><Text className='price-current'>¥{listing.price.toFixed(2)}</Text><Text className='price-original'>¥{listing.originalPrice.toFixed(2)}</Text><Text className='condition'>{listing.condition}</Text></View><View className='listing-detail'><Text>⌖ {listing.campus}校区</Text><Text>▥ {listing.course}</Text></View><View className='seller-line'><Image className='seller-avatar' src={sellerAvatar} webp={isNetworkWebp(sellerAvatar)} mode='aspectFill' /><Text>{seller.name}</Text><Glyph name='shield' /><Text>{seller.verified ? '已认证' : '校园用户'}</Text></View></View></>
   return <View className={`listing-card ${listing.status !== 'available' ? 'unavailable-card' : ''}`}>
     {href ? <Navigator id={`e2e-listing-${listing.id}`} className='listing-main' url={href} onClick={() => beginNavigationFeedback(href)}>{main}</Navigator> : <Button id={`e2e-listing-${listing.id}`} className='listing-main' onClick={onTap}>{main}</Button>}
     {!ownerView && <View className='listing-actions'><Button onClick={onFavorite}><Glyph name='heart' />{favorite ? '已收藏' : '收藏'}</Button><Button onClick={onContact}><Glyph name='message' />联系卖家</Button><Button className='detail-action' onClick={href ? () => { void navigationAdapter.go(href) } : onTap}>详情 <Glyph name='chevron' /></Button></View>}<Text className={`status-badge ${listing.status}`}>{{ available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }[listing.status]}</Text>

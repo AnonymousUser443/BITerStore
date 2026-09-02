@@ -189,8 +189,8 @@ async function connectWithRetry(timeout = connectTimeoutMs) {
   }
   throw lastError || new Error(`连接微信自动化端点超时: ${wsEndpoint}`)
 }
-function runCli(command) {
-  const args = commandArgs(command)
+function runCli(command, extraArgs = []) {
+  const args = commandArgs(command, extraArgs)
   const invocation = process.platform === 'win32' ? windowsCliInvocation(args) : { command: cliPath, args }
   return spawnSync(invocation.command, invocation.args, { encoding: 'utf8', windowsHide: true, windowsVerbatimArguments: process.platform === 'win32', timeout: 60000 })
 }
@@ -240,6 +240,18 @@ try {
       if (stopped.status !== 0) throw new Error(`微信开发者工具退出失败 (${stopped.status}): ${[stopped.stdout, stopped.stderr, stopped.error?.message].filter(Boolean).join('\n').trim()}`)
       await waitForPortToClose(automationPort)
     }
+    if (process.env.WEAPP_RESET_COMPILE_CACHE !== '0') {
+      const resetFileutils = runCli('reset-fileutils')
+      if (resetFileutils.status !== 0) throw new Error(`微信开发者工具文件索引重置失败 (${resetFileutils.status}): ${[resetFileutils.stdout, resetFileutils.stderr, resetFileutils.error?.message].filter(Boolean).join('\n').trim()}`)
+      const cleanCompileCache = runCli('cache', ['--clean', 'compile'])
+      if (cleanCompileCache.status !== 0) throw new Error(`微信开发者工具编译缓存清理失败 (${cleanCompileCache.status}): ${[cleanCompileCache.stdout, cleanCompileCache.stderr, cleanCompileCache.error?.message].filter(Boolean).join('\n').trim()}`)
+      const stoppedAfterReset = runCli('quit')
+      if (stoppedAfterReset.status !== 0) throw new Error(`微信开发者工具缓存刷新后退出失败 (${stoppedAfterReset.status}): ${[stoppedAfterReset.stdout, stoppedAfterReset.stderr, stoppedAfterReset.error?.message].filter(Boolean).join('\n').trim()}`)
+      await waitForPortToClose(automationPort)
+      // `cli quit` returns before every IDE helper process has exited. Starting
+      // `auto` immediately can report success without opening the WebSocket.
+      await sleep(Number(process.env.WEAPP_CACHE_RESET_SETTLE_MS || 5000))
+    }
     const started = runCli('auto')
     if (started.status !== 0) throw new Error(`微信开发者工具启动失败 (${started.status}): ${[started.stdout, started.stderr, started.error?.message].filter(Boolean).join('\n').trim()}`)
     ownsLaunchedSession = true
@@ -260,6 +272,17 @@ try {
   }); app.on('exception', (event) => { const described = describe(event); exceptions.push(described); observedExceptions.push(described) })
   await waitForBootstrap()
   const results = []
+  results.push(await scenario('bundled-image-compatibility', async () => {
+    await app.reLaunch('/pages/welcome/index')
+    const page = await pageAt('pages/welcome/index')
+    const images = await page.$$('image')
+    const sources = await Promise.all(images.map((image) => image.attribute('src')))
+    const localSources = sources.filter((source) => source?.startsWith('/assets/'))
+    if (!localSources.length) throw new Error('欢迎页没有发现本地图片资源')
+    const incompatible = localSources.filter((source) => !source.endsWith('.png'))
+    if (incompatible.length) throw new Error(`微信包仍引用真机不兼容的本地图片：${incompatible.join(', ')}`)
+    await shot('visual-bundled-png-assets')
+  }))
   results.push(await scenario('bit-login-request-domain', async () => { const response = await probeRequest('https://store.young581.com/bit-login/openapi.json'); if (!response?.ok || response.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || response?.error || 'unknown'}）`) }))
   results.push(await scenario('onboarding-guest-home', async () => { await app.reLaunch('/pages/welcome/index'); let page = await pageAt('pages/welcome/index'); await sleep(250); page = await tapForRoute(await required(page, '#e2e-welcome-start'), 'pages/onboarding/index'); await shot('visual-onboarding'); for (let i = 0; i < 3; i += 1) { const next = await required(page, '#e2e-onboarding-next'); if (i < 2) { await next.tap(); await sleep(180) } else page = await tapForRoute(next, 'pages/login/index') } page = await recoverBlankPage(page, '#e2e-guest-access', '/pages/login/index'); await shot('visual-login'); page = await tapForRoute(await required(page, '#e2e-guest-access'), 'pages/home/index'); await required(page, '#e2e-home-search-entry'); await shot('visual-home'); if (!await stored('onboarding')) throw new Error('引导完成状态未持久化'); if (await stored('authenticated-sid') !== 'guest') throw new Error('游客状态未持久化') }))
   results.push(await scenario('search-detail-favorite-contact', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await (await required(page, '#e2e-search-input')).input('高等数学'); await sleep(350); await shot('visual-search'); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await shot('visual-detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(150); if (!(await stored('favorites'))?.includes('math-7')) throw new Error('收藏未写入 Repository 存储'); await tapForRoute(await required(page, '#e2e-detail-contact'), 'pages/chat/index') }))

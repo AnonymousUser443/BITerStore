@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import { Button, Image, Text, View } from '@tarojs/components'
+import { bundledAsset } from '@/assets'
 import { AppShell, Brand } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { navigationAdapter } from '@/platform'
@@ -19,9 +20,9 @@ const states = {
 
 export default function StatesPage() {
   const type = Taro.getCurrentInstance().router?.params.type || 'index'
-  if (type === 'index') return <AppShell title='演示与状态' back className='states-index'><View className='state-grid'>{Object.entries(states).filter(([key]) => !['not-found', 'success'].includes(key)).map(([key, value]) => <Button id={`e2e-state-open-${key}`} key={key} onClick={() => navigationAdapter.go(`/pages/states/index?type=${key}`)}><Image src={`/assets/tobby-${value[2]}.webp`} mode='aspectFit' /><Text className='state-card-title'>{value[0]}</Text><Glyph name='chevron' /></Button>)}</View></AppShell>
+  if (type === 'index') return <AppShell title='演示与状态' back className='states-index'><View className='state-grid'>{Object.entries(states).filter(([key]) => !['not-found', 'success'].includes(key)).map(([key, value]) => <Button id={`e2e-state-open-${key}`} key={key} onClick={() => navigationAdapter.go(`/pages/states/index?type=${key}`)}><Image src={bundledAsset(`tobby-${value[2]}`)} mode='aspectFit' /><Text className='state-card-title'>{value[0]}</Text><Glyph name='chevron' /></Button>)}</View></AppShell>
   const current = states[type as keyof typeof states] || states['not-found']
   const destination = ['published', 'success'].includes(type) ? '/pages/my-listings/index' : type === 'empty' ? '/pages/publish/index' : ['searching', 'no-results', 'unavailable'].includes(type) ? '/pages/search/index' : '/pages/home/index'
   const go = () => destination.includes('/search/') || destination.includes('/publish/') || destination.includes('/home/') ? navigationAdapter.switchTab(destination) : navigationAdapter.go(destination)
-  return <View id={`e2e-state-${type}`} className='phone-shell full-state'><Image className='paper-texture' src='/assets/paper-bg.webp' mode='aspectFill' /><Brand /><View className='state-orbit' /><Image className='state-image' src={`/assets/tobby-${current[2]}.webp`} mode='aspectFit' /><Text className='state-title'>{current[0]}</Text><Text className='state-copy'>{current[1]}</Text>{['loading', 'searching'].includes(type) && <View className='loading-bar'><Text /></View>}<Button className='primary-button' onClick={go}>{current[3]}</Button><Text className='state-footnote'>BITerStore · 让每一本书继续被需要</Text></View>
+  return <View id={`e2e-state-${type}`} className='phone-shell full-state'><Image className='paper-texture' src={bundledAsset('paper-bg')} mode='aspectFill' /><Brand /><View className='state-orbit' /><Image className='state-image' src={bundledAsset(`tobby-${current[2]}`)} mode='aspectFit' /><Text className='state-title'>{current[0]}</Text><Text className='state-copy'>{current[1]}</Text>{['loading', 'searching'].includes(type) && <View className='loading-bar'><Text /></View>}<Button className='primary-button' onClick={go}>{current[3]}</Button><Text className='state-footnote'>BITerStore · 让每一本书继续被需要</Text></View>
 }

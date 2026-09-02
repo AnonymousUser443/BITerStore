@@ -157,6 +157,24 @@ describe('Golden Reference style alignment', () => {
     expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
   })
 
+  it('微信真机使用包内 PNG，H5 保留 WebP 素材', () => {
+    const config = read('config/index.ts')
+    const resolver = read('src/assets.ts')
+    const packageJson = read('package.json')
+    const e2e = read('scripts/weapp-e2e.mjs')
+    const originals = fs.readdirSync(path.join(source, 'assets')).filter((name) => name.endsWith('.webp')).sort()
+    const variants = fs.readdirSync(path.join(source, 'assets-weapp')).filter((name) => name.endsWith('.png')).sort()
+    expect(variants.map((name) => name.replace(/\.png$/, ''))).toEqual(originals.map((name) => name.replace(/\.webp$/, '')))
+    expect(config).toContain("{ from: 'src/assets-weapp', to: 'dist/assets' }")
+    expect(config).toContain("{ from: 'src/assets/tabbar', to: 'dist/assets/tabbar' }")
+    expect(resolver).toContain("process.env.TARO_ENV === 'weapp' ? 'png' : 'webp'")
+    expect(packageJson).toContain('assets:verify-weapp')
+    expect(e2e).toContain("scenario('bundled-image-compatibility'")
+    expect(e2e).toContain("runCli('reset-fileutils')")
+    expect(e2e).toContain("runCli('cache', ['--clean', 'compile'])")
+    expect(e2e).toContain('WEAPP_CACHE_RESET_SETTLE_MS || 5000')
+  })
+
   it('微信冷启动不依赖可能被恢复跳过的页面 onLoad，并保存启动失败证据', () => {
     const startup = read('src/pages/startup/index.tsx')
     const screen = read('src/components/StartupScreen.tsx')
