@@ -207,6 +207,17 @@ describe('Golden Reference style alignment', () => {
     expect(listings).toContain("['available', 'offline'].includes(item.status) ? '' : ' single-action'")
   })
 
+  it('requires a stable explicit confirmation before marking an owned listing as sold', () => {
+    const listings = read('src/pages/my-listings/index.tsx')
+    expect(listings).toContain('setConfirmingSoldId(item.id)')
+    expect(listings).toContain('确认已售')
+    expect(listings).toContain("updateStatus(item, 'sold')")
+    expect(listings).toContain('e2e-mark-sold-${item.id}')
+    expect(listings).toContain('e2e-cancel-sold-${item.id}')
+    expect(listings).toContain('e2e-confirm-sold-${item.id}')
+    expect(listings).toContain("cause instanceof Error ? cause.message : '状态更新失败，请稍后重试'")
+  })
+
   it('hides an empty course fact and enlarges campus and ISBN metadata', () => {
     const detail = read('src/pages/listing/detail.tsx')
     const adapter = read('src/app.css')

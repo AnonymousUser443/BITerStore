@@ -629,9 +629,19 @@ function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; n
 }
 
 function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
-  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const [deleteTarget, setDeleteTarget] = useState<Book | null>(null); const [deletingId, setDeletingId] = useState<string>(); const load = useCallback(() => { demoRepository.listMyListings().then((next) => setBooks((current) => preserveSnapshot(current, next))); }, []); useEffect(load, [load]);
+  const [tab, setTab] = useState<ListingStatus | 'all'>('all'); const [books, setBooks] = useState<Book[]>(() => peekMyListings() || []); const [confirmingSoldId, setConfirmingSoldId] = useState<string>(); const [updatingId, setUpdatingId] = useState<string>(); const [deleteTarget, setDeleteTarget] = useState<Book | null>(null); const [deletingId, setDeletingId] = useState<string>(); const load = useCallback(() => { demoRepository.listMyListings().then((next) => setBooks((current) => preserveSnapshot(current, next))); }, []); useEffect(load, [load]);
   const visible = tab === 'all' ? books : books.filter((book) => book.status === tab);
-  const change = async (book: Book) => { const next: ListingStatus = book.status === 'available' ? 'sold' : 'available'; await demoRepository.updateListingStatus(book.id, next); notify(next === 'sold' ? '已标记为已售' : '已重新上架'); load(); };
+  const updateStatus = async (book: Book, status: ListingStatus) => {
+    if (updatingId) return;
+    setUpdatingId(book.id);
+    try {
+      await demoRepository.updateListingStatus(book.id, status);
+      setConfirmingSoldId(undefined);
+      notify(status === 'sold' ? '已标记为已售' : '已重新上架'); load();
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '状态更新失败，请稍后重试'); }
+    finally { setUpdatingId(undefined); }
+  };
+  const change = (book: Book) => { if (book.status === 'available') setConfirmingSoldId(book.id); else void updateStatus(book, 'available'); };
   const remove = (book: Book) => setDeleteTarget(book);
   const confirmRemove = async () => {
     if (!deleteTarget || deletingId) return;
@@ -644,7 +654,10 @@ function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; 
     } catch (cause) { notify(cause instanceof Error ? cause.message : '删除失败，请稍后重试'); }
     finally { setDeletingId(undefined); }
   };
-  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => setTab(value)} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{['available', 'offline'].includes(book.status) && <button className="secondary-button" onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : '重新上架'}</button>}<button className="danger-button" onClick={() => remove(book)}><Trash2 />删除</button></div></div>) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button>{deleteTarget && <div className="dialog-layer"><button className="dialog-scrim" onClick={() => !deletingId && setDeleteTarget(null)} aria-label="取消删除" /><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title"><div className="confirm-dialog-copy"><span><CircleAlert /></span><div><h2 id="delete-dialog-title">确认删除这本书？</h2><p>《{deleteTarget.title}》删除后不会再公开展示。</p></div></div><div className="confirm-dialog-actions"><button className="secondary-button" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(null)}>取消</button><button className="danger-button" disabled={Boolean(deletingId)} onClick={() => void confirmRemove()}>{deletingId ? <><RefreshCw className="spin" />删除中</> : <><Trash2 />确认删除</>}</button></div></section></div>}</AppShell>;
+  return <AppShell navigate={navigate} title="我的发布" back className="simple-list-page"><div className="status-tabs">{([['all', '全部'], ['available', '在售'], ['sold', '已售'], ['offline', '下架']] as const).map(([value, label]) => <button className={tab === value ? 'active' : ''} onClick={() => { setTab(value); setConfirmingSoldId(undefined); }} key={value}>{label}</button>)}</div>{visible.length ? visible.map((book) => {
+    const confirmingSold = confirmingSoldId === book.id; const updating = updatingId === book.id;
+    return <div className="manage-listing" key={book.id}><BookListCard book={book} navigate={navigate} ownerView /><div className="manage-listing-actions">{confirmingSold ? <><button className="secondary-button" disabled={updating} onClick={() => setConfirmingSoldId(undefined)}>取消</button><button className="danger-button" disabled={updating} onClick={() => void updateStatus(book, 'sold')}>{updating ? <><RefreshCw className="spin" />更新中</> : '确认已售'}</button></> : <>{['available', 'offline'].includes(book.status) && <button className="secondary-button" disabled={Boolean(updatingId)} onClick={() => change(book)}>{book.status === 'available' ? '标记已售' : updating ? '更新中…' : '重新上架'}</button>}<button className="danger-button" disabled={Boolean(updatingId)} onClick={() => remove(book)}><Trash2 />删除</button></>}</div></div>;
+  }) : <InlineEmpty navigate={navigate} />}<button className="floating-add" onClick={() => navigate('/publish')}><Plus />发布一本书</button>{deleteTarget && <div className="dialog-layer"><button className="dialog-scrim" onClick={() => !deletingId && setDeleteTarget(null)} aria-label="取消删除" /><section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title"><div className="confirm-dialog-copy"><span><CircleAlert /></span><div><h2 id="delete-dialog-title">确认删除这本书？</h2><p>《{deleteTarget.title}》删除后不会再公开展示。</p></div></div><div className="confirm-dialog-actions"><button className="secondary-button" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(null)}>取消</button><button className="danger-button" disabled={Boolean(deletingId)} onClick={() => void confirmRemove()}>{deletingId ? <><RefreshCw className="spin" />删除中</> : <><Trash2 />确认删除</>}</button></div></section></div>}</AppShell>;
 }
 
 const stateContent: Record<string, { title: string; text: string; image: string; button: string }> = {
