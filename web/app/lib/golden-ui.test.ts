@@ -5,6 +5,18 @@ const mobileApp = readFileSync(new URL('../components/mobile-app.tsx', import.me
 const styles = readFileSync(new URL('../globals.css', import.meta.url), 'utf8');
 
 describe('authenticated Golden H5', () => {
+  it('offers Bug and suggestion feedback from the profile and removes the decorative login badge', () => {
+    const profilePage = mobileApp.slice(mobileApp.indexOf('function ProfilePage'), mobileApp.indexOf('function ProfileEditPage'));
+    const feedbackPage = mobileApp.slice(mobileApp.indexOf('function FeedbackPage'), mobileApp.indexOf('function FavoritesPage'));
+    const loginPage = mobileApp.slice(mobileApp.indexOf('function LoginPage'), mobileApp.indexOf('function HomePage'));
+    expect(profilePage).toContain("navigate('/feedback')");
+    expect(mobileApp).toContain("type: 'BUG', title: '提交 Bug'");
+    expect(mobileApp).toContain("type: 'SUGGESTION', title: '提交建议'");
+    expect(feedbackPage).toContain('demoRepository.submitFeedback(type, detail)');
+    expect(loginPage).toContain('<header className="login-brand"><Brand /></header>');
+    expect(loginPage).not.toContain('<span><ShieldCheck /></span>');
+  });
+
   it('uses a dedicated profile editor page instead of a scroll-bound bottom sheet', () => {
     expect(mobileApp).toContain('function ProfileEditPage');
     expect(mobileApp).toContain("navigate('/profile/edit')");

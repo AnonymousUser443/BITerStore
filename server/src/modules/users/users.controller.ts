@@ -1,5 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, Get, Patch, UseGuards } from '@nestjs/common'
-import { AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
+import { BadRequestException, Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common'
+import { AuthGuard, CurrentUser, VerifiedGuard, type AuthUser } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 @Controller('me') @UseGuards(AuthGuard)
 export class UsersController {
@@ -12,6 +12,17 @@ export class UsersController {
   }
 
   @Get() get(@CurrentUser() user: AuthUser) { return this.profile(user.id) }
+
+  @Post('feedback')
+  @UseGuards(VerifiedGuard)
+  submitFeedback(@CurrentUser() user: AuthUser, @Body() body: { type?: string; content?: string; platform?: string }) {
+    const type = body.type?.trim().toUpperCase()
+    const content = body.content?.trim() || ''
+    if (!type || !['BUG', 'SUGGESTION'].includes(type)) throw new BadRequestException('请选择提交 Bug 或提交建议')
+    if (content.length < 2 || content.length > 1000) throw new BadRequestException('反馈内容应为 2–1000 个字符')
+    const platform = body.platform?.trim().toUpperCase() === 'WEAPP' ? 'WEAPP' : 'H5'
+    return this.prisma.userFeedback.create({ data: { userId: user.id, type, content, platform } })
+  }
 
   @Patch() async update(@CurrentUser() user: AuthUser, @Body() body: { nickname?: string; campus?: string | null; bio?: string; avatarUrl?: string | null }) {
     const nickname = body.nickname?.trim()

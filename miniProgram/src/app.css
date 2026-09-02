@@ -26,8 +26,6 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 /* Native Image counterpart of the Golden Reference paper background. */
 .paper-texture { z-index: 0; width: 100%; height: 100%; }
 
-/* Native node aliases for the Golden Reference login page. */
-.login-brand > text, .login-brand > taro-text-core { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: rgba(255,253,248,.72); color: var(--sage); }
 .login-hero > image, .login-hero > taro-image-core { flex: 0 0 42%; width: 42%; height: 190px; margin-left: -12px; object-fit: contain; filter: drop-shadow(0 12px 12px rgba(73,75,57,.12)); }
 .login-hero > taro-image-core > img { object-fit: contain; }
 .login-hero > view, .login-hero > taro-view-core { flex: 1; margin-left: -3px; }
@@ -220,6 +218,12 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .profile-badges > text, .profile-badges > taro-text-core { display: inline-flex; align-items: center; gap: 3px; padding: 4px 7px; border-radius: 999px; background: #e5ead6; color: var(--olive); font-size: 11px; font-weight: 700; }
 .profile-badges > text + text, .profile-badges > taro-text-core + taro-text-core { border: 1px solid #d8cfb5; background: rgba(255,253,248,.8); }
 .profile-campus { display: block; margin: 7px 0 4px; color: #6e735f; font-size: 11px; }
+.feedback-choices > button { display: flex; align-items: center; }
+.feedback-choices > button > view { min-width: 0; flex: 1; }
+.feedback-choices > button > view > text { display: block; }
+.feedback-choices > button > view > text:first-child { color: var(--olive); font-size: 12px; font-weight: 700; }
+.feedback-choices > button > view > text + text { margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.feedback-choice-icon, .feedback-choice-check { flex: 0 0 auto; }
 .profile-bio { display: block; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .profile-settings { align-self: flex-start; flex: 0 0 37px; width: 37px; height: 37px; display: flex; align-items: center; justify-content: center; color: #777a6e; font-size: 20px; }
 .profile-stats > taro-button-core { min-height: 71px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 1px dashed #ddd2b9; background: transparent; }

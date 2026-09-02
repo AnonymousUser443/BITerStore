@@ -51,6 +51,29 @@ describe('administrator moderation actions', () => {
     expect(prisma.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({ requestId: 'admin-request-1', metadata: { reason: '多次发布违规信息' } }) })
   })
 
+  it('allows an action without a reason and records a fallback audit reason', async () => {
+    const prisma = actionPrisma()
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, {
+      targetType: 'USER', targetId: 'user-1', action: 'MUTED'
+    })).resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reason: '管理员未填写原因' })
+    })
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metadata: { reason: '管理员未填写原因' } })
+    })
+  })
+
+  it('rejects a reason longer than the audit field limit', async () => {
+    const prisma = actionPrisma()
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, {
+      targetType: 'USER', targetId: 'user-1', action: 'MUTED', reason: 'a'.repeat(301)
+    })).rejects.toMatchObject({ status: 400 })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it('returns repeated success without applying the same request twice', async () => {
     const prisma = actionPrisma()
     prisma.auditLog.findFirst.mockResolvedValue({ actorId: 'admin-1', action: 'BANNED', resourceType: 'USER', resourceId: 'user-1' })
@@ -135,7 +158,7 @@ describe('administrator user activity summary', () => {
     const prisma: any = {
       user: {
         findMany: vi.fn().mockResolvedValue([{
-          id: 'user-1', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
+          id: 'user-1', studentNumber: '1120241261', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
           createdAt: older, updatedAt: latest, _count: { listings: 2, reports: 1 },
           sessions: [
             { platform: 'h5', device: 'desktop', createdAt: latest, expiresAt: new Date('2099-01-01'), revokedAt: null },
@@ -149,11 +172,13 @@ describe('administrator user activity summary', () => {
     const result = await new AdminController(prisma).users()
     expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
+        studentNumber: true,
         sessions: expect.objectContaining({ take: 12, orderBy: { createdAt: 'desc' } }),
         _count: { select: { listings: { where: { status: 'ACTIVE', deletedAt: null } }, reports: true } }
       })
     }))
     expect(result.items[0]).toMatchObject({
+      studentNumber: '1120241261',
       lastSeenAt: latest,
       _count: { listings: 2, reports: 1 },
       recentAccess: [
@@ -175,5 +200,24 @@ describe('administrator audit log serialization', () => {
     }
     const result = await new AdminController(prisma).audit()
     expect(result.items[0].id).toBe('42')
+  })
+})
+
+describe('administrator user feedback', () => {
+  it('filters feedback and includes the submitter identity', async () => {
+    const createdAt = new Date('2026-09-02T08:00:00.000Z')
+    const record = {
+      id: 'feedback-1', type: 'BUG', content: '登录按钮没有响应', platform: 'H5', createdAt,
+      user: { id: 'user-1', studentNumber: '1120241261', nickname: '测试用户', campus: '良乡' }
+    }
+    const prisma: any = {
+      userFeedback: { findMany: vi.fn().mockResolvedValue([record]), count: vi.fn().mockResolvedValue(1) }
+    }
+    const result = await new AdminController(prisma).feedback('登录', 'BUG', '1', '20')
+    expect(prisma.userFeedback.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ type: 'BUG', OR: expect.any(Array) }),
+      include: { user: { select: { id: true, studentNumber: true, nickname: true, campus: true } } }
+    }))
+    expect(result.items).toEqual([record])
   })
 })

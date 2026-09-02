@@ -95,6 +95,14 @@ describe('domain', () => {
   })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
   it('收藏能够持久化并取消', async () => { expect(await demoRepository.toggleFavorite('math-7')).toBe(true); expect((await demoRepository.listFavorites()).map((x) => x.id)).toEqual(['math-7']); expect(await demoRepository.toggleFavorite('math-7')).toBe(false) })
+  it('真实 API 会提交反馈类型、内容和微信端来源', async () => {
+    vi.stubEnv('TARO_ENV', 'weapp')
+    await apiRepository.submitFeedback('SUGGESTION', '希望增加按课程筛选')
+    expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://api.test/me/feedback', method: 'POST', data: { type: 'SUGGESTION', content: '希望增加按课程筛选', platform: 'WEAPP' }
+    }))
+    vi.unstubAllEnvs()
+  })
   it('真实 API 的个人数据快照按账号隔离', async () => {
     const session = { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
     await sessionStore.set(session)

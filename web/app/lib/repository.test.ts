@@ -101,6 +101,18 @@ describe('demoRepository persistence', () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/listings?');
   });
 
+  it('submits authenticated feedback through the real API', async () => {
+    demoRepository.markAuthenticated('user-real');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'feedback-1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await demoRepository.submitFeedback('BUG', '登录按钮没有响应');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/me/feedback', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ type: 'BUG', content: '登录按钮没有响应', platform: 'H5' })
+    }));
+  });
+
   it('formats API conversation timestamps for compact message cards', async () => {
     demoRepository.markAuthenticated('user-real');
     vi.useFakeTimers();

@@ -82,6 +82,7 @@ model User {
   blockedBy Block[] @relation("BlockedUser")
   conversationMembers ConversationMember[]
   notifications Notification[]
+  feedback UserFeedback[]
   moderationActions ModerationAction[]
   auditLogs AuditLog[]
 }
@@ -231,6 +232,18 @@ model Notification {
   readAt DateTime?
   createdAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model UserFeedback {
+  id String @id @default(uuid())
+  userId String
+  type String
+  content String
+  platform String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([type, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
 }
 

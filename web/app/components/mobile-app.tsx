@@ -22,7 +22,7 @@ import {
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
 import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
-import type { Book, BookFilters, ChatThread, Condition, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
+import type { Book, BookFilters, ChatThread, Condition, FeedbackType, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
 const navItems = [
   { label: '首页', href: '/home', icon: Home },
@@ -352,7 +352,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
     catch (cause) { setError(cause instanceof Error ? cause.message : '短信验证失败'); }
     finally { setLoading(false); }
   };
-  return <section className="phone-shell login-page"><div className="paper-texture" aria-hidden="true" /><header className="login-brand"><Brand /><span><ShieldCheck /></span></header><div className="login-hero"><Image src="/assets/tobby-hello.webp" alt="Tobby 欢迎北理同学" width={760} height={760} priority /><div><p className="eyebrow">BIT CAMPUS IDENTITY</p><h1>{challenge ? '确认是你本人' : '北理同学，你好'}</h1><p>{challenge ? <>验证码已发送至 <strong>{challenge.masked_phone || '绑定手机'}</strong></> : '使用学校统一身份认证登录，完成校园身份验证。'}</p></div></div><div className="login-card">{challenge ? <><label><span>短信验证码</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ''))} placeholder="请输入验证码" autoFocus /></label><button className="primary-button" disabled={loading} onClick={verifySms}>{loading ? <><RefreshCw className="spin" />正在验证</> : '继续验证'}</button><button className="login-link" disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError(''); }}>返回重新登录</button></> : <><label><span>学号</span><input inputMode="numeric" autoComplete="username" value={sid} onChange={(event) => setSid(event.target.value.replace(/\D/g, ''))} placeholder="请输入北理工学号" autoFocus /></label><label><span>统一身份认证密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login(); }} placeholder="请输入密码" /></label><button className="primary-button" disabled={loading} onClick={login}>{loading ? <><RefreshCw className="spin" />正在安全验证</> : '登录 BITerStore'}</button><div className="guest-divider"><span>或</span></div><button className="secondary-button guest-button" disabled={loading} onClick={continueAsGuest}>游客访问</button><p className="guest-note">先逛逛校园书架，之后可在“我的”页面重新登录。</p></>}{error && <div className="login-error" role="alert"><CircleAlert />{error}</div>}</div><div className="login-security"><ShieldCheck /><p><strong>凭据安全说明</strong><span>密码仅用于本次学校统一身份认证，不会保存在 BITerStore 本地。</span></p></div><button className="login-guide" onClick={() => navigate('/onboarding')}>返回新手指引</button></section>;
+  return <section className="phone-shell login-page"><div className="paper-texture" aria-hidden="true" /><header className="login-brand"><Brand /></header><div className="login-hero"><Image src="/assets/tobby-hello.webp" alt="Tobby 欢迎北理同学" width={760} height={760} priority /><div><p className="eyebrow">BIT CAMPUS IDENTITY</p><h1>{challenge ? '确认是你本人' : '北理同学，你好'}</h1><p>{challenge ? <>验证码已发送至 <strong>{challenge.masked_phone || '绑定手机'}</strong></> : '使用学校统一身份认证登录，完成校园身份验证。'}</p></div></div><div className="login-card">{challenge ? <><label><span>短信验证码</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ''))} placeholder="请输入验证码" autoFocus /></label><button className="primary-button" disabled={loading} onClick={verifySms}>{loading ? <><RefreshCw className="spin" />正在验证</> : '继续验证'}</button><button className="login-link" disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError(''); }}>返回重新登录</button></> : <><label><span>学号</span><input inputMode="numeric" autoComplete="username" value={sid} onChange={(event) => setSid(event.target.value.replace(/\D/g, ''))} placeholder="请输入北理工学号" autoFocus /></label><label><span>统一身份认证密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login(); }} placeholder="请输入密码" /></label><button className="primary-button" disabled={loading} onClick={login}>{loading ? <><RefreshCw className="spin" />正在安全验证</> : '登录 BITerStore'}</button><div className="guest-divider"><span>或</span></div><button className="secondary-button guest-button" disabled={loading} onClick={continueAsGuest}>游客访问</button><p className="guest-note">先逛逛校园书架，之后可在“我的”页面重新登录。</p></>}{error && <div className="login-error" role="alert"><CircleAlert />{error}</div>}</div><div className="login-security"><ShieldCheck /><p><strong>凭据安全说明</strong><span>密码仅用于本次学校统一身份认证，不会保存在 BITerStore 本地。</span></p></div><button className="login-guide" onClick={() => navigate('/onboarding')}>返回新手指引</button></section>;
 }
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
@@ -581,7 +581,7 @@ function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout
     <div className="profile-stats"><button onClick={() => navigate('/favorites')}><strong>{favorites}</strong><span>我的收藏</span></button><button onClick={() => navigate('/my-listings')}><strong>{listings}</strong><span>我的发布</span></button><button><strong className="verified-stat">已认证</strong><span>校园身份</span></button></div>
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
-    <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /></section>
+    <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={MessageCircle} label="问题反馈" detail="提交 Bug 或建议，帮助我们改进" onClick={() => navigate('/feedback')} /><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /></section>
     <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
   </AppShell>;
 }
@@ -622,6 +622,39 @@ function ProfileEditPage({ navigate, notify, currentUser, onProfileUpdated }: { 
 }
 
 function MenuButton({ icon: Icon, label, detail, onClick, danger }: { icon: typeof Heart; label: string; detail: string; onClick: () => void; danger?: boolean }) { return <button className={danger ? 'danger' : ''} onClick={onClick}><span><Icon /></span><div><strong>{label}</strong><small>{detail}</small></div><ChevronRight /></button>; }
+
+const feedbackChoices: Array<{ type: FeedbackType; title: string; detail: string; icon: typeof CircleAlert }> = [
+  { type: 'BUG', title: '提交 Bug', detail: '功能异常、页面错误或无法完成操作', icon: CircleAlert },
+  { type: 'SUGGESTION', title: '提交建议', detail: '功能想法、体验优化或其他建议', icon: Sparkles },
+];
+
+function FeedbackPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
+  const [type, setType] = useState<FeedbackType>();
+  const [content, setContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async () => {
+    const detail = content.trim();
+    if (!type) return notify('请先选择提交 Bug 或提交建议');
+    if (detail.length < 2) return notify('请至少填写 2 个字符');
+    setSubmitting(true);
+    try {
+      await demoRepository.submitFeedback(type, detail);
+      notify('反馈已提交，感谢你的帮助');
+      navigate('/profile');
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '反馈提交失败，请稍后重试'); }
+    finally { setSubmitting(false); }
+  };
+  return <AppShell navigate={navigate} title="问题反馈" back noNav className="feedback-page">
+    <section className="feedback-intro"><Image src="/assets/tobby-question.webp" alt="Tobby 等待你的反馈" width={760} height={760} /><div><p className="eyebrow">HELP US IMPROVE</p><h1>遇到问题，或有好点子？</h1><p>选择反馈类型并告诉我们具体情况，管理员会在后台查看。</p></div></section>
+    <section className="feedback-form">
+      <h2>反馈类型</h2>
+      <div className="feedback-choices">{feedbackChoices.map((choice) => { const Icon = choice.icon; return <button id={`e2e-feedback-${choice.type.toLowerCase()}`} type="button" className={type === choice.type ? 'selected' : ''} onClick={() => setType(choice.type)} key={choice.type}><span className="feedback-choice-icon"><Icon /></span><div><strong>{choice.title}</strong><small>{choice.detail}</small></div><i className="feedback-choice-check">{type === choice.type ? <Check /> : null}</i></button>; })}</div>
+      <label className="feedback-field"><span>反馈内容</span><textarea id="e2e-feedback-content" maxLength={1000} value={content} onChange={(event) => setContent(event.target.value)} placeholder={type === 'BUG' ? '请描述出现问题的页面、操作步骤和现象' : type === 'SUGGESTION' ? '请描述你希望增加或改进的内容' : '请先选择反馈类型，再填写具体内容'} /><small>{content.trim().length}/1000</small></label>
+      <p className="feedback-note"><ShieldCheck />反馈会关联你的账号，便于确认问题；不会公开展示。</p>
+      <button id="e2e-feedback-submit" className="primary-button feedback-submit" disabled={!type || content.trim().length < 2 || submitting} onClick={() => void submit()}>{submitting ? <><RefreshCw className="spin" />正在提交</> : '提交反馈'}</button>
+    </section>
+  </AppShell>;
+}
 
 function FavoritesPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
   const [books, setBooks] = useState<Book[] | undefined>(() => peekFavorites()); useEffect(() => { demoRepository.listFavorites().then((next) => setBooks((current) => preserveSnapshot(current, next))); }, []);
@@ -751,7 +784,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   const clearCurrentUser = useCallback(() => { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }, []);
   const toastProgress = Number(toast.match(/正在上传并发布\s+(\d+)%$/)?.[1] || 0);
   if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
-  const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings'];
+  const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings', '/feedback'];
   const needsAccount = privatePaths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
   const effectivePath = needsAccount && authMode !== 'authenticated'
     ? '/login'
@@ -769,6 +802,7 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
   else if (effectivePath.startsWith('/messages/')) page = <ChatPage threadId={effectivePath.split('/')[2]} navigate={navigate} notify={notify} />;
   else if (effectivePath === '/profile/edit') page = <ProfileEditPage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={updateCurrentUser} />;
   else if (effectivePath === '/profile') page = <ProfilePage navigate={navigate} notify={notify} currentUser={currentUser} onProfileUpdated={updateCurrentUser} onLogout={clearCurrentUser} />;
+  else if (effectivePath === '/feedback') page = <FeedbackPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/favorites') page = <FavoritesPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/my-listings') page = <MyListingsPage navigate={navigate} notify={notify} />;
   else if (effectivePath === '/states') page = <StatePage type="index" navigate={navigate} />;

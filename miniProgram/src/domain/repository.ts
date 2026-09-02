@@ -2,7 +2,7 @@ import { mediaAdapter, storageAdapter } from '@/platform'
 import { CURRENT_USER_ID, seedListings, seedNotifications, seedThreads, users } from './seed'
 import { defaultFilters, filterListings } from './filters'
 import { apiRepository } from './api-repository'
-import type { ChatThread, Listing, ListingFilters, ListingStatus, Message, Notification, ProfileUpdate, PublishDraft, User } from './types'
+import type { ChatThread, FeedbackType, Listing, ListingFilters, ListingStatus, Message, Notification, ProfileUpdate, PublishDraft, User } from './types'
 import { AppError } from './types'
 
 const KEYS = { listings: 'listings', favorites: 'favorites', threads: 'threads', draft: 'draft', onboarding: 'onboarding', filters: 'filters', notifications: 'notifications', resetNotice: 'reset-notice', authenticatedSid: 'authenticated-sid' }
@@ -16,6 +16,7 @@ export interface DemoRepository {
   updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; peekMyListings(): Listing[] | undefined;
   listThreads(): Promise<ChatThread[]>; peekThreads(): ChatThread[] | undefined; getThread(id: string): Promise<ChatThread>; peekThread(id: string): ChatThread | undefined; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
   listNotifications(): Promise<Notification[]>; peekNotifications(): Notification[] | undefined; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  submitFeedback(type: FeedbackType, content: string): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
@@ -51,6 +52,7 @@ const localRepository: DemoRepository = {
   async getProfile() { return storageAdapter.get<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   peekProfile() { return storageAdapter.peek<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   async updateProfile(profile) { const current = await this.getProfile(); const updated = { ...current, ...profile }; await storageAdapter.set('profile', updated); return updated },
+  async submitFeedback(type, content) { const items = await storageAdapter.get<Array<{ type: FeedbackType; content: string; createdAt: string }>>('feedback', []); await storageAdapter.set('feedback', [{ type, content, createdAt: new Date().toISOString() }, ...items]) },
   async getFilters() {
     if (filterCache) return filterCache
     filterCache = await storageAdapter.get(KEYS.filters, defaultFilters)

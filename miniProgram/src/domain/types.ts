@@ -1,6 +1,7 @@
 export type Campus = '中关村' | '良乡' | '西山' | '珠海'
 export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing'
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下'
+export type FeedbackType = 'BUG' | 'SUGGESTION'
 
 export interface User { id: string; studentNumber?: string; name: string; campus: Campus; verified: boolean; wechatBound?: boolean; bio: string; responseTime: string; avatar?: string; avatarTone?: 'sage' | 'peach' | 'blue' | 'gold' | 'olive' }
 export interface ProfileUpdate { name: string; campus: Campus; bio: string; avatar?: string }

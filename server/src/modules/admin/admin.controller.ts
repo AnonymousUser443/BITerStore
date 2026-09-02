@@ -9,6 +9,7 @@ const campusStatuses = ['UNVERIFIED', 'PENDING', 'VERIFIED', 'EXPIRED', 'REVOKED
 const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
 const listingReviewStates = ['PENDING', 'REVIEWED', 'ALL'] as const
 const reportStatuses = ['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED'] as const
+const feedbackTypes = ['BUG', 'SUGGESTION'] as const
 const actionsByTarget = {
   USER: ['ACTIVE', 'MUTED', 'BANNED', 'REVOKE_SESSIONS', 'ROLE_USER', 'ROLE_MODERATOR', 'ROLE_ADMIN'],
   LISTING: ['ACTIVE', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
@@ -29,7 +30,7 @@ const reportStatusTransitions: Record<string, readonly string[]> = {
 }
 
 type TargetType = keyof typeof actionsByTarget
-type ActionBody = { targetType: TargetType; targetId: string; action: string; reason: string; requestId?: string }
+type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string }
 
 function pageOptions(pageRaw?: string, pageSizeRaw?: string) {
   const page = Math.max(1, Number.parseInt(pageRaw || '1', 10) || 1)
@@ -97,7 +98,7 @@ export class AdminController {
         skip,
         take: pageSize,
         select: {
-          id: true, nickname: true, avatarUrl: true, campus: true, role: true, status: true,
+          id: true, studentNumber: true, nickname: true, avatarUrl: true, campus: true, role: true, status: true,
           campusStatus: true, adminTotpEnabled: true, createdAt: true, updatedAt: true,
           sessions: {
             orderBy: { createdAt: 'desc' },
@@ -254,13 +255,42 @@ export class AdminController {
     return pageResult(items, total, page, pageSize)
   }
 
+  @Get('feedback')
+  async feedback(
+    @Query('q') qRaw?: string,
+    @Query('type') typeRaw?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string
+  ) {
+    const q = qRaw?.trim().slice(0, 80)
+    const type = requireValue(typeRaw, feedbackTypes, '反馈类型')
+    const { page, pageSize, skip } = pageOptions(pageRaw, pageSizeRaw)
+    const where = {
+      ...(type ? { type } : {}),
+      ...(q ? { OR: [
+        { content: { contains: q, mode: 'insensitive' as const } },
+        { user: { nickname: { contains: q, mode: 'insensitive' as const } } },
+        { user: { studentNumber: { contains: q, mode: 'insensitive' as const } } }
+      ] } : {})
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.userFeedback.findMany({
+        where, orderBy: { createdAt: 'desc' }, skip, take: pageSize,
+        include: { user: { select: { id: true, studentNumber: true, nickname: true, campus: true } } }
+      }),
+      this.prisma.userFeedback.count({ where })
+    ])
+    return pageResult(items, total, page, pageSize)
+  }
+
   @Post('moderation-actions')
   async action(@CurrentUser() actor: AuthUser, @Body() body: ActionBody) {
     if (!body || !Object.hasOwn(actionsByTarget, body.targetType)) throw new BadRequestException('处置对象类型无效')
     if (!body.targetId?.trim()) throw new BadRequestException('处置对象不能为空')
     if (!(actionsByTarget[body.targetType] as readonly string[]).includes(body.action)) throw new BadRequestException('该对象不支持此处置动作')
-    const reason = body.reason?.trim()
-    if (!reason || reason.length < 3 || reason.length > 300) throw new BadRequestException('处置原因应为 3–300 个字符')
+    const providedReason = body.reason?.trim() || ''
+    if (providedReason.length > 300) throw new BadRequestException('处置原因不能超过 300 个字符')
+    const reason = providedReason || '管理员未填写原因'
     const requestId = body.requestId?.trim() || randomRequestId()
     if (requestId.length > 100) throw new BadRequestException('请求标识过长')
 

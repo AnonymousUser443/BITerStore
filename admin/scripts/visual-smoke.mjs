@@ -13,7 +13,7 @@ const debugPort = 9344
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const fixtureUser = {
-  id: 'visual-user-1', nickname: '测试书友', campus: '良乡', role: 'USER', status: 'ACTIVE',
+  id: 'visual-user-1', studentNumber: '1120241261', nickname: '测试书友', campus: '良乡', role: 'USER', status: 'ACTIVE',
   campusStatus: 'VERIFIED', adminTotpEnabled: false, createdAt: '2026-09-01T08:00:00.000Z',
   updatedAt: '2026-09-01T08:00:00.000Z', lastSeenAt: '2026-09-02T04:20:00.000Z',
   recentAccess: [
@@ -28,6 +28,7 @@ const fixtures = {
   '/api/v1/admin/users': { items: [fixtureUser], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', priceCents: 1800, campus: '良乡', status: 'ACTIVE', moderationDecision: null, viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/reports': { items: [{ id: 'visual-report-1', targetType: 'LISTING', targetId: 'visual-listing-1', reason: '商品描述与实物不符', evidence: '已提供聊天记录', status: 'OPEN', createdAt: '2026-09-02T01:20:00.000Z', updatedAt: '2026-09-02T01:20:00.000Z', reporter: { id: 'reporter-1', nickname: '认真同学' }, target: { label: '高等数学（第七版）上册', status: 'ACTIVE' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
+  '/api/v1/admin/feedback': { items: [{ id: 'visual-feedback-1', type: 'BUG', content: '登录后偶尔无法返回商品详情页，希望保留当前位置。', platform: 'H5', createdAt: '2026-09-02T02:10:00.000Z', user: { id: 'visual-user-1', studentNumber: '1120241261', nickname: '测试书友', campus: '良乡' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/audit-logs': { items: [{ id: '42', action: 'BLOCKED', resourceType: 'LISTING', resourceId: 'visual-listing-1', requestId: 'admin-visual-request', metadata: { reason: '示例违规处置' }, createdAt: '2026-09-02T02:00:00.000Z', actor: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN' } }], total: 1, page: 1, pageSize: 20, pages: 1 }
 }
 let listingIgnored = false
@@ -130,7 +131,7 @@ try {
   await waitForEndpoint(`http://127.0.0.1:${debugPort}/json/version`)
   const tab = await fetch(`http://127.0.0.1:${debugPort}/json/new?about:blank`, { method: 'PUT' }).then((response) => response.json())
   client = new CdpClient(tab.webSocketDebuggerUrl, (message) => {
-    if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.text || 'Runtime exception' })
+    if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.exception?.description || message.params.exceptionDetails?.text || 'Runtime exception' })
     if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') diagnostics.push({ type: 'console-error', text: message.params.args?.map((item) => item.value || item.description).join(' ') })
   })
   await client.send('Page.enable')
@@ -143,7 +144,8 @@ try {
     ['users-desktop-detail', 1180, 820, 1, 'user-detail'],
     ['listings-desktop-dialog', 1440, 760, 2, 'listing'],
     ['reports-mobile-dialog', 390, 844, 3, 'report'],
-    ['audit-tablet', 768, 900, 4, null]
+    ['feedback-tablet', 768, 900, 4, null],
+    ['audit-tablet', 768, 900, 5, null]
   ]
   for (const [name, width, height, navIndex, dialogTrigger] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
@@ -171,7 +173,11 @@ try {
       await client.send('Runtime.evaluate', { expression })
       await waitFor(client, dialogTrigger === 'user-detail' ? `Boolean(document.querySelector('.user-detail-dialog'))` : `Boolean(document.querySelector('.action-dialog'))`)
     }
-    const state = await client.send('Runtime.evaluate', { expression: `(() => { const sidebar = document.querySelector('.sidebar'); return { text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: Boolean(sidebar && getComputedStyle(sidebar).display !== 'none'), dialog: Boolean(document.querySelector('.dialog-panel')), actionDialog: Boolean(document.querySelector('.action-dialog')), userDetail: Boolean(document.querySelector('.user-detail-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, actionChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '', listingScopes: [...document.querySelectorAll('select[aria-label="商品范围"] option')].map((option) => option.textContent?.trim()), activeListingLabel: document.querySelector('select[aria-label="商品状态"] option[value="ACTIVE"]')?.textContent?.trim() || '' } })()`, returnByValue: true })
+    if (dialogTrigger === 'user-action') {
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-choice-grid button')?.click()` })
+      await waitFor(client, `Boolean(document.querySelector('.action-dialog textarea'))`)
+    }
+    const state = await client.send('Runtime.evaluate', { expression: `(() => { const sidebar = document.querySelector('.sidebar'); const confirm = document.querySelector('.action-dialog .dialog-actions button:last-child'); return { text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: Boolean(sidebar && getComputedStyle(sidebar).display !== 'none'), dialog: Boolean(document.querySelector('.dialog-panel')), actionDialog: Boolean(document.querySelector('.action-dialog')), userDetail: Boolean(document.querySelector('.user-detail-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, actionChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), actionConfirmDisabled: Boolean(confirm?.disabled), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '', listingScopes: [...document.querySelectorAll('select[aria-label="商品范围"] option')].map((option) => option.textContent?.trim()), activeListingLabel: document.querySelector('select[aria-label="商品状态"] option[value="ACTIVE"]')?.textContent?.trim() || '' } })()`, returnByValue: true })
     if (!state.result?.value) throw new Error(`Cannot inspect ${name}: ${state.exceptionDetails?.exception?.description || state.exceptionDetails?.text || 'unknown browser evaluation error'}`)
     const value = state.result.value
     if (!value.text.trim()) diagnostics.push({ type: 'blank-page', text: name })
@@ -181,12 +187,14 @@ try {
     if (dialogTrigger && value.tableScrollHeight !== beforeTableScroll) diagnostics.push({ type: 'table-scroll-changed', text: `${name}: ${beforeTableScroll} -> ${value.tableScrollHeight}` })
     if (dialogTrigger === 'user-action' && (value.actionChoices.length < 3 || !value.actionChoices.includes('封禁账号'))) diagnostics.push({ type: 'wrong-user-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'user-action' && (!value.text.includes('3 本在售') || !value.text.includes('浏览器 · 电脑'))) diagnostics.push({ type: 'missing-user-activity', text: name })
-    if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
+    if (dialogTrigger === 'user-action' && (value.actionConfirmDisabled || !value.text.includes('处置原因（选填）'))) diagnostics.push({ type: 'reason-still-required', text: name })
+    if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('1120241261') || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
     if (dialogTrigger === 'listing' && value.actionChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'listing' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-listing-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
     if (dialogTrigger === 'listing' && (!value.listingScopes.includes('在售商品') || value.activeListingLabel !== '在售')) diagnostics.push({ type: 'missing-active-listing-scope', text: `${name}: ${value.listingScopes.join('|')} ${value.activeListingLabel}` })
     if (dialogTrigger === 'report' && value.actionChoices.join('|') !== '标记处理中|处理并结案|驳回举报') diagnostics.push({ type: 'wrong-report-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'report' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-report-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
+    if (name === 'feedback-tablet' && (!value.text.includes('用户反馈') || !value.text.includes('提交 Bug') && !value.text.includes('Bug') || !value.text.includes('1120241261') || !value.text.includes('网页端'))) diagnostics.push({ type: 'wrong-feedback-view', text: name })
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))
