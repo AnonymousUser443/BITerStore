@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { listingActions, reportActions, userActions } from './App'
+import { listingActions, listingDetailHref, reportActions, userActions } from './App'
 import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
@@ -46,5 +46,9 @@ describe('admin action visibility', () => {
     expect(listingActions(listing('DRAFT'))).toEqual([])
     expect(reportActions(report('OPEN')).map((item) => item.action)).toEqual(['PROCESSING', 'RESOLVED', 'REJECTED'])
     expect(reportActions(report('RESOLVED'))).toEqual([])
+  })
+
+  it('builds a safe H5 product detail URL', () => {
+    expect(listingDetailHref('listing/id with spaces')).toBe('/books?id=listing%2Fid%20with%20spaces')
   })
 })
