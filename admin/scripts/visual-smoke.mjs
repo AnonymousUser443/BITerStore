@@ -13,7 +13,7 @@ const debugPort = 9344
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const fixtureUser = {
-  id: 'visual-user-1', nickname: '测试书友', campus: '良乡', role: 'USER', status: 'ACTIVE',
+  id: 'visual-user-1', studentNumber: '1120241261', nickname: '测试书友', campus: '良乡', role: 'USER', status: 'ACTIVE',
   campusStatus: 'VERIFIED', adminTotpEnabled: false, createdAt: '2026-09-01T08:00:00.000Z',
   updatedAt: '2026-09-01T08:00:00.000Z', lastSeenAt: '2026-09-02T04:20:00.000Z',
   recentAccess: [
@@ -171,7 +171,11 @@ try {
       await client.send('Runtime.evaluate', { expression })
       await waitFor(client, dialogTrigger === 'user-detail' ? `Boolean(document.querySelector('.user-detail-dialog'))` : `Boolean(document.querySelector('.action-dialog'))`)
     }
-    const state = await client.send('Runtime.evaluate', { expression: `(() => { const sidebar = document.querySelector('.sidebar'); return { text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: Boolean(sidebar && getComputedStyle(sidebar).display !== 'none'), dialog: Boolean(document.querySelector('.dialog-panel')), actionDialog: Boolean(document.querySelector('.action-dialog')), userDetail: Boolean(document.querySelector('.user-detail-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, actionChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '', listingScopes: [...document.querySelectorAll('select[aria-label="商品范围"] option')].map((option) => option.textContent?.trim()), activeListingLabel: document.querySelector('select[aria-label="商品状态"] option[value="ACTIVE"]')?.textContent?.trim() || '' } })()`, returnByValue: true })
+    if (dialogTrigger === 'user-action') {
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-choice-grid button')?.click()` })
+      await waitFor(client, `Boolean(document.querySelector('.action-dialog textarea'))`)
+    }
+    const state = await client.send('Runtime.evaluate', { expression: `(() => { const sidebar = document.querySelector('.sidebar'); const confirm = document.querySelector('.action-dialog .dialog-actions button:last-child'); return { text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: Boolean(sidebar && getComputedStyle(sidebar).display !== 'none'), dialog: Boolean(document.querySelector('.dialog-panel')), actionDialog: Boolean(document.querySelector('.action-dialog')), userDetail: Boolean(document.querySelector('.user-detail-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, actionChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), actionConfirmDisabled: Boolean(confirm?.disabled), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '', listingScopes: [...document.querySelectorAll('select[aria-label="商品范围"] option')].map((option) => option.textContent?.trim()), activeListingLabel: document.querySelector('select[aria-label="商品状态"] option[value="ACTIVE"]')?.textContent?.trim() || '' } })()`, returnByValue: true })
     if (!state.result?.value) throw new Error(`Cannot inspect ${name}: ${state.exceptionDetails?.exception?.description || state.exceptionDetails?.text || 'unknown browser evaluation error'}`)
     const value = state.result.value
     if (!value.text.trim()) diagnostics.push({ type: 'blank-page', text: name })
@@ -181,7 +185,8 @@ try {
     if (dialogTrigger && value.tableScrollHeight !== beforeTableScroll) diagnostics.push({ type: 'table-scroll-changed', text: `${name}: ${beforeTableScroll} -> ${value.tableScrollHeight}` })
     if (dialogTrigger === 'user-action' && (value.actionChoices.length < 3 || !value.actionChoices.includes('封禁账号'))) diagnostics.push({ type: 'wrong-user-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'user-action' && (!value.text.includes('3 本在售') || !value.text.includes('浏览器 · 电脑'))) diagnostics.push({ type: 'missing-user-activity', text: name })
-    if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
+    if (dialogTrigger === 'user-action' && (value.actionConfirmDisabled || !value.text.includes('处置原因（选填）'))) diagnostics.push({ type: 'reason-still-required', text: name })
+    if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('1120241261') || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
     if (dialogTrigger === 'listing' && value.actionChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'listing' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-listing-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
     if (dialogTrigger === 'listing' && (!value.listingScopes.includes('在售商品') || value.activeListingLabel !== '在售')) diagnostics.push({ type: 'missing-active-listing-scope', text: `${name}: ${value.listingScopes.join('|')} ${value.activeListingLabel}` })

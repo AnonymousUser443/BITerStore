@@ -4,7 +4,7 @@ import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
 const user = (values: Partial<UserRow> = {}): UserRow => ({
-  id: 'user-1', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
+  id: 'user-1', studentNumber: '1120241261', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
   adminTotpEnabled: false, createdAt: '', updatedAt: '', recentAccess: [], _count: { listings: 0, reports: 0 }, ...values
 })
 const listing = (status: string): ListingRow => ({

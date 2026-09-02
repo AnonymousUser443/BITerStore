@@ -435,11 +435,11 @@ function ActionDialog({ actions, onClose, onConfirm }: { actions: PendingAction[
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const target = actions[0]
-  const requiresReason = selected?.action !== 'IGNORE'
+  const acceptsReason = selected?.action !== 'IGNORE'
   const targetName = target?.targetType === 'USER' ? '用户' : target?.targetType === 'LISTING' ? '商品' : '举报'
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!selected || (requiresReason && reason.trim().length < 3)) return
+    if (!selected) return
     setBusy(true)
     setError('')
     try { await onConfirm(selected, reason.trim()) } catch (cause) { setError(messageOf(cause)); setBusy(false) }
@@ -450,12 +450,12 @@ function ActionDialog({ actions, onClose, onConfirm }: { actions: PendingAction[
     <div className={`dialog-icon ${selected?.tone === 'danger' ? 'danger' : ''}`}>{selected?.tone === 'danger' ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div>
     <p className="eyebrow">治理操作确认</p><h2 id="action-dialog-title">处置{targetName}</h2>
     <p>对象：<strong>{target.targetLabel}</strong></p>
-    <p className="dialog-guidance">选择处置方式后确认。涉及状态或权限变更时，需填写至少 3 个字符的可审计原因。</p>
+    <p className="dialog-guidance">选择处置方式后即可确认；处置原因选填，填写后会一并保留在审计记录中。</p>
     {actions.length > 1 && <fieldset className="action-choice-grid"><legend>处置方式</legend>{actions.map((action) => <button type="button" className={`${selected?.action === action.action ? 'selected' : ''} ${action.tone === 'danger' ? 'danger-choice' : ''}`} key={action.action} onClick={() => { setSelected(action); setReason(''); setError('') }}>{action.actionLabel}</button>)}</fieldset>}
     {selected?.action === 'IGNORE' && <div className="selected-action-note"><strong>忽略此商品</strong><span>记录本次审核结果，商品保持当前销售状态。</span></div>}
-    {selected && requiresReason && <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={`请填写${selected.actionLabel}的原因（至少 3 个字符）`} /><small>{reason.trim().length}/300</small></label>}
+    {selected && acceptsReason && <label>处置原因（选填）<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={`可填写${selected.actionLabel}的原因，便于后续审计`} /><small>{reason.trim().length}/300</small></label>}
     {error && <ErrorBanner message={error} />}
-    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button><button className={selected?.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || !selected || (requiresReason && reason.trim().length < 3)}>{busy ? '正在提交…' : selected ? `确认${selected.actionLabel}` : '请先选择'}</button></div>
+    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button><button className={selected?.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || !selected}>{busy ? '正在提交…' : selected ? `确认${selected.actionLabel}` : '请先选择'}</button></div>
   </form></div>
 }
 
@@ -468,6 +468,7 @@ function UserDetailDialog({ user, onClose }: { user: UserRow; onClose: () => voi
     <dl className="user-detail-grid">
       <div><dt>账号状态</dt><dd><Status value={user.status} /></dd></div>
       <div><dt>校园认证</dt><dd><Status value={user.campusStatus} /></dd></div>
+      <div><dt>学号</dt><dd>{user.studentNumber || '未绑定'}</dd></div>
       <div><dt>后台角色</dt><dd>{labels[user.role]}</dd></div>
       <div><dt>所在校区</dt><dd>{user.campus || '未填写'}</dd></div>
       <div><dt>在售书籍</dt><dd>{user._count.listings} 本</dd></div>

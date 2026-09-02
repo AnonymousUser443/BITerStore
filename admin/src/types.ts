@@ -47,6 +47,7 @@ export interface Metrics {
 
 export interface UserRow {
   id: string
+  studentNumber?: string | null
   nickname: string
   avatarUrl?: string | null
   campus?: string | null

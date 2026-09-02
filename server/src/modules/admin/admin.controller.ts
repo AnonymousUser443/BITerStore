@@ -29,7 +29,7 @@ const reportStatusTransitions: Record<string, readonly string[]> = {
 }
 
 type TargetType = keyof typeof actionsByTarget
-type ActionBody = { targetType: TargetType; targetId: string; action: string; reason: string; requestId?: string }
+type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string }
 
 function pageOptions(pageRaw?: string, pageSizeRaw?: string) {
   const page = Math.max(1, Number.parseInt(pageRaw || '1', 10) || 1)
@@ -97,7 +97,7 @@ export class AdminController {
         skip,
         take: pageSize,
         select: {
-          id: true, nickname: true, avatarUrl: true, campus: true, role: true, status: true,
+          id: true, studentNumber: true, nickname: true, avatarUrl: true, campus: true, role: true, status: true,
           campusStatus: true, adminTotpEnabled: true, createdAt: true, updatedAt: true,
           sessions: {
             orderBy: { createdAt: 'desc' },
@@ -259,8 +259,9 @@ export class AdminController {
     if (!body || !Object.hasOwn(actionsByTarget, body.targetType)) throw new BadRequestException('处置对象类型无效')
     if (!body.targetId?.trim()) throw new BadRequestException('处置对象不能为空')
     if (!(actionsByTarget[body.targetType] as readonly string[]).includes(body.action)) throw new BadRequestException('该对象不支持此处置动作')
-    const reason = body.reason?.trim()
-    if (!reason || reason.length < 3 || reason.length > 300) throw new BadRequestException('处置原因应为 3–300 个字符')
+    const providedReason = body.reason?.trim() || ''
+    if (providedReason.length > 300) throw new BadRequestException('处置原因不能超过 300 个字符')
+    const reason = providedReason || '管理员未填写原因'
     const requestId = body.requestId?.trim() || randomRequestId()
     if (requestId.length > 100) throw new BadRequestException('请求标识过长')
 
