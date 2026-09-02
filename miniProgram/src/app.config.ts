@@ -4,7 +4,7 @@ export default defineAppConfig({
     'pages/startup/index', 'pages/welcome/index', 'pages/onboarding/index', 'pages/login/index', 'pages/home/index',
     'pages/search/index', 'pages/publish/index', 'pages/messages/index',
     'pages/profile/index', 'pages/profile/edit', 'pages/listing/detail', 'pages/notification/detail',
-    'pages/chat/index', 'pages/favorites/index', 'pages/my-listings/index',
+    'pages/chat/index', 'pages/favorites/index', 'pages/my-listings/index', 'pages/feedback/index',
     'pages/states/index'
   ],
   window: {

@@ -76,7 +76,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
           '/pages/messages/index': '/messages', '/pages/notification/detail': '/notifications', '/pages/chat/index': '/chat',
-          '/pages/profile/index': '/profile', '/pages/profile/edit': '/profile/edit', '/pages/favorites/index': '/favorites',
+          '/pages/profile/index': '/profile', '/pages/profile/edit': '/profile/edit', '/pages/favorites/index': '/favorites', '/pages/feedback/index': '/feedback',
           '/pages/my-listings/index': '/my-listings', '/pages/states/index': '/states'
         }
       },

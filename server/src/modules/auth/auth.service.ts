@@ -115,7 +115,7 @@ export class AuthService {
     return JSON.parse(raw)
   }
 
-  async webCallback(code: string, state: string) {
+  async webCallback(code: string, state: string, device?: string) {
     await this.redis.ensureConnected()
     const key = `web-login:${state}`
     if (!await this.redis.client.get(key)) throw new BadRequestException('state 无效或已使用')
@@ -142,7 +142,7 @@ export class AuthService {
     }
     if (!account) throw new ConflictException('该微信尚未绑定，请先使用学号登录并绑定微信')
     if (account.user.campusStatus !== 'VERIFIED') throw new ConflictException('该微信尚未绑定已认证学号，请先使用学号登录后重新绑定')
-    const tokens = await this.issue(account.user, 'h5')
+    const tokens = await this.issue(account.user, 'h5', device)
     await this.redis.client.setex(key, 60, JSON.stringify({ status: 'AUTHENTICATED', ...tokens }))
     return { status: 'authenticated' }
   }
@@ -151,7 +151,15 @@ export class AuthService {
     if (user.status && user.status !== 'ACTIVE') throw new ForbiddenException('账号当前不可用')
     const refreshToken = randomBytes(48).toString('base64url')
     const expiresAt = new Date(Date.now() + Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 86400000)
-    await this.prisma.session.create({ data: { userId: user.id, refreshTokenHash: hash(refreshToken), platform, device, expiresAt } })
+    await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: hash(refreshToken),
+        platform: platform.trim().slice(0, 30) || 'unknown',
+        device: device?.trim().slice(0, 60) || null,
+        expiresAt
+      }
+    })
     return {
       accessToken: await signAccessToken(user),
       refreshToken,

@@ -5,6 +5,18 @@ const mobileApp = readFileSync(new URL('../components/mobile-app.tsx', import.me
 const styles = readFileSync(new URL('../globals.css', import.meta.url), 'utf8');
 
 describe('authenticated Golden H5', () => {
+  it('offers Bug and suggestion feedback from the profile and removes the decorative login badge', () => {
+    const profilePage = mobileApp.slice(mobileApp.indexOf('function ProfilePage'), mobileApp.indexOf('function ProfileEditPage'));
+    const feedbackPage = mobileApp.slice(mobileApp.indexOf('function FeedbackPage'), mobileApp.indexOf('function FavoritesPage'));
+    const loginPage = mobileApp.slice(mobileApp.indexOf('function LoginPage'), mobileApp.indexOf('function HomePage'));
+    expect(profilePage).toContain("navigate('/feedback')");
+    expect(mobileApp).toContain("type: 'BUG', title: '提交 Bug'");
+    expect(mobileApp).toContain("type: 'SUGGESTION', title: '提交建议'");
+    expect(feedbackPage).toContain('demoRepository.submitFeedback(type, detail)');
+    expect(loginPage).toContain('<header className="login-brand"><Brand /></header>');
+    expect(loginPage).not.toContain('<span><ShieldCheck /></span>');
+  });
+
   it('uses a dedicated profile editor page instead of a scroll-bound bottom sheet', () => {
     expect(mobileApp).toContain('function ProfileEditPage');
     expect(mobileApp).toContain("navigate('/profile/edit')");
@@ -126,6 +138,15 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain('role="alertdialog"')
     expect(myListingsPage).toContain('className="dialog-scrim"')
     expect(styles).toContain('.confirm-dialog')
+  })
+
+  it('requires an explicit second click before marking a listing as sold', () => {
+    const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
+    expect(myListingsPage).toContain('setConfirmingSoldId(book.id)')
+    expect(myListingsPage).toContain('确认已售')
+    expect(myListingsPage).toContain("updateStatus(book, 'sold')")
+    expect(myListingsPage).toContain('setConfirmingSoldId(undefined)')
+    expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '状态更新失败，请稍后重试'")
   })
 
   it('keeps optional publish photos fully visible across aspect ratios', () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthController } from '../src/modules/auth/auth.controller.js'
+import { AuthController, inferSessionDevice } from '../src/modules/auth/auth.controller.js'
 
 describe('H5 cookie sessions', () => {
   const originalEnv = { ...process.env }
@@ -22,15 +22,17 @@ describe('H5 cookie sessions', () => {
   afterEach(() => { process.env = { ...originalEnv } })
 
   it('sets embedded-browser-compatible HttpOnly cookies without returning tokens to H5', async () => {
-    const result = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'cookie' }, reply)
+    const result = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'cookie' }, 'Mozilla/5.0 (iPhone; Mobile)', reply)
     expect(result).toEqual({ expiresIn: 900, user: session.user })
+    expect(auth.campus).toHaveBeenCalledWith('jwt', 'h5', 'phone')
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ sameSite: 'strict', path: '/api/v1/auth' }))
     expect(reply.setCookie).toHaveBeenCalledWith('biterstore_access', 'access-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1' }))
     expect(reply.setCookie).toHaveBeenCalledWith('biterstore_refresh', 'refresh-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1', maxAge: 2592000 }))
   })
 
   it('keeps the token response for non-browser clients', async () => {
-    await expect(controller.campus({ registrationToken: 'jwt', platform: 'weapp' }, reply)).resolves.toEqual(session)
+    await expect(controller.campus({ registrationToken: 'jwt', platform: 'weapp' }, undefined, reply)).resolves.toEqual(session)
+    expect(auth.campus).toHaveBeenCalledWith('jwt', 'weapp', 'phone')
     expect(reply.setCookie).not.toHaveBeenCalled()
   })
 
@@ -44,5 +46,19 @@ describe('H5 cookie sessions', () => {
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_access', expect.objectContaining({ path: '/api/v1' }))
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1/auth' }))
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1' }))
+  })
+})
+
+describe('session device classification', () => {
+  it('distinguishes browser phones, tablets, and computers', () => {
+    expect(inferSessionDevice('h5', undefined, 'Mozilla/5.0 (iPhone; Mobile)')).toBe('phone')
+    expect(inferSessionDevice('h5', undefined, 'Mozilla/5.0 (iPad)')).toBe('tablet')
+    expect(inferSessionDevice('h5', undefined, 'Mozilla/5.0 (Linux; Android 13; SM-X700)')).toBe('tablet')
+    expect(inferSessionDevice('h5', undefined, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('desktop')
+  })
+
+  it('records mini-program sessions as phones and accepts normalized client hints', () => {
+    expect(inferSessionDevice('weapp', 'weapp')).toBe('phone')
+    expect(inferSessionDevice('h5', 'tablet')).toBe('tablet')
   })
 })

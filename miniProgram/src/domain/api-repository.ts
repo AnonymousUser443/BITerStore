@@ -42,6 +42,7 @@ export const apiRepository: DemoRepository = {
   async getProfile() { const value = profile(await apiRequest('/me')); await writeSnapshot('profile', value); return value },
   peekProfile() { return readSnapshot<User>('profile') },
   async updateProfile(value) { const updated = profile(await apiRequest('/me', { method: 'PATCH', data: { nickname: value.name, campus: value.campus, bio: value.bio, avatarUrl: value.avatar || null } })); await writeSnapshot('profile', updated); return updated },
+  async submitFeedback(type, content) { await apiRequest('/me/feedback', { method: 'POST', data: { type, content, platform: process.env.TARO_ENV === 'weapp' ? 'WEAPP' : 'H5' } }) },
   async isOnboardingComplete() { return storageAdapter.get(apiOnboardingKey, false) }, async completeOnboarding() { await storageAdapter.set(apiOnboardingKey, true) },
   async getAuthenticatedSid() { const session = await sessionStore.get(); return session?.user.id || ((await sessionStore.mode()) === 'guest' ? 'guest' : '') }, async markAuthenticated() {}, async clearAuthentication() { await sessionStore.clear() },
   async getFilters() { return storageAdapter.get(apiFiltersKey, defaultFilters) }, async saveFilters(filters) { await storageAdapter.set(apiFiltersKey, filters) }, async shouldShowResetNotice() { return false }, async acknowledgeResetNotice() {}, async resetDemoData() { throw new Error('真实数据模式不支持重置') }

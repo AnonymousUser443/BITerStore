@@ -105,7 +105,7 @@ export default function LoginPage() {
 
   return <View className='phone-shell login-page'>
     <Image className='paper-texture' src={bundledAsset('paper-bg')} mode='aspectFill' />
-    <View className='login-brand'><Brand /><Text><Glyph name='shield' /></Text></View>
+    <View className='login-brand'><Brand /></View>
     <View className='login-hero'>
       <Image src={bundledAsset('tobby-hello')} mode='aspectFit' />
       <View>

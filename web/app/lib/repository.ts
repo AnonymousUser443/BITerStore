@@ -1,7 +1,7 @@
 import { CURRENT_USER_ID, notifications, seedBooks, seedThreads, users } from './demo-data';
 import { apiRepository } from './api-repository';
 import { clearImages } from './image-store';
-import type { Book, BookFilters, ChatThread, ListingStatus, Message, Notification, PublishDraft, User } from './types';
+import type { Book, BookFilters, ChatThread, FeedbackType, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
 const KEYS = {
   books: 'biterstore:v1:books', favorites: 'biterstore:v1:favorites', threads: 'biterstore:v1:threads',
@@ -123,6 +123,7 @@ export interface DemoRepository {
   sendMessage(threadId: string, text: string): Promise<Message>;
   ensureThread(bookId: string): Promise<string>;
   getProfile(): Promise<User>;
+  submitFeedback(type: FeedbackType, content: string): Promise<void>;
   isOnboardingComplete(): boolean;
   completeOnboarding(): void;
   getAuthenticatedSid(): string;
@@ -152,6 +153,7 @@ const localRepository: DemoRepository = {
   async sendMessage(threadId, text) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }; const threads = read(KEYS.threads, seedThreads).map((thread) => thread.id === threadId ? { ...thread, updatedAt: message.createdAt, messages: [...thread.messages, message] } : thread); write(KEYS.threads, threads); await wait(110); return message; },
   async ensureThread(bookId) { const threads = read(KEYS.threads, seedThreads); const existing = threads.find((thread) => thread.bookId === bookId); if (existing) return existing.id; const book = read(KEYS.books, seedBooks).find((item) => item.id === bookId)!; const next: ChatThread = { id: `thread-${bookId}`, participantId: book.sellerId, bookId, unread: 0, updatedAt: '刚刚', messages: [] }; write(KEYS.threads, [next, ...threads]); await wait(90); return next.id; },
   async getProfile() { await wait(80); return users.find((user) => user.id === CURRENT_USER_ID)!; },
+  async submitFeedback(type, content) { write('biterstore:v1:feedback', [{ type, content, createdAt: new Date().toISOString() }, ...read<Array<{ type: FeedbackType; content: string; createdAt: string }>>('biterstore:v1:feedback', [])]); await wait(120); },
   isOnboardingComplete() { return read(KEYS.onboarding, false); },
   completeOnboarding() { write(KEYS.onboarding, true); },
   getAuthenticatedSid() { return read(KEYS.authenticatedSid, ''); },
@@ -205,6 +207,7 @@ export const demoRepository: DemoRepository = {
     return id;
   },
   getProfile: () => activeRepository().getProfile(),
+  submitFeedback: (type, content) => activeRepository().submitFeedback(type, content),
   isOnboardingComplete: () => localRepository.isOnboardingComplete(),
   completeOnboarding: () => localRepository.completeOnboarding(),
   getAuthenticatedSid: () => localRepository.getAuthenticatedSid(),
