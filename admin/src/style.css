@@ -143,6 +143,8 @@ td > strong { display: block; color: #30362d; }
 .action-menu button { width: 100%; border: 0; padding: 9px 12px; color: #4d5548; background: #fff; font-size: 12px; text-align: left; }
 .action-menu button:hover { background: #f3f5ef; }
 .action-menu button.danger-text { color: var(--danger); }
+.listing-action-trigger { min-width: 62px; padding: 7px 11px; border: 1px solid #d5d3c8; border-radius: 8px; color: #596451; background: #fff; font-size: 12px; font-weight: 750; }
+.listing-action-trigger:hover { background: var(--soft-moss); }
 .pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; color: var(--muted); font-size: 12px; }
 .pagination div { display: flex; gap: 7px; }
 .pagination button { min-height: 36px; padding: 7px 11px; color: #596252; background: #fff; border-color: var(--line); font-size: 12px; }
@@ -161,6 +163,7 @@ td > strong { display: block; color: #30362d; }
 .dialog-icon.danger { color: var(--danger); background: var(--danger-soft); }
 .action-dialog h2 { margin: 0 0 8px; font: 700 25px Georgia, "Songti SC", serif; }
 .action-dialog > p:not(.eyebrow) { color: var(--muted); font-size: 13px; }
+.action-dialog .dialog-guidance { margin: 12px 0 -2px; padding: 10px 12px; border-radius: 9px; background: #f5f3eb; line-height: 1.5; }
 .action-dialog textarea { min-height: 105px; resize: vertical; line-height: 1.55; }
 .action-dialog label { position: relative; }
 .action-dialog label small { position: absolute; right: 10px; bottom: 8px; color: #9a9e96; font-weight: 500; }

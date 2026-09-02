@@ -119,12 +119,13 @@ try {
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: `sessionStorage.setItem('biterstore-admin-token', 'visual-fixture')` })
 
   const targets = [
-    ['dashboard-desktop', 1440, 900, 0, false],
-    ['users-desktop-dialog', 1180, 820, 1, true],
-    ['reports-mobile', 390, 844, 3, false],
-    ['audit-tablet', 768, 900, 4, false]
+    ['dashboard-desktop', 1440, 900, 0, null],
+    ['users-desktop-dialog', 1180, 820, 1, 'menu'],
+    ['listings-desktop-dialog', 1440, 760, 2, 'listing'],
+    ['reports-mobile', 390, 844, 3, null],
+    ['audit-tablet', 768, 900, 4, null]
   ]
-  for (const [name, width, height, navIndex, openDialog] of targets) {
+  for (const [name, width, height, navIndex, dialogTrigger] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
     await client.send('Page.navigate', { url: `${preview}/admin/` })
@@ -134,16 +135,24 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelectorAll('.sidebar nav button')[${navIndex}]?.click()` })
       await delay(400)
     }
-    if (openDialog) {
-      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-menu summary')?.click(); document.querySelector('.action-menu button')?.click()` })
+    const beforeTableScroll = dialogTrigger === 'listing'
+      ? await client.send('Runtime.evaluate', { expression: `document.querySelector('.table-card')?.scrollHeight || 0`, returnByValue: true }).then((result) => result.result.value)
+      : null
+    if (dialogTrigger) {
+      const expression = dialogTrigger === 'listing'
+        ? `document.querySelector('.listing-action-trigger')?.click()`
+        : `document.querySelector('.action-menu summary')?.click(); document.querySelector('.action-menu button')?.click()`
+      await client.send('Runtime.evaluate', { expression })
       await waitFor(client, `Boolean(document.querySelector('.action-dialog'))`)
     }
-    const state = await client.send('Runtime.evaluate', { expression: `(() => ({ text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: getComputedStyle(document.querySelector('.sidebar')).display !== 'none', dialog: Boolean(document.querySelector('.action-dialog')) }))()`, returnByValue: true })
+    const state = await client.send('Runtime.evaluate', { expression: `(() => ({ text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: getComputedStyle(document.querySelector('.sidebar')).display !== 'none', dialog: Boolean(document.querySelector('.action-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, listingChoices: [...document.querySelectorAll('.action-dialog .dialog-actions button')].map((button) => button.textContent?.trim()) }))()`, returnByValue: true })
     const value = state.result.value
     if (!value.text.trim()) diagnostics.push({ type: 'blank-page', text: name })
     if (value.scrollWidth > value.clientWidth + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: ${value.scrollWidth} > ${value.clientWidth}` })
     if (!value.navVisible) diagnostics.push({ type: 'missing-navigation', text: name })
-    if (openDialog && !value.dialog) diagnostics.push({ type: 'missing-dialog', text: name })
+    if (dialogTrigger && !value.dialog) diagnostics.push({ type: 'missing-dialog', text: name })
+    if (dialogTrigger === 'listing' && value.tableScrollHeight !== beforeTableScroll) diagnostics.push({ type: 'table-scroll-changed', text: `${name}: ${beforeTableScroll} -> ${value.tableScrollHeight}` })
+    if (dialogTrigger === 'listing' && value.listingChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.listingChoices.join('|')}` })
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))

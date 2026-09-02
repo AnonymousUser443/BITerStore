@@ -345,6 +345,7 @@ function UsersTable({ rows, identity, onAction }: { rows: UserRow[]; identity: A
 function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (action: PendingAction) => void }) {
   return <Table headers={['商品', '卖家', '价格 / 校区', '状态', '互动', '发布时间', '操作']}>{rows.map((row) => {
     const cover = row.images.find((image) => image.role === 'COVER') || row.images.find((image) => image.role !== 'ISBN')
+    const [blockAction] = listingActions(row)
     return <tr key={row.id}>
       <td data-label="商品"><div className="listing-cell">{cover ? <img src={`${API_ROOT}/media/${cover.id}`} alt="" /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code></div></div></td>
       <td data-label="卖家">{row.seller.nickname}<small className="inline-note">{labels[row.seller.status] || row.seller.status}</small></td>
@@ -352,7 +353,9 @@ function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (acti
       <td data-label="状态"><Status value={row.status} /></td>
       <td data-label="互动">{row.viewCount} 浏览<small className="inline-note">{row._count.favorites} 收藏 · {row._count.conversations} 会话</small></td>
       <td data-label="发布时间">{dateTime(row.createdAt)}</td>
-      <td data-label="操作"><ActionMenu actions={listingActions(row)} onAction={onAction} /></td>
+      <td data-label="操作">{blockAction
+        ? <button type="button" className="listing-action-trigger" onClick={() => onAction(blockAction)}>处置</button>
+        : <span className="muted">不可操作</span>}</td>
     </tr>
   })}</Table>
 }
@@ -396,6 +399,7 @@ function ActionDialog({ pending, onClose, onConfirm }: { pending: PendingAction;
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const isListingBlock = pending.targetType === 'LISTING' && pending.action === 'BLOCKED'
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (reason.trim().length < 3) return
@@ -408,9 +412,10 @@ function ActionDialog({ pending, onClose, onConfirm }: { pending: PendingAction;
     <div className={`dialog-icon ${pending.tone === 'danger' ? 'danger' : ''}`}>{pending.tone === 'danger' ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div>
     <p className="eyebrow">治理操作确认</p><h2>{pending.actionLabel}</h2>
     <p>对象：<strong>{pending.targetLabel}</strong></p>
-    <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="请填写清晰、可审计的原因（至少 3 个字符）" /><small>{reason.trim().length}/300</small></label>
+    {isListingBlock && <p className="dialog-guidance">确认违规时填写原因并屏蔽；无需处理时选择“忽略”，商品保持原状态。</p>}
+    <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={isListingBlock ? '请填写违规依据（至少 3 个字符）' : '请填写清晰、可审计的原因（至少 3 个字符）'} /><small>{reason.trim().length}/300</small></label>
     {error && <ErrorBanner message={error} />}
-    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button><button className={pending.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || reason.trim().length < 3}>{busy ? '正在提交…' : '确认执行'}</button></div>
+    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>{isListingBlock ? '忽略' : '取消'}</button><button className={pending.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || reason.trim().length < 3}>{busy ? '正在提交…' : isListingBlock ? '违规屏蔽' : '确认执行'}</button></div>
   </form></div>
 }
 
@@ -435,11 +440,9 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 
 export function listingActions(row: ListingRow): PendingAction[] {
   const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, targetLabel: row.title, action, actionLabel, tone })
-  const actions: PendingAction[] = []
-  if (['BLOCKED', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)) actions.push(base('ACTIVE', '恢复在售'))
-  if (!['OFF_SHELF', 'SOLD', 'BLOCKED'].includes(row.status)) actions.push(base('OFF_SHELF', '管理下架'))
-  if (row.status !== 'BLOCKED') actions.push(base('BLOCKED', '违规屏蔽', 'danger'))
-  return actions
+  return ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
+    ? [base('BLOCKED', '违规屏蔽', 'danger')]
+    : []
 }
 
 export function reportActions(row: ReportRow): PendingAction[] {
