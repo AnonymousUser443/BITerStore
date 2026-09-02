@@ -28,8 +28,13 @@ if (bytes > maximumMainPackageBytes) {
   throw new Error(`微信主包 ${(bytes / 1024).toFixed(1)} KiB 超出 1.5 MiB 预览预算`)
 }
 
+const appConfig = JSON.parse(fs.readFileSync(path.join(outputDirectory, 'app.json'), 'utf8'))
+if (appConfig.lazyCodeLoading !== 'requiredComponents') {
+  throw new Error('微信产物未启用 requiredComponents 组件按需注入')
+}
+
 const encodedBytes = Math.ceil(bytes / 3) * 4
 console.log(
   `WeApp package verified: ${files.length} files, ${(bytes / 1024).toFixed(1)} KiB raw, ` +
-  `${(encodedBytes / 1024).toFixed(1)} KiB estimated upload payload, 0 WebP files`
+  `${(encodedBytes / 1024).toFixed(1)} KiB estimated upload payload, 0 WebP files, lazy components enabled`
 )

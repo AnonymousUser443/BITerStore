@@ -29,6 +29,7 @@ npm run e2e:weapp:launch
 - H5 使用包内 WebP，微信真机使用 `src/assets-weapp/` 的 PNG 兼容副本。`assets:verify-weapp` 会阻止缺图或本地 WebP 回归。
 - `build:weapp` 与 `build:weapp:e2e` 会在编译后运行 `package:verify-weapp`：主包原始文件总量必须小于 1.5 MiB，估算上传载荷必须留在微信 2 MiB 限制内。若出现错误码 `80051`，不得关闭门禁，应压缩兼容素材或拆分分包。
 - 公共 `project.config.json` 已启用 `setting.minified`，预览时继续勾选开发者工具的上传代码压缩，不要把未压缩构建用于真机二维码。
+- 微信 `app.json` 由 Taro 生成 `lazyCodeLoading: requiredComponents`，启用组件按需注入；构建后门禁会验证该配置没有丢失。
 - 失败证据写入 `miniProgram/qa-artifacts/`，该目录不会提交。
 
 ## 安全边界

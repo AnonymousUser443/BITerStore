@@ -12,6 +12,7 @@ export default defineAppConfig({
     navigationBarBackgroundColor: '#fffdf8', backgroundColor: '#f7f4ea', backgroundTextStyle: 'dark'
   },
   ...(process.env.TARO_ENV === 'weapp' ? {
+    lazyCodeLoading: 'requiredComponents',
     tabBar: {
       color: '#7f846f', selectedColor: '#4f5940', backgroundColor: '#fffdf7', borderStyle: 'white',
       list: [
