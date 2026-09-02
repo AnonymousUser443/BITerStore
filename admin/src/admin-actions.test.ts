@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { listingActions, listingDetailHref, reportActions, userActions } from './App'
+import { accessSummary, listingActions, listingDetailHref, reportActions, userActions } from './App'
 import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
 const user = (values: Partial<UserRow> = {}): UserRow => ({
   id: 'user-1', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
-  adminTotpEnabled: false, createdAt: '', updatedAt: '', _count: { listings: 0, reports: 0 }, ...values
+  adminTotpEnabled: false, createdAt: '', updatedAt: '', recentAccess: [], _count: { listings: 0, reports: 0 }, ...values
 })
 const listing = (status: string): ListingRow => ({
   id: 'listing-1', title: '测试教材', author: '作者', isbn: '9780000000000', category: '教材',
@@ -39,8 +39,8 @@ describe('admin action visibility', () => {
   })
 
   it('only offers state-appropriate listing and report actions', () => {
-    expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['BLOCKED'])
-    expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['BLOCKED'])
+    expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
+    expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
     expect(listingActions({ ...listing('SOLD'), moderationDecision: 'IGNORE' })).toEqual([])
     expect(listingActions(listing('BLOCKED'))).toEqual([])
     expect(listingActions(listing('DRAFT'))).toEqual([])
@@ -50,5 +50,12 @@ describe('admin action visibility', () => {
 
   it('builds a safe H5 product detail URL', () => {
     expect(listingDetailHref('listing/id with spaces')).toBe('/books?id=listing%2Fid%20with%20spaces')
+  })
+
+  it('labels access channels and device classes for administrators', () => {
+    const base = { lastSeenAt: '', active: true }
+    expect(accessSummary({ ...base, platform: 'weapp', device: 'phone' })).toBe('微信小程序 · 手机')
+    expect(accessSummary({ ...base, platform: 'h5', device: 'desktop' })).toBe('浏览器 · 电脑')
+    expect(accessSummary({ ...base, platform: 'h5', device: 'tablet' })).toBe('浏览器 · 平板')
   })
 })

@@ -90,7 +90,7 @@ export class AdminController {
         { studentNumber: { contains: q, mode: 'insensitive' as const } }
       ] } : {})
     }
-    const [items, total] = await Promise.all([
+    const [records, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -99,11 +99,39 @@ export class AdminController {
         select: {
           id: true, nickname: true, avatarUrl: true, campus: true, role: true, status: true,
           campusStatus: true, adminTotpEnabled: true, createdAt: true, updatedAt: true,
-          _count: { select: { listings: true, reports: true } }
+          sessions: {
+            orderBy: { createdAt: 'desc' },
+            take: 12,
+            select: { platform: true, device: true, createdAt: true, expiresAt: true, revokedAt: true }
+          },
+          _count: {
+            select: {
+              listings: { where: { status: 'ACTIVE', deletedAt: null } },
+              reports: true
+            }
+          }
         }
       }),
       this.prisma.user.count({ where })
     ])
+    const now = new Date()
+    const items = records.map(({ sessions, ...user }) => {
+      const recentAccess = [] as Array<{ platform: string; device: string | null; lastSeenAt: Date; active: boolean }>
+      const seenDevices = new Set<string>()
+      for (const session of sessions) {
+        const key = `${session.platform.toLowerCase()}:${session.device?.toLowerCase() || ''}`
+        if (seenDevices.has(key)) continue
+        seenDevices.add(key)
+        recentAccess.push({
+          platform: session.platform,
+          device: session.device,
+          lastSeenAt: session.createdAt,
+          active: session.revokedAt === null && session.expiresAt > now
+        })
+        if (recentAccess.length === 5) break
+      }
+      return { ...user, lastSeenAt: sessions[0]?.createdAt || null, recentAccess }
+    })
     return pageResult(items, total, page, pageSize)
   }
 
