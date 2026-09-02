@@ -43,6 +43,19 @@ async function shot(name) {
   throw lastError
 }
 async function stored(key) { try { const result = await app.callWxMethod('getStorage', { key: `${namespace}:${key}` }); return result?.data } catch { return undefined } }
+async function probeRequest(url) {
+  return Promise.race([
+    app.evaluate((target) => new Promise((resolve) => {
+      globalThis.wx.request({
+        url: target,
+        method: 'GET',
+        success: (response) => resolve({ ok: true, statusCode: response.statusCode }),
+        fail: (error) => resolve({ ok: false, error: error?.errMsg || String(error) })
+      })
+    }), url),
+    sleep(15000).then(() => ({ ok: false, error: 'request timeout' }))
+  ])
+}
 async function pageAt(pathname, timeout = 15000, expectedQuery = {}, navigationObservation) {
   const observation = navigationObservation || { pathname, started: activeRouteProbe?.pathname === pathname ? activeRouteProbe.started : Date.now() - 250, ended: undefined }
   if (!navigationObservation) routeObservationWindows.push(observation)
@@ -93,6 +106,7 @@ async function waitForBootstrap(timeout = 45000) {
   while (Date.now() < deadline) {
     const page = await app.currentPage().catch(() => null)
     lastRoute = page?.path || ''
+    if (lastRoute) lastKnownRoute = lastRoute
     if (lastRoute && lastRoute !== 'pages/startup/index') {
       await sleep(1200)
       const stablePage = await app.currentPage().catch(() => null)
@@ -144,7 +158,8 @@ function partitionConsoleErrors(events) {
   for (let index = 0; index < errors.length; index += 1) {
     const event = errors[index]
     const routeDoneNoise = event.args?.some((arg) => typeof arg === 'string' && /routeDone with a webviewId \d+ is not found/.test(arg))
-    if (!routeDoneNoise) continue
+    const appLaunchNoise = event.args?.some((arg) => arg === 'appLaunch with non-empty page stack')
+    if (!routeDoneNoise && !appLaunchNoise) continue
     ignored.add(event)
     const companion = errors[index + 1]
     const companionDelay = Math.abs(Date.parse(companion?.time || '') - Date.parse(event.time || ''))
@@ -245,11 +260,11 @@ try {
   }); app.on('exception', (event) => { const described = describe(event); exceptions.push(described); observedExceptions.push(described) })
   await waitForBootstrap()
   const results = []
-  results.push(await scenario('bit-login-request-domain', async () => { const response = await app.callWxMethod('request', { url: 'https://store.young581.com/bit-login/openapi.json', method: 'GET' }); if (response?.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || 'unknown'}）`) }))
+  results.push(await scenario('bit-login-request-domain', async () => { const response = await probeRequest('https://store.young581.com/bit-login/openapi.json'); if (!response?.ok || response.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || response?.error || 'unknown'}）`) }))
   results.push(await scenario('onboarding-guest-home', async () => { await app.reLaunch('/pages/welcome/index'); let page = await pageAt('pages/welcome/index'); await sleep(250); page = await tapForRoute(await required(page, '#e2e-welcome-start'), 'pages/onboarding/index'); await shot('visual-onboarding'); for (let i = 0; i < 3; i += 1) { const next = await required(page, '#e2e-onboarding-next'); if (i < 2) { await next.tap(); await sleep(180) } else page = await tapForRoute(next, 'pages/login/index') } page = await recoverBlankPage(page, '#e2e-guest-access', '/pages/login/index'); await shot('visual-login'); page = await tapForRoute(await required(page, '#e2e-guest-access'), 'pages/home/index'); await required(page, '#e2e-home-search-entry'); await shot('visual-home'); if (!await stored('onboarding')) throw new Error('引导完成状态未持久化'); if (await stored('authenticated-sid') !== 'guest') throw new Error('游客状态未持久化') }))
   results.push(await scenario('search-detail-favorite-contact', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await (await required(page, '#e2e-search-input')).input('高等数学'); await sleep(350); await shot('visual-search'); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await shot('visual-detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(150); if (!(await stored('favorites'))?.includes('math-7')) throw new Error('收藏未写入 Repository 存储'); await tapForRoute(await required(page, '#e2e-detail-contact'), 'pages/chat/index') }))
   results.push(await scenario('publish-fixture-draft-success', async () => { let page = await openStable('switchTab', '/pages/publish/index'); await shot('visual-publish-upload'); await (await required(page, '#e2e-publish-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-isbn-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-tobby-ai')).tap(); await (await requiredEventually(page, '#e2e-publish-title')).input('自动化测试教材'); await (await required(page, '#e2e-publish-price')).input('16'); await shot('visual-publish-form'); await (await required(page, '#e2e-publish-save')).tap(); await sleep(120); if ((await stored('draft'))?.title !== '自动化测试教材') throw new Error('草稿未持久化'); await (await required(page, '#e2e-publish-submit')).tap(); await sleep(180); await shot('visual-publish-preview'); await (await required(page, '#e2e-publish-submit')).tap(); page = await pageAt('pages/states/index'); await required(page, '#e2e-state-success'); if (!(await stored('listings'))?.some((item) => item.title === '自动化测试教材')) throw new Error('发布结果未写入 Repository 存储') }))
-  results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.switchTab('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(120); await (await required(page, '#e2e-message-image')).tap(); await sleep(120); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
+  results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.switchTab('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(280); await (await required(page, '#e2e-message-image')).tap(); await sleep(280); await required(page, '#e2e-chat-end'); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
   results.push(await scenario('favorites-profile-replay-reset', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await sleep(200); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(120); await app.navigateTo('/pages/favorites/index'); page = await pageAt('pages/favorites/index'); await required(page, '#e2e-listing-math-7'); await shot('visual-favorites'); await app.switchTab('/pages/profile/index'); page = await pageAt('pages/profile/index'); page = await recoverBlankPage(page, '#e2e-profile-reset', '/pages/profile/index'); await shot('visual-profile'); await tapForEffect(await required(page, '#e2e-profile-reset')); await sleep(900); if ((await stored('favorites'))?.length) throw new Error('重置后收藏数据仍然存在'); await app.navigateTo('/pages/my-listings/index'); page = await pageAt('pages/my-listings/index'); await required(page, '#e2e-my-listings-empty'); await shot('visual-my-listings-empty'); await app.reLaunch('/pages/onboarding/index'); page = await pageAt('pages/onboarding/index'); await required(page, '#e2e-onboarding-next') }))
   results.push(await scenario('all-states', async () => { for (const state of ['loading', 'searching', 'empty', 'no-results', 'network', 'maintenance', 'unavailable', 'success', 'not-found']) { await app.reLaunch(`/pages/states/index?type=${state}`); const page = await pageAt('pages/states/index', 15000, { type: state }); await required(page, `#e2e-state-${state}`) } }))
   const navigationMetrics = await app.evaluate(() => globalThis.__BITERSTORE_NAV_METRICS__ || []).catch(() => [])
@@ -257,4 +272,19 @@ try {
   const consoleSummary = { total: observedConsoleEvents.length, applicationErrors: observedErrors.actionable.length, ignoredDevToolsErrors: ignoredConsoleEvents.length, exceptions: observedExceptions.length }
   const ok = results.every((x) => x.ok) && observedErrors.actionable.length === 0 && observedExceptions.length === 0
   write('result.json', { mode, results, routeTimings, navigationMetrics, consoleSummary, ignoredConsoleEvents, observedExceptions, knownAutomationNoise, routeObservationWindows }); console.log(JSON.stringify({ ok, artifactRoot, results, routeTimings, navigationMetrics, consoleSummary }, null, 2)); if (!ok) process.exitCode = 1
-} catch (error) { write('launch-failure.json', { error: error.stack || error.message }); console.error(JSON.stringify({ ok: false, artifactRoot, error: error.message }, null, 2)); process.exitCode = 1 } finally { if (app) { try { if (ownsLaunchedSession) await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }
+} catch (error) {
+  const page = app ? await app.currentPage().catch(() => null) : null
+  if (app) await shot('launch-failure').catch(() => undefined)
+  const consoleErrors = partitionConsoleErrors(observedConsoleEvents)
+  write('launch-failure.json', {
+    route: page?.path || lastKnownRoute,
+    error: error.stack || error.message,
+    structure: await snapshot(page),
+    consoleEvents: observedConsoleEvents,
+    actionableConsoleErrors: consoleErrors.actionable,
+    ignoredConsoleErrors: consoleErrors.ignored,
+    exceptions: observedExceptions
+  })
+  console.error(JSON.stringify({ ok: false, artifactRoot, route: page?.path || lastKnownRoute, error: error.message }, null, 2))
+  process.exitCode = 1
+} finally { if (app) { try { if (ownsLaunchedSession) await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }

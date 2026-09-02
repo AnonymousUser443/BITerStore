@@ -1,6 +1,6 @@
 # BITerStore 开发进度
 
-最后更新：2026-08-28
+最后更新：2026-09-02
 
 ## 已完成
 
@@ -69,25 +69,37 @@
 - [x] 增加受限 Cloudflare Worker 书目代理模板、Redis 正负缓存，并通过受控媒体接口从公开访问中排除 ISBN 页
 - [x] 部署书目代理并填写生产 `BOOK_METADATA_PROXY_URL` / `BOOK_METADATA_PROXY_TOKEN`
 - [x] 验证私有 R2 Bucket 的凭据与直传 CORS 后，将生产 `UPLOAD_STORAGE` 从 `local` 切换为 `r2`
+- [x] 同步搭档合并后的 `main@23b4d4c`，在 `codex/weapp-final-adaptation` 完成微信端最终适配
+- [x] 修复微信冷启动恢复时跳过页面 `onLoad` 导致启动页停滞，并为初始化异常增加欢迎页安全回退
+- [x] 将微信启动文案校正为“托比正在准备 App 资源包……”，H5 保留真实资源下载/缓存语义
+- [x] 完善微信 E2E 启动失败证据：route、结构快照、console/exception 与截图均可追踪
+- [x] 修复微信详情轮播封面未铺满画廊、聊天末条消息被输入栏遮挡，并加入平滑末尾滚动锚点
+- [x] 将聊天滚动容器拆为 `.weapp.tsx` 平台组件，避免微信专属组件进入 H5 产物
+- [x] 修复 H5 Golden Reference 被 14 个路由重复打包的问题；首屏 369.1 KiB、总资源 1.90 MiB，均通过性能预算
+- [x] 修复 H5 视觉脚本硬编码 Chrome 且未启动预览服务的问题，支持 Chrome/Edge 自动探测与 SPA fallback
+- [x] 完成 H5 65 个多尺寸页面/视口回归，空白页、溢出、裁切、不可达内容与 console/exception 诊断均为 0
+- [x] 完成微信开发者工具 7/7 场景全量验收，BIT-Login 合法域名探针、核心交易流程和全部状态页均通过
+- [x] 完成旧 `web/` Golden Reference 回归：ESLint、34 项测试与生产构建全部通过
 
 ## 进行中
 
 ### Taro 双端迁移 Phase 0–8
 
-- [ ] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
+- [x] Phase 0：开启微信开发者工具服务端口，使用 `miniProgram/` 完成 CLI/9420/automator 闭环验证
 - [x] Phase 1：Taro 骨架、双端构建、公共 touristappid 配置和版本锁定
 - [x] Phase 2：Listing Domain、Repository、平台适配器和独立存储命名空间
-- [x] Phase 3：首页、搜索、详情、发布、消息与个人中心核心流程
+- [x] Phase 3：首页、分类/搜索、详情、发布、消息与个人中心核心流程
 - [x] Phase 4：状态页、旧 H5 路由转写和手机/平板/桌面响应式样式
 - [x] Phase 5：doctor、open、connect/launch E2E 和 qa 命令
-- [ ] Phase 6：在微信开发者工具运行核心 E2E，检查 route、结构、异常和截图
-- [ ] Phase 7：已完成 360/390/430/820/1280 精确视口 H5 视觉回归；待至少一台微信真机冒烟
+- [x] Phase 6：在微信开发者工具运行核心 E2E，检查 route、结构、异常和截图
+- [ ] Phase 7：已完成 320–1920px 共 65 个 H5 页面/视口视觉回归；待至少一台微信真机冒烟
 - [ ] Phase 8：用户确认后创建 owner-only Taro H5 私有预览；不替换正式 H5
 
 ### 已知依赖风险
 
+- [ ] 本机实际 Node 为 25.2.1，高于仓库锁定的 Node 22.13.x；本轮 lint/test/H5/WeApp/自动化全部通过，但团队与 CI 仍应统一回 Node 22 LTS，避免 Taro/automator 的非预期兼容差异。
 - [ ] Taro 4.2.1 的锁定依赖树仍包含 npm audit 上游告警（含 Swiper、lodash-es、Vite/webpack-dev-server 等传递依赖）；禁止 `--force` 绕过 Taro 的精确 peer 约束，生产化前需随 Taro 官方兼容版本升级并重新审计。
-- [ ] 直接复用 Golden Reference 后的 H5 生产入口约 357 KiB，演示交付可接受；正式上线前应继续拆包并建立性能预算。
+- [ ] 直接复用 Golden Reference 后的 H5 生产入口为 369.1 KiB，已低于 400 KiB 预算；正式上线前仍应继续按真实网络指标做缓存与加载优化。
 - [ ] Open Library 对中文教材覆盖率有限；灰度期需统计命中率，再决定是否增加国家图书馆数据源或部署本地 OCR/条码识别兜底。
 - [ ] R2 已上线，历史已完成对象已迁移至 `media/`；生命周期脚本已提供，但当前 R2 S3 凭据缺少 Bucket Settings 权限（403），仍需使用 Cloudflare 账户 API 令牌为未完成的 `pending/` 对象配置 1 天清理规则，并部署新版多源书目 Worker。
 
@@ -114,8 +126,8 @@
 ## 固定要求
 
 - 参考图只能作为视觉标杆，不可整页贴图实现 UI。
-- 现阶段只实现纯前端移动原型，不接真实后端、认证、支付或 AI。
-- 底栏固定为：首页 / 搜索 / 发布 / 消息 / 我的。
+- 本轮小程序适配沿用已合并的后端与校园认证接口，不新增支付或真实 AI 能力。
+- 底栏固定为：首页 / 分类 / 发布 / 消息 / 我的。
 - 校区固定为：中关村 / 良乡 / 西山 / 珠海。
 - 每次上下文自动压缩后，必须先重新阅读本文件再继续。
 - Taro 迁移期间保留现有 `web/`，不得删除、重命名或用 Taro 中间状态覆盖其部署。

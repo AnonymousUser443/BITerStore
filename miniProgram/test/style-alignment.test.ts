@@ -127,8 +127,12 @@ describe('Golden Reference style alignment', () => {
   })
 
   it('H5 在窄屏、折叠屏、平板、横屏和超宽窗口连续重排', () => {
+    const config = read('config/index.ts')
     const h5 = read('src/h5.css')
     const visual = read('scripts/h5-visual.mjs')
+    expect(config).toContain("name: 'golden-reference'")
+    expect(config).toContain('test: /[\\\\/]web[\\\\/]app[\\\\/]/')
+    expect(config).toContain("chunks: 'async'")
     expect(h5).toContain('@media (max-width: 340px)')
     expect(h5).toContain('@media (min-width: 480px) and (max-width: 699px)')
     expect(h5).toContain('@media (orientation: landscape) and (min-width: 700px)')
@@ -136,6 +140,9 @@ describe('Golden Reference style alignment', () => {
     expect(h5).toContain('width: min(calc(100vw - 48px), 1600px)')
     expect(visual).toContain("['home-1920', 1920, 1080, '/home']")
     expect(visual).toContain("['home-landscape-844', 844, 390, '/home']")
+    expect(visual).toContain('Microsoft\\\\Edge\\\\Application\\\\msedge.exe')
+    expect(visual).toContain('createServer(async (request, response) =>')
+    expect(visual).toContain("file = path.join(distDir, 'index.html')")
     expect(visual).toContain("type: 'horizontal-overflow'")
     expect(visual).toContain("type: 'fixed-compact-canvas'")
   })
@@ -148,6 +155,20 @@ describe('Golden Reference style alignment', () => {
     expect(syncScript).toContain("dist', 'project.config.json")
     expect(syncScript).toContain('outputConfig.libVersion = libVersion')
     expect(syncScript).not.toMatch(/\bwx[a-f0-9]{16}\b/i)
+  })
+
+  it('微信冷启动不依赖可能被恢复跳过的页面 onLoad，并保存启动失败证据', () => {
+    const startup = read('src/pages/startup/index.tsx')
+    const screen = read('src/components/StartupScreen.tsx')
+    const e2e = read('scripts/weapp-e2e.mjs')
+    expect(startup).toContain('useEffect(() => {')
+    expect(startup).toContain('bootstrapStarted.current')
+    expect(startup).not.toContain('useLoad')
+    expect(startup).toContain("Taro.reLaunch({ url: '/pages/welcome/index' }).catch")
+    expect(screen).toContain("'托比正在准备 App 资源包……'")
+    expect(e2e).toContain("shot('launch-failure')")
+    expect(e2e).toContain('structure: await snapshot(page)')
+    expect(e2e).toContain('actionableConsoleErrors: consoleErrors.actionable')
   })
 
   it('builds WeApp API requests through domains already allowed by the WeChat project', () => {
@@ -175,8 +196,10 @@ describe('Golden Reference style alignment', () => {
     expect(e2e).toContain('duringRouteObservation')
     expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
     expect(e2e).toContain("scenario('bit-login-request-domain'")
-    expect(e2e).toContain("url: 'https://store.young581.com/bit-login/openapi.json'")
-    expect(e2e).toContain('response?.statusCode !== 200')
+    expect(e2e).toContain("probeRequest('https://store.young581.com/bit-login/openapi.json')")
+    expect(e2e).toContain('globalThis.wx.request')
+    expect(e2e).toContain("response.statusCode !== 200")
+    expect(e2e).toContain('appLaunch with non-empty page stack')
   })
 
   it('gives native navigation immediate feedback and keeps the card detail action wired', () => {
@@ -214,5 +237,20 @@ describe('Golden Reference style alignment', () => {
     expect(detail).not.toContain('detail-original-price')
     expect(adapter).toContain("font-size: 13px; line-height: 1.5;")
     expect(adapter).not.toContain('.detail-original-price')
+  })
+
+  it('微信详情轮播封面填满画廊且聊天末条消息不被输入框遮挡', () => {
+    const adapter = read('src/app.css')
+    const ui = read('src/components/ui.tsx')
+    const chat = read('src/pages/chat/index.tsx')
+    const nativeScroll = read('src/components/ChatScroll.weapp.tsx')
+    expect(adapter).toContain('.detail-gallery swiper-item > .book-cover { width: 100%; min-width: 100%; height: 100%; }')
+    expect(adapter).toContain('.native-chrome.chat-page .content-scroll { height: 100%; padding-bottom: calc(116px + env(safe-area-inset-bottom)); }')
+    expect(ui).toContain('<ChatScroll className={contentClassName}')
+    expect(nativeScroll).toContain('<ScrollView scrollY scrollWithAnimation')
+    expect(ui).toContain('{content}{overlay}')
+    expect(chat).toContain('scrollIntoView={scrollAnchor}')
+    expect(chat).toContain('overlay={composer}')
+    expect(chat).toContain('id={scrollAnchor}')
   })
 })

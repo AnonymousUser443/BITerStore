@@ -1,11 +1,19 @@
 import fs from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { createServer } from 'node:http'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { root } from './weapp-env.mjs'
 
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
-const chrome = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+const browserCandidates = [
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+]
+const chrome = process.env.CHROME_PATH || browserCandidates.find(existsSync)
 const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
+const distDir = path.join(root, 'dist')
 const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
 const allTargets = [
   ['welcome-320', 320, 700, '/'],
@@ -180,6 +188,34 @@ class CdpClient {
 
 await fs.mkdir(artifactDir, { recursive: true })
 await fs.mkdir(profileDir, { recursive: true })
+if (!chrome) throw new Error('找不到 Chrome 或 Edge；可通过 CHROME_PATH 指定 Chromium 浏览器')
+let previewServer
+if (!process.env.BITERSTORE_H5_URL) {
+  const previewUrl = new URL(preview)
+  const contentTypes = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp' }
+  previewServer = createServer(async (request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url || '/', preview).pathname)
+      const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '')
+      const requestedFile = path.resolve(distDir, relative)
+      if (requestedFile !== distDir && !requestedFile.startsWith(`${distDir}${path.sep}`)) {
+        response.writeHead(403).end('Forbidden')
+        return
+      }
+      let file = requestedFile
+      let body
+      try { body = await fs.readFile(file) } catch { file = path.join(distDir, 'index.html'); body = await fs.readFile(file) }
+      response.writeHead(200, { 'Content-Type': contentTypes[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' })
+      response.end(body)
+    } catch (error) {
+      response.writeHead(500).end(error instanceof Error ? error.message : 'Preview server error')
+    }
+  })
+  await new Promise((resolve, reject) => {
+    previewServer.once('error', reject)
+    previewServer.listen(Number(previewUrl.port || 80), previewUrl.hostname, resolve)
+  })
+}
 const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
@@ -229,4 +265,5 @@ try {
 } finally {
   client?.close()
   browser.kill()
+  if (previewServer) await new Promise((resolve) => previewServer.close(resolve))
 }

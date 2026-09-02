@@ -80,6 +80,18 @@ export default defineConfig<'webpack5'>(async (merge) => {
           chain.output
             .filename('js/[name].[contenthash:8].js')
             .chunkFilename('chunk/[name].[contenthash:8].js')
+          chain.optimization.splitChunks({
+            cacheGroups: {
+              goldenReference: {
+                name: 'golden-reference',
+                test: /[\\/]web[\\/]app[\\/]/,
+                chunks: 'async',
+                enforce: true,
+                priority: 30,
+                reuseExistingChunk: true
+              }
+            }
+          })
         }
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
         chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))

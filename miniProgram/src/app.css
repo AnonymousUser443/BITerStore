@@ -260,6 +260,7 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .detail-gallery > image { width: 100%; height: 275px; flex: 0 0 100%; overflow: hidden; border-radius: 19px; }
 .detail-gallery > image > img { width: 100%; height: 100%; object-fit: cover; }
 .detail-gallery swiper-item, .detail-gallery .detail-slide { width: 100%; height: 100%; }
+.detail-gallery swiper-item > .book-cover { width: 100%; min-width: 100%; height: 100%; }
 .detail-gallery .detail-slide > img { width: 100%; height: 100%; object-fit: contain; }
 .detail-cta > taro-button-core.report-action { display: flex; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; color: #777269; font-size: 10.5px; }
 .message-content { max-width: 72%; }
@@ -346,6 +347,8 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 .chat-composer .send-button { min-width: 58px; min-height: 42px; padding: 0 13px; border-radius: 13px; background: var(--sage); color: white; font-size: 14px; font-weight: 700; }
 .chat-composer taro-input-core { min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #dfd4bd; border-radius: 13px; background: #fbf9f2; font-size: 12px; }
 .chat-composer taro-input-core input { height: 100%; font-size: 12px; }
+.native-chrome.chat-page .content-scroll { height: 100%; padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+.chat-scroll-anchor { width: 1px; height: 1px; }
 
 @media (max-width: 370px) { .hero-title { font-size: 24px; } }
 @media (min-width: 700px) { #app { padding: 0; } .taro_page { box-sizing: border-box; padding: 16px; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); } .hero-title { font-size: 34px; } .welcome-title { font-size: 44px; } }
