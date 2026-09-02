@@ -22,6 +22,7 @@ const labels: Record<string, string> = {
   USER: '普通用户', MODERATOR: '协管员', ADMIN: '管理员', SUPER_ADMIN: '超级管理员',
   VERIFIED: '已认证', UNVERIFIED: '未认证', PENDING: '认证中', EXPIRED: '认证过期', REVOKED: '认证撤销',
   DRAFT: '草稿', PENDING_REVIEW: '待审核', RESERVED: '已预订', SOLD: '已售', OFF_SHELF: '已下架', BLOCKED: '违规屏蔽',
+  IGNORE: '已忽略', REVIEWED: '已处置', ALL: '全部',
   OPEN: '待处理', PROCESSING: '处理中', RESOLVED: '已解决', REJECTED: '已驳回',
   REVOKE_SESSIONS: '下线全部设备', ROLE_USER: '设为普通用户', ROLE_MODERATOR: '设为协管员', ROLE_ADMIN: '设为管理员'
 }
@@ -257,16 +258,24 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
     onSessionExpired()
   }
 
-  async function completeAction(reason: string) {
-    if (!pendingAction) return
+  async function submitAction(action: PendingAction, reason: string) {
     await apiRequest('/admin/moderation-actions', {
       method: 'POST',
-      body: JSON.stringify({ ...pendingAction, reason, requestId: requestId() })
+      body: JSON.stringify({ ...action, reason, requestId: requestId() })
     })
     setPendingAction(null)
-    setNotice(`已完成：${pendingAction.actionLabel}`)
+    setNotice(`已完成：${action.actionLabel}`)
     setReloadKey((value) => value + 1)
     window.setTimeout(() => setNotice(''), 2500)
+  }
+
+  async function completeAction(reason: string) {
+    if (pendingAction) await submitAction(pendingAction, reason)
+  }
+
+  async function ignoreListing() {
+    if (!pendingAction || pendingAction.targetType !== 'LISTING') return
+    await submitAction({ ...pendingAction, action: 'IGNORE', actionLabel: '忽略', tone: 'normal' }, '管理员确认无需处置')
   }
 
   const current = navigation.find((item) => item.key === view)!
@@ -289,7 +298,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
       </section>
       {view !== 'dashboard' && data && <Pagination data={data as PageResult<unknown>} setPage={setPage} />}
     </main>
-    {pendingAction && <ActionDialog pending={pendingAction} onClose={() => setPendingAction(null)} onConfirm={completeAction} />}
+    {pendingAction && <ActionDialog pending={pendingAction} onClose={() => setPendingAction(null)} onConfirm={completeAction} onIgnore={ignoreListing} />}
   </div>
 }
 
@@ -305,7 +314,10 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
       <Select value={filters.role} label="角色" options={['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN']} onChange={(value) => setFilters({ ...filters, role: value })} />
       <Select value={filters.campusStatus} label="认证状态" options={['VERIFIED', 'UNVERIFIED', 'PENDING', 'EXPIRED', 'REVOKED']} onChange={(value) => setFilters({ ...filters, campusStatus: value })} />
     </>}
-    {view === 'listings' && <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} onChange={(value) => setFilters({ ...filters, status: value })} />}
+    {view === 'listings' && <>
+      <ReviewStateSelect value={filters.reviewState} onChange={(value) => setFilters({ ...filters, reviewState: value })} />
+      <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} onChange={(value) => setFilters({ ...filters, status: value })} />
+    </>}
     {view === 'reports' && <Select value={filters.status} label="工单状态" options={['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED']} onChange={(value) => setFilters({ ...filters, status: value })} />}
     <button className="primary compact">筛选</button>
     {active && <button type="button" className="clear-button" onClick={onClear}><X size={16} />清除</button>}
@@ -314,6 +326,10 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
 
 function Select({ value = '', label, options, onChange }: { value?: string; label: string; options: string[]; onChange: (value: string) => void }) {
   return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}><option value="">全部{label}</option>{options.map((option) => <option key={option} value={option}>{labels[option] || option}</option>)}</select>
+}
+
+function ReviewStateSelect({ value = 'PENDING', onChange }: { value?: string; onChange: (value: string) => void }) {
+  return <select aria-label="处置状态" value={value} onChange={(event) => onChange(event.target.value)}><option value="PENDING">待处置</option><option value="REVIEWED">已处置</option><option value="ALL">全部处置状态</option></select>
 }
 
 function Dashboard({ data, openReports }: { data: Metrics; openReports: () => void }) {
@@ -350,7 +366,7 @@ function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (acti
       <td data-label="商品"><div className="listing-cell">{cover ? <img src={`${API_ROOT}/media/${cover.id}`} alt="" /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code></div></div></td>
       <td data-label="卖家">{row.seller.nickname}<small className="inline-note">{labels[row.seller.status] || row.seller.status}</small></td>
       <td data-label="价格 / 校区"><strong>¥{(row.priceCents / 100).toFixed(2)}</strong><small className="inline-note">{row.campus}</small></td>
-      <td data-label="状态"><Status value={row.status} /></td>
+      <td data-label="状态"><Status value={row.status} />{row.moderationDecision === 'IGNORE' && <Status value="IGNORE" subtle />}</td>
       <td data-label="互动">{row.viewCount} 浏览<small className="inline-note">{row._count.favorites} 收藏 · {row._count.conversations} 会话</small></td>
       <td data-label="发布时间">{dateTime(row.createdAt)}</td>
       <td data-label="操作">{blockAction
@@ -395,7 +411,7 @@ function ActionMenu({ actions, onAction }: { actions: PendingAction[]; onAction:
   return <details className="action-menu"><summary>处置</summary><div>{actions.map((action) => <button className={action.tone === 'danger' ? 'danger-text' : ''} key={action.action} onClick={() => onAction(action)}>{action.actionLabel}</button>)}</div></details>
 }
 
-function ActionDialog({ pending, onClose, onConfirm }: { pending: PendingAction; onClose: () => void; onConfirm: (reason: string) => Promise<void> }) {
+function ActionDialog({ pending, onClose, onConfirm, onIgnore }: { pending: PendingAction; onClose: () => void; onConfirm: (reason: string) => Promise<void>; onIgnore: () => Promise<void> }) {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -407,6 +423,11 @@ function ActionDialog({ pending, onClose, onConfirm }: { pending: PendingAction;
     setError('')
     try { await onConfirm(reason.trim()) } catch (cause) { setError(messageOf(cause)); setBusy(false) }
   }
+  async function ignore() {
+    setBusy(true)
+    setError('')
+    try { await onIgnore() } catch (cause) { setError(messageOf(cause)); setBusy(false) }
+  }
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}><form className="action-dialog" role="dialog" aria-modal="true" onSubmit={(event) => void submit(event)}>
     <button type="button" className="dialog-close" aria-label="关闭" onClick={onClose}><X size={19} /></button>
     <div className={`dialog-icon ${pending.tone === 'danger' ? 'danger' : ''}`}>{pending.tone === 'danger' ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div>
@@ -415,7 +436,7 @@ function ActionDialog({ pending, onClose, onConfirm }: { pending: PendingAction;
     {isListingBlock && <p className="dialog-guidance">确认违规时填写原因并屏蔽；无需处理时选择“忽略”，商品保持原状态。</p>}
     <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={isListingBlock ? '请填写违规依据（至少 3 个字符）' : '请填写清晰、可审计的原因（至少 3 个字符）'} /><small>{reason.trim().length}/300</small></label>
     {error && <ErrorBanner message={error} />}
-    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>{isListingBlock ? '忽略' : '取消'}</button><button className={pending.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || reason.trim().length < 3}>{busy ? '正在提交…' : isListingBlock ? '违规屏蔽' : '确认执行'}</button></div>
+    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={isListingBlock ? () => void ignore() : onClose}>{isListingBlock && busy ? '正在提交…' : isListingBlock ? '忽略' : '取消'}</button><button className={pending.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || reason.trim().length < 3}>{busy ? '正在提交…' : isListingBlock ? '违规屏蔽' : '确认执行'}</button></div>
   </form></div>
 }
 
@@ -440,7 +461,7 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 
 export function listingActions(row: ListingRow): PendingAction[] {
   const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, targetLabel: row.title, action, actionLabel, tone })
-  return ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
+  return !row.moderationDecision && ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
     ? [base('BLOCKED', '违规屏蔽', 'danger')]
     : []
 }

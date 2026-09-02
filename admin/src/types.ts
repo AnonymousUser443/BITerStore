@@ -68,6 +68,7 @@ export interface ListingRow {
   priceCents: number
   campus: string
   status: string
+  moderationDecision?: 'IGNORE' | 'BLOCKED' | null
   viewCount: number
   createdAt: string
   seller: { id: string; nickname: string; status: string }

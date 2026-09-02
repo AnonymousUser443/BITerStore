@@ -21,10 +21,11 @@ const fixtures = {
   '/api/v1/admin/security/status': { user: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN', campusStatus: 'VERIFIED' }, totpEnabled: true },
   '/api/v1/admin/metrics': { users: 128, activeUsers: 121, newUsers: 14, listings: 356, activeListings: 219, newListings: 31, sold: 87, openReports: 3, generatedAt: '2026-09-02T03:30:00.000Z' },
   '/api/v1/admin/users': { items: [fixtureUser], total: 1, page: 1, pageSize: 20, pages: 1 },
-  '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', priceCents: 1800, campus: '良乡', status: 'ACTIVE', viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
+  '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', priceCents: 1800, campus: '良乡', status: 'ACTIVE', moderationDecision: null, viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/reports': { items: [{ id: 'visual-report-1', targetType: 'LISTING', targetId: 'visual-listing-1', reason: '商品描述与实物不符', evidence: '已提供聊天记录', status: 'OPEN', createdAt: '2026-09-02T01:20:00.000Z', updatedAt: '2026-09-02T01:20:00.000Z', reporter: { id: 'reporter-1', nickname: '认真同学' }, target: { label: '高等数学（第七版）上册', status: 'ACTIVE' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/audit-logs': { items: [{ id: '42', action: 'BLOCKED', resourceType: 'LISTING', resourceId: 'visual-listing-1', requestId: 'admin-visual-request', metadata: { reason: '示例违规处置' }, createdAt: '2026-09-02T02:00:00.000Z', actor: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN' } }], total: 1, page: 1, pageSize: 20, pages: 1 }
 }
+let listingIgnored = false
 
 function sendJson(response, body) {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
@@ -33,9 +34,19 @@ function sendJson(response, body) {
 
 const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname
+  if (pathname === '/api/v1/admin/listings') {
+    const fixture = fixtures[pathname]
+    return sendJson(response, listingIgnored ? { ...fixture, items: [], total: 0, pages: 1 } : fixture)
+  }
+  if (pathname === '/api/v1/admin/moderation-actions') {
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    if (body.targetType === 'LISTING' && body.action === 'IGNORE') listingIgnored = true
+    return sendJson(response, { ok: true, repeated: false })
+  }
   const fixtureKey = Object.keys(fixtures).find((key) => pathname === key)
   if (fixtureKey) return sendJson(response, fixtures[fixtureKey])
-  if (pathname === '/api/v1/admin/moderation-actions') return sendJson(response, { ok: true, repeated: false })
   if (pathname === '/admin') { response.writeHead(302, { Location: '/admin/' }); return response.end() }
   const relative = pathname.replace(/^\/admin\/?/, '') || 'index.html'
   const target = path.resolve(dist, relative)
@@ -156,6 +167,12 @@ try {
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))
+    if (dialogTrigger === 'listing') {
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-dialog .dialog-actions button')?.click()` })
+      await waitFor(client, `!document.querySelector('.action-dialog') && Boolean(document.querySelector('.empty-state'))`)
+      const ignored = await client.send('Runtime.evaluate', { expression: `document.body.innerText.includes('没有符合条件的记录')`, returnByValue: true })
+      if (!ignored.result.value) diagnostics.push({ type: 'ignored-listing-remains', text: name })
+    }
   }
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, pages, diagnostics }, null, 2))
   if (diagnostics.length) process.exitCode = 1
