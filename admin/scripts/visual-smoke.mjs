@@ -15,7 +15,12 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const fixtureUser = {
   id: 'visual-user-1', nickname: '测试书友', campus: '良乡', role: 'USER', status: 'ACTIVE',
   campusStatus: 'VERIFIED', adminTotpEnabled: false, createdAt: '2026-09-01T08:00:00.000Z',
-  updatedAt: '2026-09-01T08:00:00.000Z', _count: { listings: 3, reports: 1 }
+  updatedAt: '2026-09-01T08:00:00.000Z', lastSeenAt: '2026-09-02T04:20:00.000Z',
+  recentAccess: [
+    { platform: 'h5', device: 'desktop', lastSeenAt: '2026-09-02T04:20:00.000Z', active: true },
+    { platform: 'weapp', device: 'phone', lastSeenAt: '2026-09-01T10:00:00.000Z', active: false }
+  ],
+  _count: { listings: 3, reports: 1 }
 }
 const fixtures = {
   '/api/v1/admin/security/status': { user: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN', campusStatus: 'VERIFIED' }, totpEnabled: true },
@@ -26,6 +31,7 @@ const fixtures = {
   '/api/v1/admin/audit-logs': { items: [{ id: '42', action: 'BLOCKED', resourceType: 'LISTING', resourceId: 'visual-listing-1', requestId: 'admin-visual-request', metadata: { reason: '示例违规处置' }, createdAt: '2026-09-02T02:00:00.000Z', actor: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN' } }], total: 1, page: 1, pageSize: 20, pages: 1 }
 }
 let listingIgnored = false
+const adminRequests = []
 
 function sendJson(response, body) {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
@@ -33,7 +39,9 @@ function sendJson(response, body) {
 }
 
 const server = http.createServer(async (request, response) => {
-  const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname
+  const requestUrl = new URL(request.url || '/', 'http://127.0.0.1')
+  const pathname = requestUrl.pathname
+  if (pathname.startsWith('/api/v1/admin/')) adminRequests.push(`${pathname}${requestUrl.search}`)
   if (pathname === '/api/v1/admin/listings') {
     const fixture = fixtures[pathname]
     return sendJson(response, listingIgnored ? { ...fixture, items: [], total: 0, pages: 1 } : fixture)
@@ -131,9 +139,10 @@ try {
 
   const targets = [
     ['dashboard-desktop', 1440, 900, 0, null],
-    ['users-desktop-dialog', 1180, 820, 1, 'user'],
+    ['users-desktop-actions', 1180, 820, 1, 'user-action'],
+    ['users-desktop-detail', 1180, 820, 1, 'user-detail'],
     ['listings-desktop-dialog', 1440, 760, 2, 'listing'],
-    ['reports-mobile', 390, 844, 3, null],
+    ['reports-mobile-dialog', 390, 844, 3, 'report'],
     ['audit-tablet', 768, 900, 4, null]
   ]
   for (const [name, width, height, navIndex, dialogTrigger] of targets) {
@@ -146,41 +155,51 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelectorAll('.sidebar nav button')[${navIndex}]?.click()` })
       await delay(400)
     }
-    const beforeTableScroll = ['user', 'listing'].includes(dialogTrigger)
+    if (dialogTrigger === 'listing') {
+      await client.send('Runtime.evaluate', { expression: `(() => { const select = document.querySelector('select[aria-label="商品范围"]'); if (!select) return; select.value = 'ACTIVE'; select.dispatchEvent(new Event('change', { bubbles: true })); })()` })
+      await delay(100)
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.filter-bar')?.requestSubmit()` })
+      await delay(400)
+    }
+    const beforeTableScroll = dialogTrigger
       ? await client.send('Runtime.evaluate', { expression: `document.querySelector('.table-card')?.scrollHeight || 0`, returnByValue: true }).then((result) => result.result.value)
       : null
     if (dialogTrigger) {
-      const expression = dialogTrigger === 'listing'
-        ? `document.querySelector('.listing-action-trigger')?.click()`
-        : `document.querySelector('.user-action-trigger')?.click()`
+      const expression = dialogTrigger === 'user-detail'
+        ? `document.querySelector('.table-detail-button')?.click()`
+        : `document.querySelector('.action-trigger')?.click()`
       await client.send('Runtime.evaluate', { expression })
-      await waitFor(client, `Boolean(document.querySelector('.action-dialog'))`)
-      if (dialogTrigger === 'user') {
-        await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-choice-grid button')?.click()` })
-        await waitFor(client, `Boolean(document.querySelector('.action-dialog textarea'))`)
-      }
+      await waitFor(client, dialogTrigger === 'user-detail' ? `Boolean(document.querySelector('.user-detail-dialog'))` : `Boolean(document.querySelector('.action-dialog'))`)
     }
-    const state = await client.send('Runtime.evaluate', { expression: `(() => ({ text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: getComputedStyle(document.querySelector('.sidebar')).display !== 'none', dialog: Boolean(document.querySelector('.action-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, listingChoices: [...document.querySelectorAll('.action-dialog .dialog-actions button')].map((button) => button.textContent?.trim()), userChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '' }))()`, returnByValue: true })
+    const state = await client.send('Runtime.evaluate', { expression: `(() => { const sidebar = document.querySelector('.sidebar'); return { text: document.body.innerText, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, navVisible: Boolean(sidebar && getComputedStyle(sidebar).display !== 'none'), dialog: Boolean(document.querySelector('.dialog-panel')), actionDialog: Boolean(document.querySelector('.action-dialog')), userDetail: Boolean(document.querySelector('.user-detail-dialog')), tableScrollHeight: document.querySelector('.table-card')?.scrollHeight || 0, actionChoices: [...document.querySelectorAll('.action-choice-grid button')].map((button) => button.textContent?.trim()), detailHref: document.querySelector('.listing-detail-link')?.getAttribute('href') || '', detailTarget: document.querySelector('.listing-detail-link')?.getAttribute('target') || '', listingScopes: [...document.querySelectorAll('select[aria-label="商品范围"] option')].map((option) => option.textContent?.trim()), activeListingLabel: document.querySelector('select[aria-label="商品状态"] option[value="ACTIVE"]')?.textContent?.trim() || '' } })()`, returnByValue: true })
     if (!state.result?.value) throw new Error(`Cannot inspect ${name}: ${state.exceptionDetails?.exception?.description || state.exceptionDetails?.text || 'unknown browser evaluation error'}`)
     const value = state.result.value
     if (!value.text.trim()) diagnostics.push({ type: 'blank-page', text: name })
     if (value.scrollWidth > value.clientWidth + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: ${value.scrollWidth} > ${value.clientWidth}` })
     if (!value.navVisible) diagnostics.push({ type: 'missing-navigation', text: name })
     if (dialogTrigger && !value.dialog) diagnostics.push({ type: 'missing-dialog', text: name })
-    if (['user', 'listing'].includes(dialogTrigger) && value.tableScrollHeight !== beforeTableScroll) diagnostics.push({ type: 'table-scroll-changed', text: `${name}: ${beforeTableScroll} -> ${value.tableScrollHeight}` })
-    if (dialogTrigger === 'user' && (value.userChoices.length < 3 || !value.userChoices.includes('封禁账号'))) diagnostics.push({ type: 'wrong-user-actions', text: `${name}: ${value.userChoices.join('|')}` })
-    if (dialogTrigger === 'listing' && value.listingChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.listingChoices.join('|')}` })
+    if (dialogTrigger && value.tableScrollHeight !== beforeTableScroll) diagnostics.push({ type: 'table-scroll-changed', text: `${name}: ${beforeTableScroll} -> ${value.tableScrollHeight}` })
+    if (dialogTrigger === 'user-action' && (value.actionChoices.length < 3 || !value.actionChoices.includes('封禁账号'))) diagnostics.push({ type: 'wrong-user-actions', text: `${name}: ${value.actionChoices.join('|')}` })
+    if (dialogTrigger === 'user-action' && (!value.text.includes('3 本在售') || !value.text.includes('浏览器 · 电脑'))) diagnostics.push({ type: 'missing-user-activity', text: name })
+    if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
+    if (dialogTrigger === 'listing' && value.actionChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'listing' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-listing-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
+    if (dialogTrigger === 'listing' && (!value.listingScopes.includes('在售商品') || value.activeListingLabel !== '在售')) diagnostics.push({ type: 'missing-active-listing-scope', text: `${name}: ${value.listingScopes.join('|')} ${value.activeListingLabel}` })
+    if (dialogTrigger === 'report' && value.actionChoices.join('|') !== '标记处理中|处理并结案|驳回举报') diagnostics.push({ type: 'wrong-report-actions', text: `${name}: ${value.actionChoices.join('|')}` })
+    if (dialogTrigger === 'report' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-report-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))
     if (dialogTrigger === 'listing') {
-      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-dialog .dialog-actions button')?.click()` })
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-choice-grid button')?.click()` })
+      await waitFor(client, `Boolean(document.querySelector('.selected-action-note'))`)
+      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-dialog .dialog-actions button:last-child')?.click()` })
       await waitFor(client, `!document.querySelector('.action-dialog') && Boolean(document.querySelector('.empty-state'))`)
       const ignored = await client.send('Runtime.evaluate', { expression: `document.body.innerText.includes('没有符合条件的记录')`, returnByValue: true })
       if (!ignored.result.value) diagnostics.push({ type: 'ignored-listing-remains', text: name })
     }
   }
+  if (!adminRequests.some((url) => url.includes('/admin/listings?') && url.includes('reviewState=ALL') && url.includes('status=ACTIVE'))) diagnostics.push({ type: 'active-listing-filter-not-applied', text: adminRequests.filter((url) => url.includes('/admin/listings')).join('|') })
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, pages, diagnostics }, null, 2))
   if (diagnostics.length) process.exitCode = 1
 } finally {

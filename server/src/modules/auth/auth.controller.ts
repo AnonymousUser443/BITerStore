@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { AuthService } from './auth.service.js'
@@ -9,16 +9,25 @@ export class AuthController {
   @Post('campus')
   async campus(
     @Body() body: { registrationToken: string; platform?: string; device?: string; sessionTransport?: 'body' | 'cookie' },
+    @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
-    const result = await this.auth.campus(body.registrationToken, body.platform, body.device)
+    const result = await this.auth.campus(body.registrationToken, body.platform, inferSessionDevice(body.platform, body.device, userAgent))
     return this.presentSession(reply, result, body.sessionTransport)
   }
-  @Post('wechat/mini-program') mini(@Body() body: { code: string; device?: string }) { return this.auth.miniProgram(body.code, body.device) }
+  @Post('wechat/mini-program') mini(
+    @Body() body: { code: string; device?: string },
+    @Headers('user-agent') userAgent?: string
+  ) { return this.auth.miniProgram(body.code, inferSessionDevice('weapp', body.device, userAgent)) }
   @Post('wechat/mini-program/bind') @UseGuards(AuthGuard) bindMini(@CurrentUser() user: AuthUser, @Body() body: { code: string }) { return this.auth.bindMiniProgram(user.id, body.code) }
   @Post('wechat/web/start') startWeb() { return this.auth.startWebLogin() }
   @Get('wechat/web/status') status(@Query('state') state: string) { return this.auth.webStatus(state) }
-  @Get('wechat/web/callback') async callback(@Query('code') code: string, @Query('state') state: string, @Res() reply: FastifyReply) { await this.auth.webCallback(code, state); const h5 = (process.env.H5_ORIGIN || '').split(',')[0] || 'http://localhost:10086'; return reply.redirect(`${h5.replace(/\/$/, '')}/login?wechat=complete`) }
+  @Get('wechat/web/callback') async callback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Res() reply: FastifyReply
+  ) { await this.auth.webCallback(code, state, inferSessionDevice('h5', undefined, userAgent)); const h5 = (process.env.H5_ORIGIN || '').split(',')[0] || 'http://localhost:10086'; return reply.redirect(`${h5.replace(/\/$/, '')}/login?wechat=complete`) }
   @Post('refresh')
   async refresh(
     @Body() body: { refreshToken?: string; sessionTransport?: 'body' | 'cookie' },
@@ -71,4 +80,14 @@ export class AuthController {
     reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'strict', path: '/api/v1/auth' })
     reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'lax', path: '/api/v1' })
   }
+}
+
+export function inferSessionDevice(platform = 'campus', provided?: string, userAgent?: string) {
+  const normalized = provided?.trim().toLowerCase()
+  if (normalized && ['phone', 'tablet', 'desktop'].includes(normalized)) return normalized
+  if (platform.toLowerCase() === 'weapp') return 'phone'
+  const agent = userAgent?.toLowerCase() || ''
+  if (/ipad|tablet|kindle|silk/.test(agent) || (agent.includes('android') && !agent.includes('mobile'))) return 'tablet'
+  if (/mobile|iphone|ipod|android|windows phone/.test(agent)) return 'phone'
+  return 'desktop'
 }

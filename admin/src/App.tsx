@@ -27,6 +27,11 @@ const labels: Record<string, string> = {
   REVOKE_SESSIONS: '下线全部设备', ROLE_USER: '设为普通用户', ROLE_MODERATOR: '设为协管员', ROLE_ADMIN: '设为管理员'
 }
 
+const listingStatusLabels: Record<string, string> = {
+  DRAFT: '草稿', PENDING_REVIEW: '待审核', ACTIVE: '在售', RESERVED: '已预订', SOLD: '已售',
+  OFF_SHELF: '已下架', BLOCKED: '违规屏蔽'
+}
+
 const metricCards: Array<{ key: keyof Metrics; label: string; note: string; tone: string }> = [
   { key: 'users', label: '注册用户', note: '全部账号', tone: 'sage' },
   { key: 'activeUsers', label: '正常用户', note: '当前可用', tone: 'moss' },
@@ -270,12 +275,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
   }
 
   async function completeAction(action: PendingAction, reason: string) {
-    await submitAction(action, reason)
-  }
-
-  async function ignoreListing(action: PendingAction) {
-    if (action.targetType !== 'LISTING') return
-    await submitAction({ ...action, action: 'IGNORE', actionLabel: '忽略', tone: 'normal' }, '管理员确认无需处置')
+    await submitAction(action, action.action === 'IGNORE' ? '管理员确认无需处置' : reason)
   }
 
   function openActions(actions: PendingAction | PendingAction[]) {
@@ -302,7 +302,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
       </section>
       {view !== 'dashboard' && data && <Pagination data={data as PageResult<unknown>} setPage={setPage} />}
     </main>
-    {pendingActions && <ActionDialog actions={pendingActions} onClose={() => setPendingActions(null)} onConfirm={completeAction} onIgnore={ignoreListing} />}
+    {pendingActions && <ActionDialog actions={pendingActions} onClose={() => setPendingActions(null)} onConfirm={completeAction} />}
   </div>
 }
 
@@ -319,8 +319,8 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
       <Select value={filters.campusStatus} label="认证状态" options={['VERIFIED', 'UNVERIFIED', 'PENDING', 'EXPIRED', 'REVOKED']} onChange={(value) => setFilters({ ...filters, campusStatus: value })} />
     </>}
     {view === 'listings' && <>
-      <ReviewStateSelect value={filters.reviewState} onChange={(value) => setFilters({ ...filters, reviewState: value })} />
-      <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} onChange={(value) => setFilters({ ...filters, status: value })} />
+      <ListingScopeSelect filters={filters} onChange={setFilters} />
+      <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} optionLabels={listingStatusLabels} onChange={(value) => setFilters({ ...filters, status: value, ...(value ? { reviewState: 'ALL' } : {}) })} />
     </>}
     {view === 'reports' && <Select value={filters.status} label="工单状态" options={['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED']} onChange={(value) => setFilters({ ...filters, status: value })} />}
     <button className="primary compact">筛选</button>
@@ -328,12 +328,21 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
   </form>
 }
 
-function Select({ value = '', label, options, onChange }: { value?: string; label: string; options: string[]; onChange: (value: string) => void }) {
-  return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}><option value="">全部{label}</option>{options.map((option) => <option key={option} value={option}>{labels[option] || option}</option>)}</select>
+function Select({ value = '', label, options, optionLabels = labels, onChange }: { value?: string; label: string; options: string[]; optionLabels?: Record<string, string>; onChange: (value: string) => void }) {
+  return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}><option value="">全部{label}</option>{options.map((option) => <option key={option} value={option}>{optionLabels[option] || option}</option>)}</select>
 }
 
-function ReviewStateSelect({ value = 'PENDING', onChange }: { value?: string; onChange: (value: string) => void }) {
-  return <select aria-label="处置状态" value={value} onChange={(event) => onChange(event.target.value)}><option value="PENDING">待处置</option><option value="REVIEWED">已处置</option><option value="ALL">全部处置状态</option></select>
+function ListingScopeSelect({ filters, onChange }: { filters: Record<string, string>; onChange: (value: Record<string, string>) => void }) {
+  const scope = filters.reviewState === 'REVIEWED'
+    ? 'REVIEWED'
+    : filters.reviewState === 'ALL' && filters.status === 'ACTIVE' ? 'ACTIVE' : filters.reviewState === 'ALL' ? 'ALL' : 'PENDING'
+  function selectScope(value: string) {
+    if (value === 'ACTIVE') return onChange({ ...filters, reviewState: 'ALL', status: 'ACTIVE' })
+    if (value === 'REVIEWED') return onChange({ ...filters, reviewState: 'REVIEWED', status: '' })
+    if (value === 'ALL') return onChange({ ...filters, reviewState: 'ALL', status: '' })
+    onChange({ ...filters, reviewState: 'PENDING', status: '' })
+  }
+  return <select aria-label="商品范围" value={scope} onChange={(event) => selectScope(event.target.value)}><option value="PENDING">待处置商品</option><option value="ACTIVE">在售商品</option><option value="REVIEWED">已处置商品</option><option value="ALL">全部商品</option></select>
 }
 
 function Dashboard({ data, openReports }: { data: Metrics; openReports: () => void }) {
@@ -352,48 +361,53 @@ function DataView({ view, data, identity, onAction }: { view: View; data: PageRe
 }
 
 function UsersTable({ rows, identity, onAction }: { rows: UserRow[]; identity: AdminIdentity; onAction: (actions: PendingAction[]) => void }) {
-  return <Table headers={['用户', '账号 / 认证', '角色', '业务数据', '注册时间', '操作']}>{rows.map((row) => {
+  const [detailUser, setDetailUser] = useState<UserRow | null>(null)
+  return <><Table headers={['用户', '账号 / 认证', '角色', '业务数据', '最后上线', '操作']}>{rows.map((row) => {
     const actions = userActions(row, identity)
+    const latestAccess = row.recentAccess?.[0]
     return <tr key={row.id}>
-      <td data-label="用户"><div className="user-cell"><span className="avatar">{row.nickname.slice(0, 1)}</span><div><strong>{row.nickname}</strong><code title={row.id}>{shortId(row.id)}</code></div></div></td>
+      <td data-label="用户"><div className="user-cell"><span className="avatar">{row.nickname.slice(0, 1)}</span><div><strong>{row.nickname}</strong><code title={row.id}>{shortId(row.id)}</code><button type="button" className="table-detail-button" onClick={() => setDetailUser(row)}>用户详情</button></div></div></td>
       <td data-label="账号 / 认证"><Status value={row.status} /><Status value={row.campusStatus} subtle /></td>
       <td data-label="角色"><strong>{labels[row.role]}</strong>{row.adminTotpEnabled && <small className="inline-note">TOTP 已启用</small>}</td>
-      <td data-label="业务数据"><span>{row._count.listings} 件商品</span><small className="inline-note">{row._count.reports} 次举报</small></td>
-      <td data-label="注册时间">{dateTime(row.createdAt)}</td>
+      <td data-label="业务数据"><strong>{row._count.listings} 本在售</strong><small className="inline-note">{row._count.reports} 次举报</small></td>
+      <td data-label="最后上线">{row.lastSeenAt ? dateTime(row.lastSeenAt) : <span className="muted">从未登录</span>}{latestAccess && <small className="inline-note">{accessSummary(latestAccess)}</small>}</td>
       <td data-label="操作">{actions.length
-        ? <button type="button" className="user-action-trigger" onClick={() => onAction(actions)}>处置</button>
+        ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button>
         : <span className="muted">不可操作</span>}</td>
     </tr>
-  })}</Table>
+  })}</Table>{detailUser && <UserDetailDialog user={detailUser} onClose={() => setDetailUser(null)} />}</>
 }
 
-function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (action: PendingAction) => void }) {
+function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (actions: PendingAction[]) => void }) {
   return <Table headers={['商品', '卖家', '价格 / 校区', '状态', '互动', '发布时间', '操作']}>{rows.map((row) => {
     const cover = row.images.find((image) => image.role === 'COVER') || row.images.find((image) => image.role !== 'ISBN')
-    const [blockAction] = listingActions(row)
+    const actions = listingActions(row)
     return <tr key={row.id}>
       <td data-label="商品"><div className="listing-cell">{cover ? <img src={`${API_ROOT}/media/${cover.id}`} alt="" /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code><a className="listing-detail-link" href={listingDetailHref(row.id)} target="_blank" rel="noreferrer">查看详情 <ExternalLink size={12} /></a></div></div></td>
       <td data-label="卖家">{row.seller.nickname}<small className="inline-note">{labels[row.seller.status] || row.seller.status}</small></td>
       <td data-label="价格 / 校区"><strong>¥{(row.priceCents / 100).toFixed(2)}</strong><small className="inline-note">{row.campus}</small></td>
-      <td data-label="状态"><Status value={row.status} />{row.moderationDecision === 'IGNORE' && <Status value="IGNORE" subtle />}</td>
+      <td data-label="状态"><Status value={row.status} label={listingStatusLabels[row.status]} />{row.moderationDecision === 'IGNORE' && <Status value="IGNORE" subtle />}</td>
       <td data-label="互动">{row.viewCount} 浏览<small className="inline-note">{row._count.favorites} 收藏 · {row._count.conversations} 会话</small></td>
       <td data-label="发布时间">{dateTime(row.createdAt)}</td>
-      <td data-label="操作">{blockAction
-        ? <button type="button" className="listing-action-trigger" onClick={() => onAction(blockAction)}>处置</button>
+      <td data-label="操作">{actions.length
+        ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button>
         : <span className="muted">不可操作</span>}</td>
     </tr>
   })}</Table>
 }
 
-function ReportsTable({ rows, onAction }: { rows: ReportRow[]; onAction: (action: PendingAction) => void }) {
-  return <Table headers={['举报内容', '举报对象', '举报人', '状态', '提交时间', '操作']}>{rows.map((row) => <tr key={row.id}>
-    <td data-label="举报内容"><strong>{row.reason}</strong>{row.evidence && <small className="inline-note evidence">证据：{row.evidence}</small>}{row.resolution && <small className="inline-note resolution">结论：{row.resolution}</small>}</td>
-    <td data-label="举报对象"><span>{row.target?.label || `${row.targetType} ${shortId(row.targetId)}`}</span>{row.target?.status && <Status value={row.target.status} subtle />}</td>
-    <td data-label="举报人">{row.reporter.nickname}</td>
-    <td data-label="状态"><Status value={row.status} /></td>
-    <td data-label="提交时间">{dateTime(row.createdAt)}</td>
-    <td data-label="操作"><ActionMenu actions={reportActions(row)} onAction={onAction} /></td>
-  </tr>)}</Table>
+function ReportsTable({ rows, onAction }: { rows: ReportRow[]; onAction: (actions: PendingAction[]) => void }) {
+  return <Table headers={['举报内容', '举报对象', '举报人', '状态', '提交时间', '操作']}>{rows.map((row) => {
+    const actions = reportActions(row)
+    return <tr key={row.id}>
+      <td data-label="举报内容"><strong>{row.reason}</strong>{row.evidence && <small className="inline-note evidence">证据：{row.evidence}</small>}{row.resolution && <small className="inline-note resolution">结论：{row.resolution}</small>}</td>
+      <td data-label="举报对象"><span>{row.target?.label || `${row.targetType} ${shortId(row.targetId)}`}</span>{row.target?.status && <Status value={row.target.status} label={row.targetType === 'LISTING' ? listingStatusLabels[row.target.status] : undefined} subtle />}{row.targetType === 'LISTING' && <a className="listing-detail-link" href={listingDetailHref(row.targetId)} target="_blank" rel="noreferrer">查看商品详情 <ExternalLink size={12} /></a>}</td>
+      <td data-label="举报人">{row.reporter.nickname}</td>
+      <td data-label="状态"><Status value={row.status} /></td>
+      <td data-label="提交时间">{dateTime(row.createdAt)}</td>
+      <td data-label="操作">{actions.length ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button> : <span className="muted">不可操作</span>}</td>
+    </tr>
+  })}</Table>
 }
 
 function AuditTable({ rows }: { rows: AuditRow[] }) {
@@ -415,44 +429,54 @@ function Pagination({ data, setPage }: { data: PageResult<unknown>; setPage: (pa
   return <div className="pagination"><span>共 {data.total} 条 · 第 {data.page}/{data.pages} 页</span><div><button disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}><ChevronLeft size={17} />上一页</button><button disabled={data.page >= data.pages} onClick={() => setPage(data.page + 1)}>下一页<ChevronRight size={17} /></button></div></div>
 }
 
-function ActionMenu({ actions, onAction }: { actions: PendingAction[]; onAction: (action: PendingAction) => void }) {
-  if (!actions.length) return <span className="muted">不可操作</span>
-  return <details className="action-menu"><summary>处置</summary><div>{actions.map((action) => <button className={action.tone === 'danger' ? 'danger-text' : ''} key={action.action} onClick={() => onAction(action)}>{action.actionLabel}</button>)}</div></details>
-}
-
-function ActionDialog({ actions, onClose, onConfirm, onIgnore }: { actions: PendingAction[]; onClose: () => void; onConfirm: (action: PendingAction, reason: string) => Promise<void>; onIgnore: (action: PendingAction) => Promise<void> }) {
-  const userChoices = actions.length > 1 && actions[0]?.targetType === 'USER'
-  const [selected, setSelected] = useState<PendingAction | null>(userChoices ? null : actions[0] || null)
+function ActionDialog({ actions, onClose, onConfirm }: { actions: PendingAction[]; onClose: () => void; onConfirm: (action: PendingAction, reason: string) => Promise<void> }) {
+  const [selected, setSelected] = useState<PendingAction | null>(actions.length === 1 ? actions[0] : null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const target = actions[0]
-  const isListingBlock = selected?.targetType === 'LISTING' && selected.action === 'BLOCKED'
+  const requiresReason = selected?.action !== 'IGNORE'
+  const targetName = target?.targetType === 'USER' ? '用户' : target?.targetType === 'LISTING' ? '商品' : '举报'
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!selected || reason.trim().length < 3) return
+    if (!selected || (requiresReason && reason.trim().length < 3)) return
     setBusy(true)
     setError('')
     try { await onConfirm(selected, reason.trim()) } catch (cause) { setError(messageOf(cause)); setBusy(false) }
   }
-  async function ignore() {
-    if (!selected) return
-    setBusy(true)
-    setError('')
-    try { await onIgnore(selected) } catch (cause) { setError(messageOf(cause)); setBusy(false) }
-  }
   if (!target) return null
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}><form className="action-dialog" role="dialog" aria-modal="true" onSubmit={(event) => void submit(event)}>
-    <button type="button" className="dialog-close" aria-label="关闭" onClick={onClose}><X size={19} /></button>
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}><form className="dialog-panel action-dialog" role="dialog" aria-modal="true" aria-labelledby="action-dialog-title" onSubmit={(event) => void submit(event)}>
+    <button type="button" className="dialog-close" aria-label="关闭" disabled={busy} onClick={onClose}><X size={19} /></button>
     <div className={`dialog-icon ${selected?.tone === 'danger' ? 'danger' : ''}`}>{selected?.tone === 'danger' ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</div>
-    <p className="eyebrow">治理操作确认</p><h2>{userChoices ? '处置用户' : selected?.actionLabel}</h2>
+    <p className="eyebrow">治理操作确认</p><h2 id="action-dialog-title">处置{targetName}</h2>
     <p>对象：<strong>{target.targetLabel}</strong></p>
-    {userChoices && <fieldset className="action-choice-grid"><legend>选择处置方式</legend>{actions.map((action) => <button type="button" className={`${selected?.action === action.action ? 'selected' : ''} ${action.tone === 'danger' ? 'danger-choice' : ''}`} key={action.action} onClick={() => { setSelected(action); setReason(''); setError('') }}>{action.actionLabel}</button>)}</fieldset>}
-    {isListingBlock && <p className="dialog-guidance">确认违规时填写原因并屏蔽；无需处理时选择“忽略”，商品保持原状态。</p>}
-    {selected && <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={isListingBlock ? '请填写违规依据（至少 3 个字符）' : `请填写${selected.actionLabel}的原因（至少 3 个字符）`} /><small>{reason.trim().length}/300</small></label>}
+    <p className="dialog-guidance">选择处置方式后确认。涉及状态或权限变更时，需填写至少 3 个字符的可审计原因。</p>
+    {actions.length > 1 && <fieldset className="action-choice-grid"><legend>处置方式</legend>{actions.map((action) => <button type="button" className={`${selected?.action === action.action ? 'selected' : ''} ${action.tone === 'danger' ? 'danger-choice' : ''}`} key={action.action} onClick={() => { setSelected(action); setReason(''); setError('') }}>{action.actionLabel}</button>)}</fieldset>}
+    {selected?.action === 'IGNORE' && <div className="selected-action-note"><strong>忽略此商品</strong><span>记录本次审核结果，商品保持当前销售状态。</span></div>}
+    {selected && requiresReason && <label>处置原因<textarea autoFocus maxLength={300} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={`请填写${selected.actionLabel}的原因（至少 3 个字符）`} /><small>{reason.trim().length}/300</small></label>}
     {error && <ErrorBanner message={error} />}
-    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={isListingBlock ? () => void ignore() : onClose}>{isListingBlock && busy ? '正在提交…' : isListingBlock ? '忽略' : '取消'}</button><button className={selected?.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || !selected || reason.trim().length < 3}>{busy ? '正在提交…' : isListingBlock ? '违规屏蔽' : '确认执行'}</button></div>
+    <div className="dialog-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button><button className={selected?.tone === 'danger' ? 'danger-button' : 'primary'} disabled={busy || !selected || (requiresReason && reason.trim().length < 3)}>{busy ? '正在提交…' : selected ? `确认${selected.actionLabel}` : '请先选择'}</button></div>
   </form></div>
+}
+
+function UserDetailDialog({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const recentAccess = user.recentAccess || []
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="dialog-panel user-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
+    <button type="button" className="dialog-close" aria-label="关闭" onClick={onClose}><X size={19} /></button>
+    <div className="dialog-icon"><Users size={22} /></div>
+    <p className="eyebrow">用户档案</p><h2 id="user-detail-title">{user.nickname}</h2>
+    <dl className="user-detail-grid">
+      <div><dt>账号状态</dt><dd><Status value={user.status} /></dd></div>
+      <div><dt>校园认证</dt><dd><Status value={user.campusStatus} /></dd></div>
+      <div><dt>后台角色</dt><dd>{labels[user.role]}</dd></div>
+      <div><dt>所在校区</dt><dd>{user.campus || '未填写'}</dd></div>
+      <div><dt>在售书籍</dt><dd>{user._count.listings} 本</dd></div>
+      <div><dt>被举报记录</dt><dd>{user._count.reports} 次</dd></div>
+      <div><dt>注册时间</dt><dd>{dateTime(user.createdAt)}</dd></div>
+      <div><dt>最后上线</dt><dd>{user.lastSeenAt ? dateTime(user.lastSeenAt) : '从未登录'}</dd></div>
+    </dl>
+    <div className="access-history"><h3>最近访问设备</h3>{recentAccess.length ? <ul>{recentAccess.map((access) => <li key={`${access.platform}-${access.device || 'unknown'}`}><div><strong>{accessSummary(access)}</strong><span>{dateTime(access.lastSeenAt)}</span></div><Status value={access.active ? 'ONLINE' : 'OFFLINE'} label={access.active ? '会话有效' : '已退出'} subtle /></li>)}</ul> : <p className="muted">暂无登录设备记录</p>}</div>
+  </section></div>
 }
 
 export function userActions(row: UserRow, identity: AdminIdentity): PendingAction[] {
@@ -477,7 +501,7 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 export function listingActions(row: ListingRow): PendingAction[] {
   const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, targetLabel: row.title, action, actionLabel, tone })
   return !row.moderationDecision && ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
-    ? [base('BLOCKED', '违规屏蔽', 'danger')]
+    ? [base('IGNORE', '忽略'), base('BLOCKED', '违规屏蔽', 'danger')]
     : []
 }
 
@@ -496,8 +520,15 @@ export function reportActions(row: ReportRow): PendingAction[] {
   return actions
 }
 
-function Status({ value, subtle = false }: { value: string; subtle?: boolean }) {
-  return <span className={`status status-${value.toLowerCase().replace('_', '-')} ${subtle ? 'subtle' : ''}`}>{labels[value] || value}</span>
+export function accessSummary(access: UserRow['recentAccess'][number]) {
+  const platform = access.platform.toLowerCase() === 'weapp' ? '微信小程序' : ['h5', 'web', 'campus'].includes(access.platform.toLowerCase()) ? '浏览器' : access.platform
+  const device = access.device?.toLowerCase()
+  const deviceName = device === 'phone' || device === 'mobile' || device === 'weapp' ? '手机' : device === 'tablet' ? '平板' : device === 'desktop' || device === 'pc' ? '电脑' : '设备未知'
+  return `${platform} · ${deviceName}`
+}
+
+function Status({ value, label, subtle = false }: { value: string; label?: string; subtle?: boolean }) {
+  return <span className={`status status-${value.toLowerCase().replace('_', '-')} ${subtle ? 'subtle' : ''}`}>{label || labels[value] || value}</span>
 }
 
 function ErrorBanner({ message }: { message: string }) { return <div className="error-banner"><AlertTriangle size={18} /><span>{message}</span></div> }

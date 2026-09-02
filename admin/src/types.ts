@@ -56,6 +56,13 @@ export interface UserRow {
   adminTotpEnabled: boolean
   createdAt: string
   updatedAt: string
+  lastSeenAt?: string | null
+  recentAccess: Array<{
+    platform: string
+    device?: string | null
+    lastSeenAt: string
+    active: boolean
+  }>
   _count: { listings: number; reports: number }
 }
 

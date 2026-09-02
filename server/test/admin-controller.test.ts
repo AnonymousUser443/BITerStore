@@ -128,6 +128,43 @@ describe('administrator listing review queue', () => {
   })
 })
 
+describe('administrator user activity summary', () => {
+  it('returns active listing counts, the latest login, and distinct recent devices', async () => {
+    const latest = new Date('2026-09-02T05:00:00.000Z')
+    const older = new Date('2026-09-01T05:00:00.000Z')
+    const prisma: any = {
+      user: {
+        findMany: vi.fn().mockResolvedValue([{
+          id: 'user-1', nickname: '测试用户', role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED',
+          createdAt: older, updatedAt: latest, _count: { listings: 2, reports: 1 },
+          sessions: [
+            { platform: 'h5', device: 'desktop', createdAt: latest, expiresAt: new Date('2099-01-01'), revokedAt: null },
+            { platform: 'h5', device: 'desktop', createdAt: older, expiresAt: new Date('2026-01-01'), revokedAt: older },
+            { platform: 'weapp', device: 'phone', createdAt: older, expiresAt: new Date('2099-01-01'), revokedAt: null }
+          ]
+        }]),
+        count: vi.fn().mockResolvedValue(1)
+      }
+    }
+    const result = await new AdminController(prisma).users()
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        sessions: expect.objectContaining({ take: 12, orderBy: { createdAt: 'desc' } }),
+        _count: { select: { listings: { where: { status: 'ACTIVE', deletedAt: null } }, reports: true } }
+      })
+    }))
+    expect(result.items[0]).toMatchObject({
+      lastSeenAt: latest,
+      _count: { listings: 2, reports: 1 },
+      recentAccess: [
+        { platform: 'h5', device: 'desktop', lastSeenAt: latest, active: true },
+        { platform: 'weapp', device: 'phone', lastSeenAt: older, active: true }
+      ]
+    })
+    expect(result.items[0]).not.toHaveProperty('sessions')
+  })
+})
+
 describe('administrator audit log serialization', () => {
   it('serializes bigint audit identifiers for JSON responses', async () => {
     const prisma: any = {
