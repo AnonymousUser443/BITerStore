@@ -91,6 +91,19 @@ describe('administrator moderation actions', () => {
     expect(prisma.listing.update).not.toHaveBeenCalled()
   })
 
+  it('persists an ignored listing decision without changing its sale status', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', status: 'SOLD', deletedAt: null })
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', action: 'IGNORE', reason: '管理员确认无需处置'
+    })).resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.listing.update).not.toHaveBeenCalled()
+    expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ targetType: 'LISTING', targetId: 'listing-1', action: 'IGNORE' })
+    })
+  })
+
   it('does not reopen a terminal report through a direct API call', async () => {
     const prisma = actionPrisma()
     prisma.report.findUnique.mockResolvedValue({ id: 'report-1', status: 'RESOLVED' })
@@ -99,6 +112,19 @@ describe('administrator moderation actions', () => {
       targetType: 'REPORT', targetId: 'report-1', action: 'PROCESSING', reason: '非法重开工单'
     })).rejects.toMatchObject({ status: 400 })
     expect(prisma.report.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('administrator listing review queue', () => {
+  it('excludes persisted decisions from the default pending queue', async () => {
+    const prisma: any = {
+      moderationAction: { findMany: vi.fn().mockResolvedValue([{ targetId: 'ignored-1', action: 'IGNORE', createdAt: new Date() }]) },
+      listing: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) }
+    }
+    await new AdminController(prisma).listings()
+    expect(prisma.listing.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { AND: expect.arrayContaining([{ status: { not: 'BLOCKED' }, id: { notIn: ['ignored-1'] } }]) }
+    }))
   })
 })
 

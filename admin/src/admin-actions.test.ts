@@ -41,6 +41,7 @@ describe('admin action visibility', () => {
   it('only offers state-appropriate listing and report actions', () => {
     expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['BLOCKED'])
     expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['BLOCKED'])
+    expect(listingActions({ ...listing('SOLD'), moderationDecision: 'IGNORE' })).toEqual([])
     expect(listingActions(listing('BLOCKED'))).toEqual([])
     expect(listingActions(listing('DRAFT'))).toEqual([])
     expect(reportActions(report('OPEN')).map((item) => item.action)).toEqual(['PROCESSING', 'RESOLVED', 'REJECTED'])
