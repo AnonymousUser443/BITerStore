@@ -9,6 +9,7 @@ import prodConfig from './prod'
 const assetPerformanceBudget = 384 * 1024
 const h5EntrypointPerformanceBudget = 400 * 1024
 const miniEntrypointPerformanceBudget = 640 * 1024
+const productionApiUrl = 'https://store.young581.com/api/v1'
 const productionBitLoginUrl = 'https://store.young581.com/bit-login'
 
 function readEnvironmentFile(file: string): Record<string, string> {
@@ -27,6 +28,13 @@ function buildEnvironment(): Record<string, string> {
 export default defineConfig<'webpack5'>(async (merge) => {
   const environment = buildEnvironment()
   const isE2E = environment.BITERSTORE_E2E === '1'
+  const isWeapp = process.env.TARO_ENV === 'weapp'
+  const assetPatterns = isWeapp
+    ? [
+        { from: 'src/assets-weapp', to: 'dist/assets' },
+        { from: 'src/assets/tabbar', to: 'dist/assets/tabbar' }
+      ]
+    : [{ from: 'src/assets', to: 'dist/assets' }]
   const baseConfig: UserConfigExport<'webpack5'> = {
     projectName: 'BITerStore', date: '2026-08-26', designWidth: 390,
     deviceRatio: { 390: 2, 750: 1 }, sourceRoot: 'src', outputRoot: 'dist',
@@ -35,10 +43,16 @@ export default defineConfig<'webpack5'>(async (merge) => {
     cache: { enable: true },
     defineConstants: {
       __BITERSTORE_E2E__: JSON.stringify(isE2E),
-      __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || '').replace(/\/$/, '')),
+      // H5 keeps its same-origin /api/v1 proxy. Production WeApp cannot use a
+      // relative URL, so it defaults to the deployed HTTPS API unless a local
+      // developer explicitly overrides it in the ignored environment file.
+      __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || (isWeapp ? productionApiUrl : '')).replace(/\/$/, '')),
       __BIT_LOGIN_URL__: JSON.stringify((environment.BIT_LOGIN_URL || productionBitLoginUrl).replace(/\/$/, ''))
     },
-    copy: { patterns: [{ from: 'src/assets', to: 'dist/assets' }, { from: 'src/hosting/_redirects', to: 'dist' }], options: {} },
+    copy: {
+      patterns: [...assetPatterns, ...(!isWeapp ? [{ from: 'src/hosting/_redirects', to: 'dist' }] : [])],
+      options: {}
+    },
     mini: {
       postcss: { pxtransform: { enable: true, config: {} }, cssModules: { enable: false } },
       webpackChain(chain) {
@@ -62,7 +76,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
           '/pages/messages/index': '/messages', '/pages/notification/detail': '/notifications', '/pages/chat/index': '/chat',
-          '/pages/profile/index': '/profile', '/pages/favorites/index': '/favorites', '/pages/feedback/index': '/feedback',
+          '/pages/profile/index': '/profile', '/pages/profile/edit': '/profile/edit', '/pages/favorites/index': '/favorites', '/pages/feedback/index': '/feedback',
           '/pages/my-listings/index': '/my-listings', '/pages/states/index': '/states'
         }
       },
@@ -80,6 +94,18 @@ export default defineConfig<'webpack5'>(async (merge) => {
           chain.output
             .filename('js/[name].[contenthash:8].js')
             .chunkFilename('chunk/[name].[contenthash:8].js')
+          chain.optimization.splitChunks({
+            cacheGroups: {
+              goldenReference: {
+                name: 'golden-reference',
+                test: /[\\/]web[\\/]app[\\/]/,
+                chunks: 'async',
+                enforce: true,
+                priority: 30,
+                reuseExistingChunk: true
+              }
+            }
+          })
         }
         chain.resolve.plugin('tsconfig-paths').use(TsconfigPathsPlugin)
         chain.module.rule('script').include.add(path.resolve(__dirname, '../../web/app'))

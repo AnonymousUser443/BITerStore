@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Image, Text, View } from '@tarojs/components'
+import { bundledAsset } from '@/assets'
 import { Brand } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository } from '@/domain/repository'
@@ -17,6 +18,6 @@ export default function OnboardingPage() {
   const next = async () => { if (index < steps.length - 1) setIndex(index + 1); else await complete() }
   return <View className='phone-shell onboarding-page'>
     <View className='onboarding-preview'><View className='fake-brand'><Brand /></View><View className='fake-search' /><View className='fake-hero' /><View className='fake-cards'><Text /><Text /><Text /></View><View className='fake-nav' /></View><View className='onboarding-scrim' />
-    <View className='onboarding-panel'><View className='onboarding-heading'><Text>新手指引 {index + 1}/3</Text><Button onClick={complete}>跳过</Button></View><Image className='onboarding-tobby' src={`/assets/tobby-${step.mood}.webp`} mode='aspectFit' /><View className='guide-card'><Text className='guide-step'>STEP 0{index + 1}</Text><Text className='guide-title'>{step.title}</Text><Text className='guide-copy'>{step.text}</Text><View className='guide-pills'>{step.targets.map((target) => <Text key={target}><Glyph name='check' />{target}</Text>)}</View></View><View className='step-dots'>{steps.map((_, dot) => <Text className={dot === index ? 'active' : ''} key={dot} />)}</View><View className='guide-actions'>{index > 0 && <Button className='secondary-button' onClick={() => setIndex(index - 1)}>上一步</Button>}<Button id='e2e-onboarding-next' className='primary-button' onClick={next}>{index === 2 ? '开始使用' : '下一步'}</Button></View></View>
+    <View className='onboarding-panel'><View className='onboarding-heading'><Text>新手指引 {index + 1}/3</Text><Button onClick={complete}>跳过</Button></View><Image className='onboarding-tobby' src={bundledAsset(`tobby-${step.mood}`)} mode='aspectFit' /><View className='guide-card'><Text className='guide-step'>STEP 0{index + 1}</Text><Text className='guide-title'>{step.title}</Text><Text className='guide-copy'>{step.text}</Text><View className='guide-pills'>{step.targets.map((target) => <Text key={target}><Glyph name='check' />{target}</Text>)}</View></View><View className='step-dots'>{steps.map((_, dot) => <Text className={dot === index ? 'active' : ''} key={dot} />)}</View><View className='guide-actions'>{index > 0 && <Button className='secondary-button' onClick={() => setIndex(index - 1)}>上一步</Button>}<Button id='e2e-onboarding-next' className='primary-button' onClick={next}>{index === 2 ? '开始使用' : '下一步'}</Button></View></View>
   </View>
 }

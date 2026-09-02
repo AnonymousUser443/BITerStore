@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Image, Text, Textarea, View } from '@tarojs/components'
+import { bundledAsset } from '@/assets'
 import { AppShell } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository } from '@/domain/repository'
@@ -31,7 +32,7 @@ export default function FeedbackPage() {
   }
 
   return <AppShell title='问题反馈' back noNav className='feedback-page'>
-    <View className='feedback-intro'><Image src='/assets/tobby-question.webp' mode='aspectFit' /><View><Text className='eyebrow'>HELP US IMPROVE</Text><Text className='feedback-title'>遇到问题，或有好点子？</Text><Text className='feedback-copy'>选择反馈类型并告诉我们具体情况，管理员会在后台查看。</Text></View></View>
+    <View className='feedback-intro'><Image src={bundledAsset('tobby-question')} mode='aspectFit' /><View><Text className='eyebrow'>HELP US IMPROVE</Text><Text className='feedback-title'>遇到问题，或有好点子？</Text><Text className='feedback-copy'>选择反馈类型并告诉我们具体情况，管理员会在后台查看。</Text></View></View>
     <View className='feedback-form'>
       <Text className='feedback-section-title'>反馈类型</Text>
       <View className='feedback-choices'>{choices.map((choice) => <Button id={`e2e-feedback-${choice.type.toLowerCase()}`} key={choice.type} className={type === choice.type ? 'selected' : ''} onClick={() => setType(choice.type)}><Text className='feedback-choice-icon'><Glyph name={choice.glyph} /></Text><View><Text>{choice.title}</Text><Text>{choice.detail}</Text></View><Text className='feedback-choice-check'>{type === choice.type ? '✓' : ''}</Text></Button>)}</View>

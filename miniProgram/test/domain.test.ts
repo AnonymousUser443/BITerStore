@@ -18,7 +18,8 @@ vi.mock('@tarojs/taro', () => ({ default: {
   setStorage: vi.fn(async ({ key, data }) => { memory.set(key, data) }), removeStorage: vi.fn(async ({ key }) => { memory.delete(key) }),
   getStorageInfo: vi.fn(async () => ({ keys: [...memory.keys()] })), showToast: vi.fn(), showModal: vi.fn(async () => ({ confirm: true })),
   request: vi.fn(async () => ({ statusCode: 200, data: { ok: true } })),
-  navigateTo: vi.fn(), switchTab: vi.fn(), navigateBack: vi.fn(), getCurrentInstance: vi.fn(() => ({ router: { path: '' } })), setClipboardData: vi.fn()
+  navigateTo: vi.fn(), redirectTo: vi.fn(), reLaunch: vi.fn(), switchTab: vi.fn(), navigateBack: vi.fn(), getCurrentInstance: vi.fn(() => ({ router: { path: '' } })), setClipboardData: vi.fn(),
+  getWindowInfo: vi.fn(() => ({ windowWidth: 390, statusBarHeight: 44 })), getMenuButtonBoundingClientRect: vi.fn(() => ({ left: 294, bottom: 82 }))
 } }))
 describe('domain', () => {
   it('keeps the current reference when a refreshed snapshot is unchanged', () => {
@@ -94,6 +95,19 @@ describe('domain', () => {
     expect(refreshRequests).toBe(1)
   })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
+  it('真实 API 列表同样执行成色、状态与排序筛选', async () => {
+    const make = (id: string, priceCents: number, condition: string, status = 'ACTIVE') => ({ id, title: id, author: '作者', isbn: '', category: '教材教辅', course: '', priceCents, condition, campus: '良乡', description: '', status, sellerId: 'seller', createdAt: `2026-09-0${id === 'cheap' ? '1' : '2'}T00:00:00.000Z`, tags: [], images: [] })
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { items: [make('expensive', 8000, '八成新'), make('cheap', 2000, '八成新'), make('wrong-condition', 1000, '全新')] } } as never)
+    const result = await apiRepository.listListings({ ...defaultFilters, condition: '八成新', sort: '价格从低到高' })
+    expect(result.map((item) => item.id)).toEqual(['cheap', 'expensive'])
+  })
+  it('真实 API 持久化分类筛选与引导完成状态', async () => {
+    const filters = { ...defaultFilters, campus: '珠海' as const, availableOnly: false }
+    await apiRepository.saveFilters(filters)
+    await apiRepository.completeOnboarding()
+    expect(await apiRepository.getFilters()).toEqual(filters)
+    expect(await apiRepository.isOnboardingComplete()).toBe(true)
+  })
   it('收藏能够持久化并取消', async () => { expect(await demoRepository.toggleFavorite('math-7')).toBe(true); expect((await demoRepository.listFavorites()).map((x) => x.id)).toEqual(['math-7']); expect(await demoRepository.toggleFavorite('math-7')).toBe(false) })
   it('真实 API 会提交反馈类型、内容和微信端来源', async () => {
     vi.stubEnv('TARO_ENV', 'weapp')

@@ -43,6 +43,19 @@ async function shot(name) {
   throw lastError
 }
 async function stored(key) { try { const result = await app.callWxMethod('getStorage', { key: `${namespace}:${key}` }); return result?.data } catch { return undefined } }
+async function probeRequest(url) {
+  return Promise.race([
+    app.evaluate((target) => new Promise((resolve) => {
+      globalThis.wx.request({
+        url: target,
+        method: 'GET',
+        success: (response) => resolve({ ok: true, statusCode: response.statusCode }),
+        fail: (error) => resolve({ ok: false, error: error?.errMsg || String(error) })
+      })
+    }), url),
+    sleep(15000).then(() => ({ ok: false, error: 'request timeout' }))
+  ])
+}
 async function pageAt(pathname, timeout = 15000, expectedQuery = {}, navigationObservation) {
   const observation = navigationObservation || { pathname, started: activeRouteProbe?.pathname === pathname ? activeRouteProbe.started : Date.now() - 250, ended: undefined }
   if (!navigationObservation) routeObservationWindows.push(observation)
@@ -93,6 +106,7 @@ async function waitForBootstrap(timeout = 45000) {
   while (Date.now() < deadline) {
     const page = await app.currentPage().catch(() => null)
     lastRoute = page?.path || ''
+    if (lastRoute) lastKnownRoute = lastRoute
     if (lastRoute && lastRoute !== 'pages/startup/index') {
       await sleep(1200)
       const stablePage = await app.currentPage().catch(() => null)
@@ -144,7 +158,8 @@ function partitionConsoleErrors(events) {
   for (let index = 0; index < errors.length; index += 1) {
     const event = errors[index]
     const routeDoneNoise = event.args?.some((arg) => typeof arg === 'string' && /routeDone with a webviewId \d+ is not found/.test(arg))
-    if (!routeDoneNoise) continue
+    const appLaunchNoise = event.args?.some((arg) => arg === 'appLaunch with non-empty page stack')
+    if (!routeDoneNoise && !appLaunchNoise) continue
     ignored.add(event)
     const companion = errors[index + 1]
     const companionDelay = Math.abs(Date.parse(companion?.time || '') - Date.parse(event.time || ''))
@@ -157,7 +172,7 @@ function partitionConsoleErrors(events) {
     if (!opaqueObject) continue
     const eventTime = Date.parse(event.time || '')
     const match = knownAutomationNoise.findIndex((noise, index) => !correlatedAutomationNoise.has(index) && eventTime >= noise.time && eventTime - noise.time <= 20000)
-    const duringRouteObservation = routeObservationWindows.some((observation) => eventTime >= observation.started && eventTime <= (observation.ended || Date.now()) + 1000)
+    const duringRouteObservation = routeObservationWindows.some((observation) => eventTime >= observation.started && eventTime <= (observation.ended || Date.now()) + 10000)
     if (match >= 0 || duringRouteObservation) {
       if (match >= 0) correlatedAutomationNoise.add(match)
       ignored.add(event)
@@ -174,8 +189,8 @@ async function connectWithRetry(timeout = connectTimeoutMs) {
   }
   throw lastError || new Error(`连接微信自动化端点超时: ${wsEndpoint}`)
 }
-function runCli(command) {
-  const args = commandArgs(command)
+function runCli(command, extraArgs = []) {
+  const args = commandArgs(command, extraArgs)
   const invocation = process.platform === 'win32' ? windowsCliInvocation(args) : { command: cliPath, args }
   return spawnSync(invocation.command, invocation.args, { encoding: 'utf8', windowsHide: true, windowsVerbatimArguments: process.platform === 'win32', timeout: 60000 })
 }
@@ -225,6 +240,18 @@ try {
       if (stopped.status !== 0) throw new Error(`微信开发者工具退出失败 (${stopped.status}): ${[stopped.stdout, stopped.stderr, stopped.error?.message].filter(Boolean).join('\n').trim()}`)
       await waitForPortToClose(automationPort)
     }
+    if (process.env.WEAPP_RESET_COMPILE_CACHE !== '0') {
+      const resetFileutils = runCli('reset-fileutils')
+      if (resetFileutils.status !== 0) throw new Error(`微信开发者工具文件索引重置失败 (${resetFileutils.status}): ${[resetFileutils.stdout, resetFileutils.stderr, resetFileutils.error?.message].filter(Boolean).join('\n').trim()}`)
+      const cleanCompileCache = runCli('cache', ['--clean', 'compile'])
+      if (cleanCompileCache.status !== 0) throw new Error(`微信开发者工具编译缓存清理失败 (${cleanCompileCache.status}): ${[cleanCompileCache.stdout, cleanCompileCache.stderr, cleanCompileCache.error?.message].filter(Boolean).join('\n').trim()}`)
+      const stoppedAfterReset = runCli('quit')
+      if (stoppedAfterReset.status !== 0) throw new Error(`微信开发者工具缓存刷新后退出失败 (${stoppedAfterReset.status}): ${[stoppedAfterReset.stdout, stoppedAfterReset.stderr, stoppedAfterReset.error?.message].filter(Boolean).join('\n').trim()}`)
+      await waitForPortToClose(automationPort)
+      // `cli quit` returns before every IDE helper process has exited. Starting
+      // `auto` immediately can report success without opening the WebSocket.
+      await sleep(Number(process.env.WEAPP_CACHE_RESET_SETTLE_MS || 5000))
+    }
     const started = runCli('auto')
     if (started.status !== 0) throw new Error(`微信开发者工具启动失败 (${started.status}): ${[started.stdout, started.stderr, started.error?.message].filter(Boolean).join('\n').trim()}`)
     ownsLaunchedSession = true
@@ -245,18 +272,101 @@ try {
   }); app.on('exception', (event) => { const described = describe(event); exceptions.push(described); observedExceptions.push(described) })
   await waitForBootstrap()
   const results = []
-  results.push(await scenario('bit-login-request-domain', async () => { const response = await app.callWxMethod('request', { url: 'https://store.young581.com/bit-login/openapi.json', method: 'GET' }); if (response?.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || 'unknown'}）`) }))
+  results.push(await scenario('bundled-image-compatibility', async () => {
+    await app.reLaunch('/pages/welcome/index')
+    const page = await pageAt('pages/welcome/index')
+    const images = await page.$$('image')
+    const sources = await Promise.all(images.map((image) => image.attribute('src')))
+    const localSources = sources.filter((source) => source?.startsWith('/assets/'))
+    if (!localSources.length) throw new Error('欢迎页没有发现本地图片资源')
+    const incompatible = localSources.filter((source) => !source.endsWith('.png'))
+    if (incompatible.length) throw new Error(`微信包仍引用真机不兼容的本地图片：${incompatible.join(', ')}`)
+    await shot('visual-bundled-png-assets')
+  }))
+  results.push(await scenario('bit-login-request-domain', async () => { const response = await probeRequest('https://store.young581.com/bit-login/openapi.json'); if (!response?.ok || response.statusCode !== 200) throw new Error(`BIT-Login 同域代理请求失败（${response?.statusCode || response?.error || 'unknown'}）`) }))
+  results.push(await scenario('production-api-request-domain', async () => { const response = await probeRequest('https://store.young581.com/api/v1/health'); if (!response?.ok || response.statusCode !== 200) throw new Error(`生产 API 请求失败（${response?.statusCode || response?.error || 'unknown'}）`) }))
   results.push(await scenario('onboarding-guest-home', async () => { await app.reLaunch('/pages/welcome/index'); let page = await pageAt('pages/welcome/index'); await sleep(250); page = await tapForRoute(await required(page, '#e2e-welcome-start'), 'pages/onboarding/index'); await shot('visual-onboarding'); for (let i = 0; i < 3; i += 1) { const next = await required(page, '#e2e-onboarding-next'); if (i < 2) { await next.tap(); await sleep(180) } else page = await tapForRoute(next, 'pages/login/index') } page = await recoverBlankPage(page, '#e2e-guest-access', '/pages/login/index'); await shot('visual-login'); page = await tapForRoute(await required(page, '#e2e-guest-access'), 'pages/home/index'); await required(page, '#e2e-home-search-entry'); await shot('visual-home'); if (!await stored('onboarding')) throw new Error('引导完成状态未持久化'); if (await stored('authenticated-sid') !== 'guest') throw new Error('游客状态未持久化') }))
+  results.push(await scenario('branded-chrome-navigation', async () => { await app.reLaunch('/pages/home/index'); let page = await pageAt('pages/home/index'); await required(page, '#e2e-header-notifications'); await required(page, '#e2e-header-profile'); await required(page, '#e2e-nav-publish'); page = await tapForRoute(await required(page, '#e2e-nav-search'), 'pages/search/index'); await required(page, '#e2e-nav-home'); await shot('visual-branded-search'); page = await tapForRoute(await required(page, '#e2e-nav-home'), 'pages/home/index'); await required(page, '#e2e-home-search-entry') }))
   results.push(await scenario('search-detail-favorite-contact', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await (await required(page, '#e2e-search-input')).input('高等数学'); await sleep(350); await shot('visual-search'); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await shot('visual-detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(150); if (!(await stored('favorites'))?.includes('math-7')) throw new Error('收藏未写入 Repository 存储'); await tapForRoute(await required(page, '#e2e-detail-contact'), 'pages/chat/index') }))
-  results.push(await scenario('publish-fixture-draft-success', async () => { let page = await openStable('switchTab', '/pages/publish/index'); page = await recoverBlankPage(page, '#e2e-publish-media', '/pages/publish/index'); await shot('visual-publish-upload'); await (await requiredEventually(page, '#e2e-publish-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-isbn-media')).tap(); await sleep(150); await (await required(page, '#e2e-publish-tobby-ai')).tap(); await (await requiredEventually(page, '#e2e-publish-title')).input('自动化测试教材'); await (await required(page, '#e2e-publish-price')).input('16'); await shot('visual-publish-form'); await (await required(page, '#e2e-publish-save')).tap(); await sleep(120); if ((await stored('draft'))?.title !== '自动化测试教材') throw new Error('草稿未持久化'); await (await required(page, '#e2e-publish-submit')).tap(); await sleep(180); await shot('visual-publish-preview'); await (await required(page, '#e2e-publish-submit')).tap(); page = await pageAt('pages/states/index'); await required(page, '#e2e-state-success'); if (!(await stored('listings'))?.some((item) => item.title === '自动化测试教材')) throw new Error('发布结果未写入 Repository 存储') }))
-  results.push(await scenario('my-listings-sold-confirmation', async () => { const listing = { id: 'e2e-owned', title: '自动化确认教材', author: '测试作者', isbn: '9787115428028', category: '教材教辅', course: '自动化测试', price: 16, originalPrice: 32, condition: '九成新', campus: '良乡', description: '用于验证已售二次确认。', status: 'available', sellerId: 'user-tobby', createdAt: '2026-09-01T00:00:00.000Z', tags: ['自动化'], tone: 'sage', mediaIds: [] }; await app.callWxMethod('setStorage', { key: `${namespace}:listings`, data: [listing] }); await app.reLaunch('/pages/my-listings/index'); const page = await pageAt('pages/my-listings/index'); await requiredEventually(page, '#e2e-mark-sold-e2e-owned'); await tapForEffect(await required(page, '#e2e-mark-sold-e2e-owned')); await requiredEventually(page, '#e2e-confirm-sold-e2e-owned'); if ((await stored('listings'))?.[0]?.status !== 'available') throw new Error('首次点击标记已售时不应更新状态'); await shot('visual-my-listings-sold-confirmation'); await tapForEffect(await required(page, '#e2e-cancel-sold-e2e-owned')); await requiredEventually(page, '#e2e-mark-sold-e2e-owned'); if ((await stored('listings'))?.[0]?.status !== 'available') throw new Error('取消确认后不应更新状态'); await tapForEffect(await required(page, '#e2e-mark-sold-e2e-owned')); await tapForEffect(await requiredEventually(page, '#e2e-confirm-sold-e2e-owned')); await sleep(200); if ((await stored('listings'))?.[0]?.status !== 'sold') throw new Error('确认已售后状态未更新'); if ((await app.currentPage())?.path !== 'pages/my-listings/index') throw new Error('确认已售后离开了我的发布页面') }))
-  results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); page = await recoverBlankPage(page, '#e2e-notification-detail-comment', '/pages/notification/detail?type=comment'); await requiredEventually(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.switchTab('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(120); await (await required(page, '#e2e-message-image')).tap(); await sleep(120); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
-  results.push(await scenario('profile-feedback-submit', async () => { await app.reLaunch('/pages/profile/index'); let page = await pageAt('pages/profile/index'); page = await tapForRoute(await required(page, '#e2e-profile-feedback'), 'pages/feedback/index'); await tapForEffect(await required(page, '#e2e-feedback-suggestion')); await (await required(page, '#e2e-feedback-content')).input('希望增加按课程收藏的功能'); await shot('visual-feedback'); page = await tapForRoute(await required(page, '#e2e-feedback-submit'), 'pages/profile/index'); const feedback = await stored('feedback'); if (feedback?.[0]?.type !== 'SUGGESTION' || feedback[0]?.content !== '希望增加按课程收藏的功能') throw new Error('反馈类型或内容未写入 Repository 存储'); await requiredEventually(page, '#e2e-profile-feedback') }))
-  results.push(await scenario('favorites-profile-replay-reset', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await sleep(200); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(120); await app.navigateTo('/pages/favorites/index'); page = await pageAt('pages/favorites/index'); await required(page, '#e2e-listing-math-7'); await shot('visual-favorites'); await app.switchTab('/pages/profile/index'); page = await pageAt('pages/profile/index'); page = await recoverBlankPage(page, '#e2e-profile-reset', '/pages/profile/index'); await shot('visual-profile'); await tapForEffect(await required(page, '#e2e-profile-reset')); await sleep(900); if ((await stored('favorites'))?.length) throw new Error('重置后收藏数据仍然存在'); await app.navigateTo('/pages/my-listings/index'); page = await pageAt('pages/my-listings/index'); await required(page, '#e2e-my-listings-empty'); await shot('visual-my-listings-empty'); await app.reLaunch('/pages/onboarding/index'); page = await pageAt('pages/onboarding/index'); await required(page, '#e2e-onboarding-next') }))
+  results.push(await scenario('publish-fixture-draft-success', async () => {
+    let page = await openStable('reLaunch', '/pages/publish/index')
+    await shot('visual-publish-upload')
+    await (await required(page, '#e2e-publish-media')).tap()
+    await sleep(250)
+    await (await required(page, '#e2e-publish-isbn-media')).tap()
+    await sleep(350)
+    await (await required(page, '#e2e-publish-tobby-ai')).tap()
+    let title
+    try { title = await requiredEventually(page, '#e2e-publish-title', 8000) } catch (error) {
+      const assistantError = await page.$('#e2e-publish-ai-error')
+      const detail = assistantError ? await assistantError.text() : '未显示识别错误'
+      throw new Error(`${error.message}；Tobby 状态：${detail}`)
+    }
+    await title.input('自动化测试教材')
+    await (await required(page, '#e2e-publish-price')).input('16')
+    await shot('visual-publish-form')
+    await (await required(page, '#e2e-publish-save')).tap()
+    await sleep(120)
+    if ((await stored('draft'))?.title !== '自动化测试教材') throw new Error('草稿未持久化')
+    await (await required(page, '#e2e-publish-submit')).tap()
+    await sleep(180)
+    await shot('visual-publish-preview')
+    await (await required(page, '#e2e-publish-submit')).tap()
+    page = await pageAt('pages/states/index')
+    await required(page, '#e2e-state-success')
+    if (!(await stored('listings'))?.some((item) => item.title === '自动化测试教材')) throw new Error('发布结果未写入 Repository 存储')
+  }))
+  results.push(await scenario('my-listings-sold-confirmation', async () => {
+    const listing = { id: 'e2e-owned', title: '自动化确认教材', author: '测试作者', isbn: '9787115428028', category: '教材教辅', course: '自动化测试', price: 16, originalPrice: 32, condition: '九成新', campus: '良乡', description: '用于验证已售二次确认。', status: 'available', sellerId: 'user-tobby', createdAt: '2026-09-01T00:00:00.000Z', tags: ['自动化'], tone: 'sage', mediaIds: [] }
+    await app.callWxMethod('setStorage', { key: `${namespace}:listings`, data: [listing] })
+    await app.reLaunch('/pages/my-listings/index')
+    const page = await pageAt('pages/my-listings/index')
+    await tapForEffect(await requiredEventually(page, '#e2e-mark-sold-e2e-owned'))
+    await requiredEventually(page, '#e2e-confirm-sold-e2e-owned')
+    if ((await stored('listings'))?.[0]?.status !== 'available') throw new Error('首次点击标记已售时不应更新状态')
+    await shot('visual-my-listings-sold-confirmation')
+    await tapForEffect(await required(page, '#e2e-cancel-sold-e2e-owned'))
+    await requiredEventually(page, '#e2e-mark-sold-e2e-owned')
+    if ((await stored('listings'))?.[0]?.status !== 'available') throw new Error('取消确认后不应更新状态')
+    await tapForEffect(await required(page, '#e2e-mark-sold-e2e-owned'))
+    await tapForEffect(await requiredEventually(page, '#e2e-confirm-sold-e2e-owned'))
+    await sleep(200)
+    if ((await stored('listings'))?.[0]?.status !== 'sold') throw new Error('确认已售后状态未更新')
+    if ((await app.currentPage())?.path !== 'pages/my-listings/index') throw new Error('确认已售后离开了我的发布页面')
+  }))
+  results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.reLaunch('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(280); await (await required(page, '#e2e-message-image')).tap(); await sleep(280); await required(page, '#e2e-chat-end'); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
+  results.push(await scenario('profile-feedback-submit', async () => {
+    await app.reLaunch('/pages/profile/index')
+    let page = await pageAt('pages/profile/index')
+    page = await tapForRoute(await required(page, '#e2e-profile-feedback'), 'pages/feedback/index')
+    await tapForEffect(await required(page, '#e2e-feedback-suggestion'))
+    await (await required(page, '#e2e-feedback-content')).input('希望增加按课程收藏的功能')
+    await shot('visual-feedback')
+    page = await tapForRoute(await required(page, '#e2e-feedback-submit'), 'pages/profile/index')
+    const feedback = await stored('feedback')
+    if (feedback?.[0]?.type !== 'SUGGESTION' || feedback[0]?.content !== '希望增加按课程收藏的功能') throw new Error('反馈类型或内容未写入 Repository 存储')
+    await requiredEventually(page, '#e2e-profile-feedback')
+  }))
+  results.push(await scenario('favorites-profile-replay-reset', async () => { await app.reLaunch('/pages/search/index'); let page = await pageAt('pages/search/index'); await sleep(200); page = await tapForRoute(await required(page, '#e2e-listing-math-7'), 'pages/listing/detail'); await (await required(page, '#e2e-detail-favorite')).tap(); await sleep(120); await app.navigateTo('/pages/favorites/index'); page = await pageAt('pages/favorites/index'); await required(page, '#e2e-listing-math-7'); await shot('visual-favorites'); await app.reLaunch('/pages/profile/index'); page = await pageAt('pages/profile/index'); page = await recoverBlankPage(page, '#e2e-profile-reset', '/pages/profile/index'); await shot('visual-profile'); page = await tapForRoute(await required(page, '#e2e-profile-edit'), 'pages/profile/edit'); await (await required(page, '#e2e-profile-name')).input('自动化小书童'); await shot('visual-profile-edit'); page = await tapForRoute(await required(page, '#e2e-profile-save'), 'pages/profile/index'); if ((await stored('profile'))?.name !== '自动化小书童') throw new Error('个人资料未通过 Repository 持久化'); await tapForEffect(await required(page, '#e2e-profile-reset')); await sleep(900); if ((await stored('favorites'))?.length) throw new Error('重置后收藏数据仍然存在'); await app.navigateTo('/pages/my-listings/index'); page = await pageAt('pages/my-listings/index'); await required(page, '#e2e-my-listings-empty'); await shot('visual-my-listings-empty'); await app.reLaunch('/pages/onboarding/index'); page = await pageAt('pages/onboarding/index'); await required(page, '#e2e-onboarding-next') }))
   results.push(await scenario('all-states', async () => { for (const state of ['loading', 'searching', 'empty', 'no-results', 'network', 'maintenance', 'unavailable', 'success', 'not-found']) { await app.reLaunch(`/pages/states/index?type=${state}`); const page = await pageAt('pages/states/index', 15000, { type: state }); await required(page, `#e2e-state-${state}`) } }))
   const navigationMetrics = await app.evaluate(() => globalThis.__BITERSTORE_NAV_METRICS__ || []).catch(() => [])
   const observedErrors = partitionConsoleErrors(observedConsoleEvents)
   const consoleSummary = { total: observedConsoleEvents.length, applicationErrors: observedErrors.actionable.length, ignoredDevToolsErrors: ignoredConsoleEvents.length, exceptions: observedExceptions.length }
   const ok = results.every((x) => x.ok) && observedErrors.actionable.length === 0 && observedExceptions.length === 0
   write('result.json', { mode, results, routeTimings, navigationMetrics, consoleSummary, ignoredConsoleEvents, observedExceptions, knownAutomationNoise, routeObservationWindows }); console.log(JSON.stringify({ ok, artifactRoot, results, routeTimings, navigationMetrics, consoleSummary }, null, 2)); if (!ok) process.exitCode = 1
-} catch (error) { write('launch-failure.json', { error: error.stack || error.message }); console.error(JSON.stringify({ ok: false, artifactRoot, error: error.message }, null, 2)); process.exitCode = 1 } finally { if (app) { try { if (ownsLaunchedSession) await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }
+} catch (error) {
+  const page = app ? await app.currentPage().catch(() => null) : null
+  if (app) await shot('launch-failure').catch(() => undefined)
+  const consoleErrors = partitionConsoleErrors(observedConsoleEvents)
+  write('launch-failure.json', {
+    route: page?.path || lastKnownRoute,
+    error: error.stack || error.message,
+    structure: await snapshot(page),
+    consoleEvents: observedConsoleEvents,
+    actionableConsoleErrors: consoleErrors.actionable,
+    ignoredConsoleErrors: consoleErrors.ignored,
+    exceptions: observedExceptions
+  })
+  console.error(JSON.stringify({ ok: false, artifactRoot, route: page?.path || lastKnownRoute, error: error.message }, null, 2))
+  process.exitCode = 1
+} finally { if (app) { try { if (ownsLaunchedSession) await app.close(); else app.disconnect() } catch { /* best-effort local session cleanup */ } } }

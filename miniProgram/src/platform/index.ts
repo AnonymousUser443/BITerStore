@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { bundledAsset } from '@/assets'
 import type { StoredMedia } from '@/domain/types'
 import { AppError } from '@/domain/types'
 import type { BitLoginChallenge } from '@/domain/bit-login'
@@ -35,10 +36,9 @@ type NavigationProbeGlobal = typeof globalThis & {
 let navigationPending = false
 function beginNavigation(url: string) {
   const target = url.split('?')[0]
-  const hasNativeBar = !['/pages/startup/index', '/pages/welcome/index', '/pages/onboarding/index', '/pages/login/index', '/pages/states/index'].includes(target)
-  if (process.env.TARO_ENV === 'weapp' && hasNativeBar) {
+  const hasAppShell = !['/pages/startup/index', '/pages/welcome/index', '/pages/onboarding/index', '/pages/login/index'].includes(target)
+  if (process.env.TARO_ENV === 'weapp' && hasAppShell) {
     navigationPending = true
-    void Taro.showNavigationBarLoading()
     void Taro.showLoading({ title: '加载中', mask: false })
   }
   if (!__BITERSTORE_E2E__) return
@@ -48,7 +48,6 @@ function beginNavigation(url: string) {
 export function markNavigationReady() {
   if (process.env.TARO_ENV === 'weapp' && navigationPending) {
     navigationPending = false
-    void Taro.hideNavigationBarLoading()
     void Taro.hideLoading()
   }
   if (!__BITERSTORE_E2E__) return
@@ -69,8 +68,27 @@ function markNavigationApiReady(url: string, startedAt: number) {
 }
 export const navigationAdapter: NavigationAdapter = {
   async go(url) { const startedAt = Date.now(); beginNavigation(url); await Taro.navigateTo({ url }); markNavigationApiReady(url, startedAt) },
-  async switchTab(url) { const startedAt = Date.now(); beginNavigation(url); if (process.env.TARO_ENV === 'h5') await Taro.redirectTo({ url }); else await Taro.switchTab({ url }); markNavigationApiReady(url, startedAt) },
+  // Root navigation is rendered by the branded in-app dock on both targets.
+  // reLaunch keeps the WeApp stack bounded while allowing the dock to match
+  // the H5 Golden Reference instead of falling back to the native tab bar.
+  async switchTab(url) { const startedAt = Date.now(); beginNavigation(url); if (process.env.TARO_ENV === 'h5') await Taro.redirectTo({ url }); else await Taro.reLaunch({ url }); markNavigationApiReady(url, startedAt) },
   async back() { await Taro.navigateBack() }, currentRoute() { return Taro.getCurrentInstance().router?.path || '' }
+}
+
+export function getNavigationChromeStyle() {
+  if (process.env.TARO_ENV !== 'weapp') return undefined
+  try {
+    const windowInfo = Taro.getWindowInfo()
+    const capsule = Taro.getMenuButtonBoundingClientRect()
+    const statusBarHeight = Math.max(0, Number(windowInfo.statusBarHeight || 0))
+    const rightInset = capsule?.left
+      ? Math.max(14, Number(windowInfo.windowWidth) - Number(capsule.left) + 8)
+      : 14
+    const height = Math.max(statusBarHeight + 52, Number(capsule?.bottom || 0) + 8)
+    return { height: `${height}px`, paddingTop: `${statusBarHeight}px`, paddingRight: `${rightInset}px` }
+  } catch {
+    return { height: '92px', paddingTop: '38px', paddingRight: '96px' }
+  }
 }
 export interface FeedbackAdapter { toast(message: string): Promise<void>; confirm(title: string, content: string): Promise<boolean> }
 export const feedbackAdapter: FeedbackAdapter = {
@@ -145,7 +163,7 @@ async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
 export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]> }
 export const mediaAdapter: MediaAdapter = {
   async pick(options = {}) {
-    if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: '/assets/tobby-guide-publish.webp', mime: 'image/webp', size: 1024 }]
+    if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: bundledAsset('tobby-guide-publish'), mime: process.env.TARO_ENV === 'weapp' ? 'image/png' : 'image/webp', size: 1024 }]
     try {
       const result = await Taro.chooseMedia({ count: options.count || 6, mediaType: ['image'], sourceType: options.cameraOnly ? ['camera'] : ['album', 'camera'] })
       return result.tempFiles.map((file, index) => ({ id: `media-${Date.now()}-${index}`, uri: file.tempFilePath, mime: 'image/jpeg', size: file.size || 0 }))
