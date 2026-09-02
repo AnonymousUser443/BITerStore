@@ -11,7 +11,7 @@ describe('user profile', () => {
       role: 'USER', status: 'ACTIVE', campusStatus: 'VERIFIED', createdAt: new Date(),
       _count: { wechatAccounts: 0 }
     }
-    const prisma = { user: { update: vi.fn(), findUniqueOrThrow: vi.fn().mockResolvedValue(profile) } }
+    const prisma = { user: { update: vi.fn(), findUniqueOrThrow: vi.fn().mockResolvedValue(profile) }, userFeedback: { create: vi.fn().mockResolvedValue({ id: 'feedback-1' }) } }
     return { prisma, controller: new UsersController(prisma as any) }
   }
 
@@ -29,5 +29,19 @@ describe('user profile', () => {
     const { controller } = setup()
     await expect(controller.update(authUser, { nickname: ' ' })).rejects.toBeInstanceOf(BadRequestException)
     await expect(controller.update(authUser, { avatarUrl: 'javascript:alert(1)' })).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('submits a trimmed Bug or suggestion for the authenticated user', async () => {
+    const { prisma, controller } = setup()
+    await expect(controller.submitFeedback(authUser, { type: 'bug', content: '  登录按钮没有响应  ', platform: 'weapp' })).resolves.toEqual({ id: 'feedback-1' })
+    expect(prisma.userFeedback.create).toHaveBeenCalledWith({
+      data: { userId: 'student-1', type: 'BUG', content: '登录按钮没有响应', platform: 'WEAPP' }
+    })
+  })
+
+  it('rejects an unknown feedback type or blank content', async () => {
+    const { controller } = setup()
+    expect(() => controller.submitFeedback(authUser, { type: 'QUESTION', content: '内容' })).toThrow(BadRequestException)
+    expect(() => controller.submitFeedback(authUser, { type: 'SUGGESTION', content: ' ' })).toThrow(BadRequestException)
   })
 })

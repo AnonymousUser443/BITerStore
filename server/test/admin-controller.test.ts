@@ -202,3 +202,22 @@ describe('administrator audit log serialization', () => {
     expect(result.items[0].id).toBe('42')
   })
 })
+
+describe('administrator user feedback', () => {
+  it('filters feedback and includes the submitter identity', async () => {
+    const createdAt = new Date('2026-09-02T08:00:00.000Z')
+    const record = {
+      id: 'feedback-1', type: 'BUG', content: '登录按钮没有响应', platform: 'H5', createdAt,
+      user: { id: 'user-1', studentNumber: '1120241261', nickname: '测试用户', campus: '良乡' }
+    }
+    const prisma: any = {
+      userFeedback: { findMany: vi.fn().mockResolvedValue([record]), count: vi.fn().mockResolvedValue(1) }
+    }
+    const result = await new AdminController(prisma).feedback('登录', 'BUG', '1', '20')
+    expect(prisma.userFeedback.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ type: 'BUG', OR: expect.any(Array) }),
+      include: { user: { select: { id: true, studentNumber: true, nickname: true, campus: true } } }
+    }))
+    expect(result.items).toEqual([record])
+  })
+})

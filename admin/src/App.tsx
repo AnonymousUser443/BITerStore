@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle, BookOpen, Check, ChevronLeft, ChevronRight, ClipboardList, Copy,
-  ExternalLink, KeyRound, LayoutDashboard, LogOut, RefreshCw, Search, ShieldCheck, Users, X
+  ExternalLink, KeyRound, LayoutDashboard, LogOut, MessageSquareText, RefreshCw, Search, ShieldCheck, Users, X
 } from 'lucide-react'
 import { ADMIN_TOKEN_KEY, API_ROOT, ApiError, apiRequest, queryString, refreshBrowserSession, requestId } from './api'
 import type {
-  AdminIdentity, AuditRow, ElevatedSession, ListingRow, Metrics, PageResult,
+  AdminIdentity, AuditRow, ElevatedSession, FeedbackRow, ListingRow, Metrics, PageResult,
   PendingAction, ReportRow, SecurityStatus, TotpSetup, UserRow, View
 } from './types'
 
@@ -14,6 +14,7 @@ const navigation: Array<{ key: View; label: string; hint: string; icon: typeof L
   { key: 'users', label: '用户管理', hint: '账号与权限', icon: Users },
   { key: 'listings', label: '商品治理', hint: '在售与违规', icon: BookOpen },
   { key: 'reports', label: '举报工单', hint: '受理与结案', icon: ClipboardList },
+  { key: 'feedback', label: '用户反馈', hint: 'Bug 与建议', icon: MessageSquareText },
   { key: 'audit', label: '审计日志', hint: '操作留痕', icon: ShieldCheck }
 ]
 
@@ -24,6 +25,7 @@ const labels: Record<string, string> = {
   DRAFT: '草稿', PENDING_REVIEW: '待审核', RESERVED: '已预订', SOLD: '已售', OFF_SHELF: '已下架', BLOCKED: '违规屏蔽',
   IGNORE: '已忽略', REVIEWED: '已处置', ALL: '全部',
   OPEN: '待处理', PROCESSING: '处理中', RESOLVED: '已解决', REJECTED: '已驳回',
+  BUG: 'Bug', SUGGESTION: '建议', H5: '网页端', WEAPP: '微信小程序',
   REVOKE_SESSIONS: '下线全部设备', ROLE_USER: '设为普通用户', ROLE_MODERATOR: '设为协管员', ROLE_ADMIN: '设为管理员'
 }
 
@@ -204,7 +206,7 @@ function CodeInput({ code, setCode, autoFocus = false }: { code: string; setCode
 
 function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity; onSessionExpired: () => void }) {
   const [view, setView] = useState<View>('dashboard')
-  const [data, setData] = useState<Metrics | PageResult<UserRow | ListingRow | ReportRow | AuditRow> | null>(null)
+  const [data, setData] = useState<Metrics | PageResult<UserRow | ListingRow | ReportRow | FeedbackRow | AuditRow> | null>(null)
   const [page, setPage] = useState(1)
   const [draftQ, setDraftQ] = useState('')
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({})
@@ -298,7 +300,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
       <section className={busy && data ? 'content-area refreshing' : 'content-area'}>
         {!data ? (busy ? <LoadingRows /> : null) : view === 'dashboard'
           ? <Dashboard data={data as Metrics} openReports={() => changeView('reports')} />
-          : <DataView view={view} data={data as PageResult<UserRow | ListingRow | ReportRow | AuditRow>} identity={identity} onAction={openActions} />}
+          : <DataView view={view} data={data as PageResult<UserRow | ListingRow | ReportRow | FeedbackRow | AuditRow>} identity={identity} onAction={openActions} />}
       </section>
       {view !== 'dashboard' && data && <Pagination data={data as PageResult<unknown>} setPage={setPage} />}
     </main>
@@ -310,7 +312,7 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
   view: View; q: string; setQ: (value: string) => void; filters: Record<string, string>;
   setFilters: (value: Record<string, string>) => void; active: boolean; onSubmit: (event: FormEvent) => void; onClear: () => void
 }) {
-  const placeholder = view === 'users' ? '搜索昵称或学号' : view === 'listings' ? '搜索书名、作者、ISBN 或卖家' : view === 'reports' ? '搜索原因、对象或举报人' : '搜索动作、资源或操作人'
+  const placeholder = view === 'users' ? '搜索昵称或学号' : view === 'listings' ? '搜索书名、作者、ISBN 或卖家' : view === 'reports' ? '搜索原因、对象或举报人' : view === 'feedback' ? '搜索反馈内容、昵称或学号' : '搜索动作、资源或操作人'
   return <form className="filter-bar" onSubmit={onSubmit}>
     <label className="search-box"><Search size={17} /><input value={q} onChange={(event) => setQ(event.target.value)} placeholder={placeholder} /></label>
     {view === 'users' && <>
@@ -323,6 +325,7 @@ function FilterBar({ view, q, setQ, filters, setFilters, active, onSubmit, onCle
       <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} optionLabels={listingStatusLabels} onChange={(value) => setFilters({ ...filters, status: value, ...(value ? { reviewState: 'ALL' } : {}) })} />
     </>}
     {view === 'reports' && <Select value={filters.status} label="工单状态" options={['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED']} onChange={(value) => setFilters({ ...filters, status: value })} />}
+    {view === 'feedback' && <Select value={filters.type} label="反馈类型" options={['BUG', 'SUGGESTION']} onChange={(value) => setFilters({ ...filters, type: value })} />}
     <button className="primary compact">筛选</button>
     {active && <button type="button" className="clear-button" onClick={onClear}><X size={16} />清除</button>}
   </form>
@@ -352,11 +355,12 @@ function Dashboard({ data, openReports }: { data: Metrics; openReports: () => vo
   </>
 }
 
-function DataView({ view, data, identity, onAction }: { view: View; data: PageResult<UserRow | ListingRow | ReportRow | AuditRow>; identity: AdminIdentity; onAction: (action: PendingAction | PendingAction[]) => void }) {
+function DataView({ view, data, identity, onAction }: { view: View; data: PageResult<UserRow | ListingRow | ReportRow | FeedbackRow | AuditRow>; identity: AdminIdentity; onAction: (action: PendingAction | PendingAction[]) => void }) {
   if (!data.items.length) return <EmptyState />
   if (view === 'users') return <UsersTable rows={data.items as UserRow[]} identity={identity} onAction={onAction} />
   if (view === 'listings') return <ListingsTable rows={data.items as ListingRow[]} onAction={onAction} />
   if (view === 'reports') return <ReportsTable rows={data.items as ReportRow[]} onAction={onAction} />
+  if (view === 'feedback') return <FeedbackTable rows={data.items as FeedbackRow[]} />
   return <AuditTable rows={data.items as AuditRow[]} />
 }
 
@@ -408,6 +412,16 @@ function ReportsTable({ rows, onAction }: { rows: ReportRow[]; onAction: (action
       <td data-label="操作">{actions.length ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button> : <span className="muted">不可操作</span>}</td>
     </tr>
   })}</Table>
+}
+
+function FeedbackTable({ rows }: { rows: FeedbackRow[] }) {
+  return <Table headers={['类型', '反馈内容', '反馈用户', '来源', '提交时间']}>{rows.map((row) => <tr key={row.id}>
+    <td data-label="类型"><Status value={row.type} label={labels[row.type]} subtle={row.type === 'SUGGESTION'} /></td>
+    <td data-label="反馈内容" className="feedback-content"><strong>{row.content}</strong></td>
+    <td data-label="反馈用户"><strong>{row.user.nickname}</strong><small className="inline-note">学号 {row.user.studentNumber || '未绑定'}{row.user.campus ? ` · ${row.user.campus}` : ''}</small></td>
+    <td data-label="来源">{labels[row.platform] || row.platform}</td>
+    <td data-label="提交时间">{dateTime(row.createdAt)}</td>
+  </tr>)}</Table>
 }
 
 function AuditTable({ rows }: { rows: AuditRow[] }) {

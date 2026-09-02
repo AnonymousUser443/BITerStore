@@ -225,6 +225,7 @@ export const apiRepository: DemoRepository = {
     }));
   },
   async getProfile() { return user(await h5ApiRequest<ApiUser>('/me')); },
+  async submitFeedback(type, content) { await h5ApiRequest('/me/feedback', { method: 'POST', body: JSON.stringify({ type, content, platform: 'H5' }) }); },
   isOnboardingComplete() { return localStorage.getItem('biterstore:v1:onboarding') === 'true'; },
   completeOnboarding() { localStorage.setItem('biterstore:v1:onboarding', 'true'); },
   getAuthenticatedSid: currentUserId,

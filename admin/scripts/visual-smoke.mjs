@@ -28,6 +28,7 @@ const fixtures = {
   '/api/v1/admin/users': { items: [fixtureUser], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', priceCents: 1800, campus: '良乡', status: 'ACTIVE', moderationDecision: null, viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/reports': { items: [{ id: 'visual-report-1', targetType: 'LISTING', targetId: 'visual-listing-1', reason: '商品描述与实物不符', evidence: '已提供聊天记录', status: 'OPEN', createdAt: '2026-09-02T01:20:00.000Z', updatedAt: '2026-09-02T01:20:00.000Z', reporter: { id: 'reporter-1', nickname: '认真同学' }, target: { label: '高等数学（第七版）上册', status: 'ACTIVE' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
+  '/api/v1/admin/feedback': { items: [{ id: 'visual-feedback-1', type: 'BUG', content: '登录后偶尔无法返回商品详情页，希望保留当前位置。', platform: 'H5', createdAt: '2026-09-02T02:10:00.000Z', user: { id: 'visual-user-1', studentNumber: '1120241261', nickname: '测试书友', campus: '良乡' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/audit-logs': { items: [{ id: '42', action: 'BLOCKED', resourceType: 'LISTING', resourceId: 'visual-listing-1', requestId: 'admin-visual-request', metadata: { reason: '示例违规处置' }, createdAt: '2026-09-02T02:00:00.000Z', actor: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN' } }], total: 1, page: 1, pageSize: 20, pages: 1 }
 }
 let listingIgnored = false
@@ -130,7 +131,7 @@ try {
   await waitForEndpoint(`http://127.0.0.1:${debugPort}/json/version`)
   const tab = await fetch(`http://127.0.0.1:${debugPort}/json/new?about:blank`, { method: 'PUT' }).then((response) => response.json())
   client = new CdpClient(tab.webSocketDebuggerUrl, (message) => {
-    if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.text || 'Runtime exception' })
+    if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.exception?.description || message.params.exceptionDetails?.text || 'Runtime exception' })
     if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') diagnostics.push({ type: 'console-error', text: message.params.args?.map((item) => item.value || item.description).join(' ') })
   })
   await client.send('Page.enable')
@@ -143,7 +144,8 @@ try {
     ['users-desktop-detail', 1180, 820, 1, 'user-detail'],
     ['listings-desktop-dialog', 1440, 760, 2, 'listing'],
     ['reports-mobile-dialog', 390, 844, 3, 'report'],
-    ['audit-tablet', 768, 900, 4, null]
+    ['feedback-tablet', 768, 900, 4, null],
+    ['audit-tablet', 768, 900, 5, null]
   ]
   for (const [name, width, height, navIndex, dialogTrigger] of targets) {
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
@@ -192,6 +194,7 @@ try {
     if (dialogTrigger === 'listing' && (!value.listingScopes.includes('在售商品') || value.activeListingLabel !== '在售')) diagnostics.push({ type: 'missing-active-listing-scope', text: `${name}: ${value.listingScopes.join('|')} ${value.activeListingLabel}` })
     if (dialogTrigger === 'report' && value.actionChoices.join('|') !== '标记处理中|处理并结案|驳回举报') diagnostics.push({ type: 'wrong-report-actions', text: `${name}: ${value.actionChoices.join('|')}` })
     if (dialogTrigger === 'report' && (value.detailHref !== '/books?id=visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-report-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
+    if (name === 'feedback-tablet' && (!value.text.includes('用户反馈') || !value.text.includes('提交 Bug') && !value.text.includes('Bug') || !value.text.includes('1120241261') || !value.text.includes('网页端'))) diagnostics.push({ type: 'wrong-feedback-view', text: name })
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))

@@ -9,6 +9,7 @@ const campusStatuses = ['UNVERIFIED', 'PENDING', 'VERIFIED', 'EXPIRED', 'REVOKED
 const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
 const listingReviewStates = ['PENDING', 'REVIEWED', 'ALL'] as const
 const reportStatuses = ['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED'] as const
+const feedbackTypes = ['BUG', 'SUGGESTION'] as const
 const actionsByTarget = {
   USER: ['ACTIVE', 'MUTED', 'BANNED', 'REVOKE_SESSIONS', 'ROLE_USER', 'ROLE_MODERATOR', 'ROLE_ADMIN'],
   LISTING: ['ACTIVE', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
@@ -251,6 +252,34 @@ export class AdminController {
       this.prisma.auditLog.count({ where })
     ])
     const items = records.map((item) => ({ ...item, id: item.id.toString() }))
+    return pageResult(items, total, page, pageSize)
+  }
+
+  @Get('feedback')
+  async feedback(
+    @Query('q') qRaw?: string,
+    @Query('type') typeRaw?: string,
+    @Query('page') pageRaw?: string,
+    @Query('pageSize') pageSizeRaw?: string
+  ) {
+    const q = qRaw?.trim().slice(0, 80)
+    const type = requireValue(typeRaw, feedbackTypes, '反馈类型')
+    const { page, pageSize, skip } = pageOptions(pageRaw, pageSizeRaw)
+    const where = {
+      ...(type ? { type } : {}),
+      ...(q ? { OR: [
+        { content: { contains: q, mode: 'insensitive' as const } },
+        { user: { nickname: { contains: q, mode: 'insensitive' as const } } },
+        { user: { studentNumber: { contains: q, mode: 'insensitive' as const } } }
+      ] } : {})
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.userFeedback.findMany({
+        where, orderBy: { createdAt: 'desc' }, skip, take: pageSize,
+        include: { user: { select: { id: true, studentNumber: true, nickname: true, campus: true } } }
+      }),
+      this.prisma.userFeedback.count({ where })
+    ])
     return pageResult(items, total, page, pageSize)
   }
 

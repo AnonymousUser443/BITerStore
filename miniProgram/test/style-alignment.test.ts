@@ -18,7 +18,7 @@ describe('Golden Reference style alignment', () => {
     const pages = filesBelow(path.join(source, 'pages'), '.tsx')
     const config = read('config/index.ts')
     const h5Pages = pages.filter((file) => file.endsWith('.h5.tsx'))
-    expect(h5Pages).toHaveLength(14)
+    expect(h5Pages).toHaveLength(15)
     expect(h5Pages.every((file) => fs.readFileSync(file, 'utf8').includes("from '@/h5/GoldenRoute'"))).toBe(true)
     expect(read('src/h5/GoldenRoute.tsx')).toContain("from '../../../web/app/components/mobile-app'")
     expect(read('src/h5/GoldenRoute.tsx')).not.toContain('scrollTo(0, 0)')
@@ -28,6 +28,18 @@ describe('Golden Reference style alignment', () => {
     expect(read('src/app.ts')).toContain("import '../../web/app/globals.css'")
     expect(read('src/app.ts')).not.toContain("import './app.css'")
     expect(read('src/h5.css')).toContain('#app.taro_router > .taro_page.taro_navigation_page { overflow: hidden; }')
+  })
+
+  it('提供双端反馈入口并移除登录页无功能圆形装饰', () => {
+    const profile = read('src/pages/profile/page.tsx')
+    const feedback = read('src/pages/feedback/index.tsx')
+    const login = read('src/pages/login/page.tsx')
+    expect(profile).toContain("navigationAdapter.go('/pages/feedback/index')")
+    expect(feedback).toContain("title: '提交 Bug'")
+    expect(feedback).toContain("title: '提交建议'")
+    expect(feedback).toContain('demoRepository.submitFeedback(type, detail)')
+    expect(login).toContain("<View className='login-brand'><Brand /></View>")
+    expect(login).not.toContain("<Glyph name='shield' /></Text></View>")
   })
 
   it('H5 在应用加载前把生产 HTTP 入口切换到 HTTPS', () => {

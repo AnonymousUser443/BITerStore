@@ -1,4 +1,4 @@
-export type View = 'dashboard' | 'users' | 'listings' | 'reports' | 'audit'
+export type View = 'dashboard' | 'users' | 'listings' | 'reports' | 'feedback' | 'audit'
 export type AdminRole = 'MODERATOR' | 'ADMIN' | 'SUPER_ADMIN'
 export type TargetType = 'USER' | 'LISTING' | 'REPORT'
 
@@ -97,6 +97,15 @@ export interface ReportRow {
   updatedAt: string
   reporter: { id: string; nickname: string }
   target?: { label: string; status: string } | null
+}
+
+export interface FeedbackRow {
+  id: string
+  type: 'BUG' | 'SUGGESTION'
+  content: string
+  platform: 'H5' | 'WEAPP'
+  createdAt: string
+  user: { id: string; studentNumber?: string | null; nickname: string; campus?: string | null }
 }
 
 export interface AuditRow {
