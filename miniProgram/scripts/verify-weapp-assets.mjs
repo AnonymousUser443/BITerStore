@@ -6,6 +6,7 @@ const webpDirectory = path.join(root, 'src', 'assets')
 const pngDirectory = path.join(root, 'src', 'assets-weapp')
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const maximumAssetBytes = 384 * 1024
+const maximumAssetBundleBytes = 800 * 1024
 
 const originals = fs.readdirSync(webpDirectory)
   .filter((name) => name.endsWith('.webp'))
@@ -29,6 +30,9 @@ for (const name of variants) {
   if (!buffer.subarray(0, pngSignature.length).equals(pngSignature)) throw new Error(`${file} 不是有效 PNG`)
   if (buffer.length > maximumAssetBytes) throw new Error(`${file} 超出 384 KiB 单资源预算`)
   bytes += buffer.length
+}
+if (bytes > maximumAssetBundleBytes) {
+  throw new Error(`微信 PNG 素材集 ${(bytes / 1024).toFixed(1)} KiB 超出 800 KiB 总预算`)
 }
 
 const sourceFiles = []

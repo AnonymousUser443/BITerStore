@@ -16,7 +16,7 @@
     "enhance": true,
     "compileHotReLoad": true,
     "postcss": true,
-    "minified": false
+    "minified": true
   },
   "compileType": "miniprogram"
 }
