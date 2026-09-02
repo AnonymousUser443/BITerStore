@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException, createParamDecorator } from '@nestjs/common'
 import { SignJWT, jwtVerify } from 'jose'
+import { PrismaService } from '../infra/prisma.service.js'
 
 export interface AuthUser { id: string; role: 'USER' | 'MODERATOR' | 'ADMIN' | 'SUPER_ADMIN'; campusStatus: string; adminTotp?: boolean }
 const secret = () => new TextEncoder().encode(process.env.ACCESS_TOKEN_SECRET || 'development-only-secret-change-me')
@@ -34,10 +35,20 @@ export class VerifiedGuard implements CanActivate {
 
 @Injectable()
 export class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext) {
-    const user = context.switchToHttp().getRequest().user as AuthUser
-    if (!['MODERATOR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role)) throw new ForbiddenException('没有后台权限')
-    if (!user.adminTotp) throw new ForbiddenException('需要管理员动态验证码')
+  constructor(private readonly prisma: PrismaService) {}
+
+  async canActivate(context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest()
+    const user = request.user as AuthUser
+    if (!user?.id || !user.adminTotp) throw new ForbiddenException('需要管理员动态验证码')
+    const record = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { role: true, status: true, campusStatus: true, adminTotpEnabled: true }
+    })
+    if (!record || record.status !== 'ACTIVE' || record.campusStatus !== 'VERIFIED') throw new ForbiddenException('管理员账号当前不可用')
+    if (!['MODERATOR', 'ADMIN', 'SUPER_ADMIN'].includes(record.role)) throw new ForbiddenException('没有后台权限')
+    if (!record.adminTotpEnabled) throw new ForbiddenException('管理员动态验证码已停用')
+    request.user = { ...user, role: record.role, campusStatus: record.campusStatus }
     return true
   }
 }

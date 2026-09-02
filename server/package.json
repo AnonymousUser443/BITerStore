@@ -15,7 +15,8 @@
     "seed": "tsx prisma/seed.ts",
     "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
     "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
-    "admin:promote": "tsx scripts/promote-admin.ts"
+    "admin:promote": "tsx scripts/promote-admin.ts",
+    "admin:reset-totp": "tsx scripts/reset-admin-totp.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.883.0",
