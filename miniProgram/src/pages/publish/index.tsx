@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useDidShow } from '@tarojs/taro'
 import { Button, Image, Input, Picker, Progress, Text, Textarea, View } from '@tarojs/components'
 import { bundledAsset } from '@/assets'
-import { AppShell, Avatar, BookCover } from '@/components/ui'
+import { AppShell, Avatar, ListingCard } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { listingAssistant } from '@/domain/assistant'
 import { apiRequest } from '@/domain/api'
 import { demoRepository } from '@/domain/repository'
 import { requireAccount } from '@/domain/access'
-import type { BookMetadata, Campus, Condition, PublishDraft, User } from '@/domain/types'
+import type { BookMetadata, Campus, Condition, Listing, PublishDraft, User } from '@/domain/types'
 import { feedbackAdapter, isbnRecognitionAdapter, mediaAdapter, navigationAdapter } from '@/platform'
 
 const categories = ['教材教辅', '专业课', '考研考公', '文学小说']
@@ -21,6 +21,7 @@ export default function PublishPage() {
   const [step, setStep] = useState(1)
   const [draft, setDraft] = useState<PublishDraft>(() => ({ ...emptyDraft, clientRequestId: newPublishRequestId() }))
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
   const [errors, setErrors] = useState<string[]>([])
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const [seller, setSeller] = useState<User>()
@@ -43,6 +44,7 @@ export default function PublishPage() {
   const generate = async () => {
     if (!draft.coverMediaId || !draft.isbnMediaId) { await feedbackAdapter.toast('请先拍摄封面和 ISBN 页'); return }
     setAiLoading(true)
+    setAiError('')
     let recognizedIsbn = ''
     try {
       const isbn = await isbnRecognitionAdapter.scan(previews[draft.isbnMediaId])
@@ -54,14 +56,18 @@ export default function PublishPage() {
       const category = metadata.subjects.some((value) => /文学|小说|fiction/i.test(value)) ? '文学小说' : '教材教辅'
       const result = await listingAssistant.generate({ ...draft, title: metadata.title, course: draft.course || metadata.title })
       patch({ ...result, title: metadata.title, author: metadata.author || draft.author, isbn: metadata.isbn, category, course: draft.course || metadata.title, description: `${metadata.title}${metadata.author ? `，${metadata.author}著` : ''}。${draft.condition}，支持校内当面验书。`, tags: Array.from(new Set([...result.tags, ...metadata.subjects.slice(0, 2)])) })
-      await feedbackAdapter.toast('已识别 ISBN 并补全书籍信息')
       setStep(2)
+      void feedbackAdapter.toast('已识别 ISBN 并补全书籍信息')
     } catch (cause) {
       if (recognizedIsbn) {
         patch({ isbn: recognizedIsbn })
-        await feedbackAdapter.toast('已识别 ISBN；书目信息暂未查到，请手动补全')
         setStep(2)
-      } else await feedbackAdapter.toast(cause instanceof Error ? cause.message : '识别失败，请重试')
+        void feedbackAdapter.toast('已识别 ISBN；书目信息暂未查到，请手动补全')
+      } else {
+        const message = cause instanceof Error ? cause.message : '识别失败，请重试'
+        setAiError(message)
+        void feedbackAdapter.toast(message)
+      }
     }
     finally { setAiLoading(false) }
   }
@@ -70,12 +76,13 @@ export default function PublishPage() {
   const save = async () => { await demoRepository.saveDraft(draft); await feedbackAdapter.toast('草稿已保存') }
   const publish = async () => { if (publishingRef.current) return; if (!validate()) return setStep(2); publishingRef.current = true; setPublishing(true); setPublishProgress(1); try { await demoRepository.publishListing(draft, setPublishProgress); await navigationAdapter.go('/pages/states/index?type=success') } catch (cause) { publishingRef.current = false; setPublishing(false); setPublishProgress(0); await feedbackAdapter.toast(cause instanceof Error ? cause.message : '发布失败，请稍后重试') } }
   const removeImage = async (id: string) => { await mediaAdapter.remove([id]); patch({ mediaIds: draft.mediaIds.filter((value) => value !== id), ...(draft.coverMediaId === id ? { coverMediaId: undefined } : {}), ...(draft.isbnMediaId === id ? { isbnMediaId: undefined } : {}) }) }
+  const previewListing: Listing = { id: 'preview', title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course || draft.category, price: Number(draft.price || 0), originalPrice: Number(draft.originalPrice || draft.price || 0), condition: draft.condition, campus: draft.campus, description: draft.description, status: 'available', sellerId: seller?.id || '', seller, createdAt: '', tags: draft.tags, tone: 'sage', mediaIds: draft.mediaIds, imageUrls: draft.coverMediaId && previews[draft.coverMediaId] ? [previews[draft.coverMediaId]] : undefined }
 
   return <AppShell title='发布闲置书籍' active='publish' className='publish-page'>
     <View className='stepper'>{['上传图片', '填写信息', '确认发布'].map((label, index) => <View className={`stepper-item ${step >= index + 1 ? 'active' : ''}`} key={label}><Text className='stepper-number'>{index + 1}</Text><Text className='stepper-label'>{label}</Text>{index < 2 && <Text className='stepper-line' />}</View>)}</View>
-    {step === 1 && <><View className='upload-card'><Text className='upload-heading'>两张必拍照片</Text><Text className='upload-instruction'>请对准拍摄，文字与条码保持清晰，发布时会再次校验。</Text><View className='required-image-grid'><RequiredImage id='e2e-publish-media' label='书籍封面' hint='必拍 · 用作商品首图' mediaId={draft.coverMediaId} preview={draft.coverMediaId ? previews[draft.coverMediaId] : undefined} onPick={() => pickRole('coverMediaId')} onRemove={removeImage} /><RequiredImage id='e2e-publish-isbn-media' label='ISBN 页' hint='必拍 · 对准条形码' mediaId={draft.isbnMediaId} preview={draft.isbnMediaId ? previews[draft.isbnMediaId] : undefined} onPick={() => pickRole('isbnMediaId')} onRemove={removeImage} /></View><View className='optional-images'><Text>其他实拍图（选填，最多 4 张）</Text><View className='image-grid'>{draft.mediaIds.filter((id) => id !== draft.coverMediaId && id !== draft.isbnMediaId).map((id, index) => <View className='upload-preview' key={id}>{previews[id] ? <Image className='optional-image-preview' src={previews[id]} mode='aspectFit' /> : <Text>图片 {index + 1}</Text>}<Button aria-label={`移除图片 ${index + 1}`} onClick={() => removeImage(id)}>×</Button></View>)}{draft.mediaIds.length < 6 && <Button className='add-image' onClick={pick}><Glyph name='camera' /><Text className='add-image-title'>补充图片</Text><Text className='add-image-copy'>书脊、内页或瑕疵</Text></Button>}</View></View><View className='tobby-tip'><Image src={bundledAsset('tobby-guide-publish')} mode='aspectFit' /><Text>封面和 ISBN 页拍清楚，托比就能帮你补全信息～</Text></View></View><View className='ai-card'><View><Text className='ai-title'>✦ Tobby 一键识别</Text><Text className='ai-copy'>免费识别 ISBN 条码，查询书名、作者与分类；识别结果可修改。</Text></View><Button id='e2e-publish-tobby-ai' disabled={aiLoading || !draft.coverMediaId || !draft.isbnMediaId} onClick={generate}>{aiLoading ? '识别中…' : '✦ 一键识别生成'}</Button></View></>}
+    {step === 1 && <><View className='upload-card'><Text className='upload-heading'>两张必拍照片</Text><Text className='upload-instruction'>请对准拍摄，文字与条码保持清晰，发布时会再次校验。</Text><View className='required-image-grid'><RequiredImage id='e2e-publish-media' label='书籍封面' hint='必拍 · 用作商品首图' mediaId={draft.coverMediaId} preview={draft.coverMediaId ? previews[draft.coverMediaId] : undefined} onPick={() => pickRole('coverMediaId')} onRemove={removeImage} /><RequiredImage id='e2e-publish-isbn-media' label='ISBN 页' hint='必拍 · 对准条形码' mediaId={draft.isbnMediaId} preview={draft.isbnMediaId ? previews[draft.isbnMediaId] : undefined} onPick={() => pickRole('isbnMediaId')} onRemove={removeImage} /></View><View className='optional-images'><Text>其他实拍图（选填，最多 4 张）</Text><View className='image-grid'>{draft.mediaIds.filter((id) => id !== draft.coverMediaId && id !== draft.isbnMediaId).map((id, index) => <View className='upload-preview' key={id}>{previews[id] ? <Image className='optional-image-preview' src={previews[id]} mode='aspectFit' /> : <Text>图片 {index + 1}</Text>}<Button aria-label={`移除图片 ${index + 1}`} onClick={() => removeImage(id)}>×</Button></View>)}{draft.mediaIds.length < 6 && <Button className='add-image' onClick={pick}><Glyph name='camera' /><Text className='add-image-title'>补充图片</Text><Text className='add-image-copy'>书脊、内页或瑕疵</Text></Button>}</View></View><View className='tobby-tip'><Image src={bundledAsset('tobby-guide-publish')} mode='aspectFit' /><Text>封面和 ISBN 页拍清楚，托比就能帮你补全信息～</Text></View></View><View className='ai-card'><View><Text className='ai-title'>✦ Tobby 一键识别</Text><Text className='ai-copy'>免费识别 ISBN 条码，查询书名、作者与分类；识别结果可修改。</Text></View><Button id='e2e-publish-tobby-ai' disabled={aiLoading || !draft.coverMediaId || !draft.isbnMediaId} onClick={generate}>{aiLoading ? '识别中…' : '✦ 一键识别生成'}</Button></View>{aiError && <View id='e2e-publish-ai-error' className='ai-error'><Glyph name='warning' /><Text>{aiError}</Text></View>}</>}
     {step === 2 && <View className='form-card'><Field label='书名' required error={errors.includes('请填写书名')}><Input id='e2e-publish-title' value={draft.title} onInput={(event) => patch({ title: event.detail.value })} /></Field><View className='form-grid'><Field label='作者' required error={errors.includes('请填写作者')}><Input value={draft.author} onInput={(event) => patch({ author: event.detail.value })} /></Field><Field label='ISBN'><Input value={draft.isbn} onInput={(event) => patch({ isbn: event.detail.value })} /></Field><Field label='课程 / 分类' required><Picker mode='selector' range={categories} onChange={(event) => patch({ category: categories[Number(event.detail.value)] })}><View className='select-control'>{draft.category}</View></Picker></Field><Field label='成色' required><Picker mode='selector' range={conditions} onChange={(event) => patch({ condition: conditions[Number(event.detail.value)] })}><View className='select-control'>{draft.condition}</View></Picker></Field><Field label='价格' required error={errors.includes('请填写价格')}><Input id='e2e-publish-price' type='number' value={draft.price} onInput={(event) => patch({ price: event.detail.value })} placeholder='¥ 0.00' /></Field><Field label='校区' required><Picker mode='selector' range={campuses} onChange={(event) => patch({ campus: campuses[Number(event.detail.value)] })}><View className='select-control'>{draft.campus}</View></Picker></Field></View><Field label='商品简介' required error={errors.includes('请填写商品简介')}><Textarea value={draft.description} onInput={(event) => patch({ description: event.detail.value })} maxlength={300} /></Field><View className='tag-picker'><Text>添加标签</Text>{['考研必备', '期末复习', '笔记少', '教材'].map((tag) => <Button className={draft.tags.includes(tag) ? 'active' : ''} onClick={() => patch({ tags: draft.tags.includes(tag) ? draft.tags.filter((value) => value !== tag) : [...draft.tags, tag] })} key={tag}>{tag}</Button>)}</View>{errors.length > 0 && <View className='form-error'>! {errors.join('、')}</View>}</View>}
-    {step === 3 && <View className='publish-preview'><Text className='eyebrow'>发布前最后确认</Text><View className='preview-listing'><BookCover listing={{ id: 'preview', title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, price: Number(draft.price || 0), originalPrice: Number(draft.originalPrice || draft.price || 0), condition: draft.condition, campus: draft.campus, description: draft.description, status: 'available', sellerId: seller?.id || '', seller, createdAt: '', tags: draft.tags, tone: 'sage', mediaIds: draft.mediaIds }} /></View>{seller && <View className='preview-owner'><Avatar user={seller} size={32} /><Text>由 {seller.name} 发布 · {seller.campus}校区</Text></View>}<View className='safety-note'>◈ 校园认证用户确认发布后将直接上架。</View>{publishing && <View className='publish-progress'><View className='publish-progress-copy'><Text>正在上传并发布</Text><Text>{publishProgress}%</Text></View><Progress percent={publishProgress} strokeWidth={6} activeColor='#6f7956' backgroundColor='#e5dfcf' /></View>}</View>}
+    {step === 3 && <View className='publish-preview'><Text className='eyebrow'>发布前最后确认</Text><View className='preview-listing'><ListingCard listing={previewListing} onTap={() => setStep(2)} ownerView /></View>{seller && <View className='preview-owner'><Avatar user={seller} size={32} /><Text>由 {seller.name} 发布 · {seller.campus}校区</Text></View>}<View className='safety-note'><Glyph name='shield' />请确认图片和描述真实准确，联系方式仅对发起咨询的同学可见。</View>{publishing && <View className='publish-progress'><View className='publish-progress-copy'><Text>正在上传并发布</Text><Text>{publishProgress}%</Text></View><Progress percent={publishProgress} strokeWidth={6} activeColor='#6f7956' backgroundColor='#e5dfcf' /></View>}</View>}
     <View className='publish-actions'>{step === 2 && <Button id='e2e-publish-save' className='secondary-button' disabled={publishing} onClick={save}>保存草稿</Button>}{step > 1 && <Button className='secondary-button' disabled={publishing} onClick={() => setStep(step - 1)}>上一步</Button>}<Button id='e2e-publish-submit' className='primary-button' disabled={publishing} loading={publishing} onClick={step === 3 ? publish : next}>{step === 3 ? (publishing ? `正在发布 ${publishProgress}%` : '发布上架') : '下一步'}</Button></View>
   </AppShell>
 }

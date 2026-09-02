@@ -18,7 +18,7 @@ export default function StartupPage() {
         if (!cached) await prepareAssetBundle((value) => { if (active) setProgress(value) })
         const onboarded = await demoRepository.isOnboardingComplete()
         if (!active) return
-        if (onboarded) await Taro.switchTab({ url: '/pages/home/index' })
+        if (onboarded) await Taro.reLaunch({ url: '/pages/home/index' })
         else await Taro.reLaunch({ url: '/pages/welcome/index' })
       } catch {
         if (!active) return

@@ -9,6 +9,7 @@ import prodConfig from './prod'
 const assetPerformanceBudget = 384 * 1024
 const h5EntrypointPerformanceBudget = 400 * 1024
 const miniEntrypointPerformanceBudget = 640 * 1024
+const productionApiUrl = 'https://store.young581.com/api/v1'
 const productionBitLoginUrl = 'https://store.young581.com/bit-login'
 
 function readEnvironmentFile(file: string): Record<string, string> {
@@ -42,7 +43,10 @@ export default defineConfig<'webpack5'>(async (merge) => {
     cache: { enable: true },
     defineConstants: {
       __BITERSTORE_E2E__: JSON.stringify(isE2E),
-      __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || '').replace(/\/$/, '')),
+      // H5 keeps its same-origin /api/v1 proxy. Production WeApp cannot use a
+      // relative URL, so it defaults to the deployed HTTPS API unless a local
+      // developer explicitly overrides it in the ignored environment file.
+      __API_URL__: JSON.stringify(isE2E ? '' : (environment.BITERSTORE_API_URL || (isWeapp ? productionApiUrl : '')).replace(/\/$/, '')),
       __BIT_LOGIN_URL__: JSON.stringify((environment.BIT_LOGIN_URL || productionBitLoginUrl).replace(/\/$/, ''))
     },
     copy: {
@@ -72,7 +76,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
           '/pages/home/index': '/home', '/pages/search/index': ['/search', '/category'],
           '/pages/listing/detail': '/books', '/pages/publish/index': '/publish',
           '/pages/messages/index': '/messages', '/pages/notification/detail': '/notifications', '/pages/chat/index': '/chat',
-          '/pages/profile/index': '/profile', '/pages/favorites/index': '/favorites',
+          '/pages/profile/index': '/profile', '/pages/profile/edit': '/profile/edit', '/pages/favorites/index': '/favorites',
           '/pages/my-listings/index': '/my-listings', '/pages/states/index': '/states'
         }
       },
