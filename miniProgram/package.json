@@ -4,7 +4,7 @@
   "private": true,
   "description": "BITerStore Taro dual-platform demo client",
   "engines": {
-    "node": "22.13.x"
+    "node": ">=22.13.0 <23"
   },
   "scripts": {
     "dev:weapp": "npm run clean:weapp && taro build --type weapp --watch",
@@ -13,6 +13,7 @@
     "build:weapp": "npm run clean:weapp && npm run assets:verify-weapp && taro build --type weapp && node scripts/sync-weapp-project-config.mjs && npm run package:verify-weapp",
     "build:weapp:e2e": "npm run clean:weapp && npm run assets:verify-weapp && set \"BITERSTORE_E2E=1\" && taro build --type weapp && node scripts/sync-weapp-project-config.mjs && npm run package:verify-weapp",
     "build:h5": "taro build --type h5",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
     "qa:h5:performance": "npm run build:h5 && node scripts/h5-performance.mjs",
     "qa:h5:visual": "npm run build:h5 && node scripts/h5-visual.mjs",
     "assets:tabbar": "node scripts/generate-tab-icons.mjs",
@@ -63,8 +64,29 @@
     "react-refresh": "0.14.2",
     "tsconfig-paths-webpack-plugin": "4.2.0",
     "typescript": "5.4.5",
-    "vitest": "0.34.6",
+    "vitest": "4.1.11",
     "webpack": "5.91.0"
+  },
+  "overrides": {
+    "swiper": "12.1.2",
+    "lodash-es": "4.18.1",
+    "postcss": "8.5.23",
+    "minimatch": "9.0.7",
+    "jpeg-js": "0.4.4",
+    "minimist": "0.2.4",
+    "phin": "3.7.1",
+    "glob": "13.0.6",
+    "http-cache-semantics": "4.1.1",
+    "got": "11.8.5",
+    "qs": "6.16.0",
+    "adm-zip": "0.6.0",
+    "decode-uri-component": "0.5.0",
+    "esbuild@<=0.24.2": "0.25.0",
+    "less": "4.9.0",
+    "serialize-javascript": "7.1.1",
+    "uuid": "11.1.1",
+    "vite": "8.2.2",
+    "webpack-dev-server": "5.2.6"
   },
   "browserslist": [
     "defaults and fully supports es6-module"
