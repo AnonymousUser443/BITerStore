@@ -6,7 +6,7 @@ import type { BitLoginChallenge } from '@/domain/bit-login'
 
 export const STORAGE_NAMESPACE = 'biterstore:taro:v1'
 const keyOf = (key: string) => `${STORAGE_NAMESPACE}:${key}`
-export interface StorageAdapter { peek<T>(key: string, fallback: T): T; get<T>(key: string, fallback: T): Promise<T>; set<T>(key: string, value: T): Promise<void>; remove(key: string): Promise<void>; clearNamespace(): Promise<void> }
+export interface StorageAdapter { peek<T>(key: string, fallback: T): T; get<T>(key: string, fallback: T): Promise<T>; set<T>(key: string, value: T): Promise<void>; remove(key: string): Promise<void>; clearNamespace(): Promise<void>; clearAccountNamespace(userId?: string): Promise<void> }
 export const storageAdapter: StorageAdapter = {
   peek(key, fallback) {
     try {
@@ -25,6 +25,23 @@ export const storageAdapter: StorageAdapter = {
   async clearNamespace() {
     const info = Taro.getStorageInfoSync() as unknown as { keys: string[] }
     info.keys.filter((key) => key.startsWith(`${STORAGE_NAMESPACE}:`)).forEach((key) => Taro.removeStorageSync(key))
+  },
+  async clearAccountNamespace(userId) {
+    const account = userId?.trim() || 'anonymous'
+    const namespace = `${STORAGE_NAMESPACE}:`
+    const draft = `${namespace}api-draft:${account}`
+    const legacyDraft = `${namespace}api-draft`
+    const snapshotPrefix = `${namespace}api-snapshot:`
+    const sessionKey = `${namespace}api-session`
+    const guestKey = `${namespace}guest-mode`
+    const info = Taro.getStorageInfoSync() as unknown as { keys: string[] }
+    info.keys.filter((key) => {
+      if (key === draft || key === legacyDraft || key === sessionKey || key === guestKey) return true
+      if (!key.startsWith(snapshotPrefix)) return false
+      const remainder = key.slice(snapshotPrefix.length)
+      const separator = remainder.indexOf(':')
+      return separator >= 0 && remainder.slice(separator + 1).split(':')[0] === account
+    }).forEach((key) => { try { Taro.removeStorageSync(key) } catch { /* continue clearing the remaining account keys */ } })
   }
 }
 
@@ -133,11 +150,27 @@ export const externalNavigationAdapter = {
   }
 }
 
-const MEDIA_KEY = 'media'
-const MEDIA_DB = 'biterstore-taro-media-v1'
+let mediaOwnerId = 'anonymous'
+let mediaOwnerInitialized = false
+const legacyMediaDatabaseName = 'biterstore-taro-media-v1'
+const mediaStorageKey = () => `media:${mediaOwnerId}`
+const mediaDatabaseName = () => `biterstore-taro-media-v1:${mediaOwnerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+function initializeMediaOwner() {
+  if (mediaOwnerInitialized) return
+  try {
+    const stored = Taro.getStorageSync(keyOf('api-session')) as { user?: { id?: unknown } } | '' | undefined
+    const id = typeof stored === 'object' && stored?.user && typeof stored.user.id === 'string' ? stored.user.id.trim() : ''
+    mediaOwnerId = id || 'anonymous'
+  } catch {
+    mediaOwnerId = 'anonymous'
+  }
+  mediaOwnerInitialized = true
+}
+initializeMediaOwner()
+export function setMediaOwner(userId?: string) { mediaOwnerId = userId?.trim() || 'anonymous'; mediaOwnerInitialized = true }
 function openMediaDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = globalThis.indexedDB.open(MEDIA_DB, 1)
+    const request = globalThis.indexedDB.open(mediaDatabaseName(), 1)
     request.onupgradeneeded = () => request.result.createObjectStore('files', { keyPath: 'id' })
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -155,12 +188,19 @@ async function removeH5Media(ids: string[]) {
   await new Promise<void>((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); ids.forEach((id) => tx.objectStore('files').delete(id)); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
   db.close()
 }
+async function deleteH5MediaDatabase(name: string) {
+  if (typeof globalThis.indexedDB === 'undefined') return
+  await new Promise<void>((resolve) => {
+    const request = globalThis.indexedDB.deleteDatabase(name)
+    request.onsuccess = request.onerror = request.onblocked = () => resolve()
+  })
+}
 async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
   const db = await openMediaDb()
   const resolved = await Promise.all(items.map((item) => new Promise<StoredMedia>((resolve) => { if (!item.uri.startsWith('idb:')) return resolve(item); const request = db.transaction('files').objectStore('files').get(item.id); request.onsuccess = () => resolve(request.result?.blob ? { ...item, uri: globalThis.URL.createObjectURL(request.result.blob) } : item); request.onerror = () => resolve(item) })))
   db.close(); return resolved
 }
-export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]> }
+export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]>; clear(): Promise<void> }
 export const mediaAdapter: MediaAdapter = {
   async pick(options = {}) {
     if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: bundledAsset('tobby-guide-publish'), mime: process.env.TARO_ENV === 'weapp' ? 'image/png' : 'image/webp', size: 1024 }]
@@ -178,18 +218,33 @@ export const mediaAdapter: MediaAdapter = {
           const saved = await Taro.saveFile({ tempFilePath: item.uri }) as { savedFilePath: string }; persisted.push({ ...item, uri: saved.savedFilePath })
         } else persisted.push(item)
       }
-      const existing = await storageAdapter.get<StoredMedia[]>(MEDIA_KEY, [])
-      await storageAdapter.set(MEDIA_KEY, [...existing.filter((x) => !persisted.some((p) => p.id === x.id)), ...persisted])
+      const key = mediaStorageKey()
+      const existing = await storageAdapter.get<StoredMedia[]>(key, [])
+      await storageAdapter.set(key, [...existing.filter((x) => !persisted.some((p) => p.id === x.id)), ...persisted])
       return persisted
     } catch (cause) { throw new AppError('MEDIA_PERSIST', '保存图片失败', cause) }
   },
   async remove(ids) {
-    const existing = await storageAdapter.get<StoredMedia[]>(MEDIA_KEY, [])
+    const existing = await storageAdapter.get<StoredMedia[]>(mediaStorageKey(), [])
     if (process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined') await removeH5Media(ids)
     if (process.env.TARO_ENV === 'weapp') await Promise.all(existing.filter((item) => ids.includes(item.id) && !item.uri.startsWith('/assets/')).map((item) => Taro.removeSavedFile({ filePath: item.uri }).catch(() => undefined)))
-    await storageAdapter.set(MEDIA_KEY, existing.filter((item) => !ids.includes(item.id)))
+    await storageAdapter.set(mediaStorageKey(), existing.filter((item) => !ids.includes(item.id)))
   },
-  async list() { const items = await storageAdapter.get<StoredMedia[]>(MEDIA_KEY, []); return process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined' ? listH5Media(items) : items }
+  async list() { const items = await storageAdapter.get<StoredMedia[]>(mediaStorageKey(), []); return process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined' ? listH5Media(items) : items },
+  async clear() {
+    const existing = await storageAdapter.get<StoredMedia[]>(mediaStorageKey(), [])
+    if (process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined') {
+      await deleteH5MediaDatabase(mediaDatabaseName())
+      // Remove the shared database created by pre-isolation builds. It has no
+      // reliable account owner, so retaining it would leave private media on
+      // the device after logout or account switching.
+      await deleteH5MediaDatabase(legacyMediaDatabaseName)
+    }
+    if (process.env.TARO_ENV === 'weapp') await Promise.all(existing.filter((item) => !item.uri.startsWith('/assets/')).map((item) => Taro.removeSavedFile({ filePath: item.uri }).catch(() => undefined)))
+    await storageAdapter.remove(mediaStorageKey())
+    // Remove the pre-isolation key left by older builds as well.
+    await storageAdapter.remove('media')
+  }
 }
 
 export const avatarAdapter = {
@@ -215,12 +270,12 @@ export const avatarAdapter = {
 }
 
 export const uploadAdapter = {
-  async put(url: string, item: StoredMedia, accessToken?: string, onProgress?: (progress: number) => void) {
+  async put(url: string, item: StoredMedia, accessToken?: string, onProgress?: (progress: number) => void, withCredentials = false) {
     let data: ArrayBuffer
     if (process.env.TARO_ENV === 'h5') data = await fetch(item.uri).then((response) => response.arrayBuffer())
     else data = await new Promise<ArrayBuffer>((resolve, reject) => Taro.getFileSystemManager().readFile({ filePath: item.uri, success: (result) => resolve(result.data as ArrayBuffer), fail: reject }))
     onProgress?.(0.05)
-    const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime, ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) } })
+    const response = await Taro.request({ url, method: 'PUT', data, header: { 'Content-Type': item.mime, ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }, ...(process.env.TARO_ENV === 'h5' && withCredentials ? { credentials: 'include' as const } : {}) })
     if (response.statusCode < 200 || response.statusCode >= 300) throw new AppError('MEDIA_PERSIST', `图片上传失败（${response.statusCode}）`)
     onProgress?.(1)
   }

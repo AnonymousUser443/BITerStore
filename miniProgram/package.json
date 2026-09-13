@@ -79,14 +79,15 @@
     "http-cache-semantics": "4.1.1",
     "got": "11.8.5",
     "qs": "6.16.0",
-    "adm-zip": "0.6.0",
+    "adm-zip": "0.6.1",
     "decode-uri-component": "0.5.0",
     "esbuild@<=0.24.2": "0.25.0",
     "less": "4.9.0",
     "serialize-javascript": "7.1.1",
     "uuid": "11.1.1",
     "vite": "8.2.2",
-    "webpack-dev-server": "5.2.6"
+    "webpack-dev-server": "5.2.6",
+    "js-yaml": "4.3.2"
   },
   "browserslist": [
     "defaults and fully supports es6-module"

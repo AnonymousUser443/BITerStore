@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common'
-import { AuthGuard, CurrentUser, VerifiedGuard, type AuthUser } from '../../common/auth.js'
+import { assertNotMuted, AuthGuard, CurrentUser, VerifiedGuard, type AuthUser } from '../../common/auth.js'
+import { ImageValidationError, inspectImage } from '../../common/image-validation.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 @Controller('me') @UseGuards(AuthGuard)
 export class UsersController {
@@ -16,6 +17,7 @@ export class UsersController {
   @Post('feedback')
   @UseGuards(VerifiedGuard)
   submitFeedback(@CurrentUser() user: AuthUser, @Body() body: { type?: string; content?: string; platform?: string }) {
+    assertNotMuted(user)
     const type = body.type?.trim().toUpperCase()
     const content = body.content?.trim() || ''
     if (!type || !['BUG', 'SUGGESTION'].includes(type)) throw new BadRequestException('请选择提交 Bug 或提交建议')
@@ -30,7 +32,16 @@ export class UsersController {
     if (body.campus !== undefined && body.campus !== null && !['中关村', '良乡', '西山', '珠海'].includes(body.campus)) throw new BadRequestException('校区选项无效')
     if (body.bio !== undefined && body.bio.length > 160) throw new BadRequestException('个人简介不能超过 160 个字符')
     if (body.avatarUrl !== undefined && body.avatarUrl !== null && body.avatarUrl !== '') {
-      const isInlineImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.avatarUrl) && body.avatarUrl.length <= 350_000
+      const inlineMatch = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/i.exec(body.avatarUrl)
+      let isInlineImage = false
+      if (inlineMatch && body.avatarUrl.length <= 350_000) {
+        try {
+          inspectImage(Buffer.from(inlineMatch[2], 'base64'), inlineMatch[1])
+          isInlineImage = true
+        } catch (cause) {
+          if (!(cause instanceof ImageValidationError)) throw cause
+        }
+      }
       const isHttpsImage = body.avatarUrl.length <= 2048 && /^https:\/\//i.test(body.avatarUrl)
       if (!isInlineImage && !isHttpsImage) throw new BadRequestException('头像必须是有效的 JPEG、PNG 或 WebP 图片')
     }
@@ -45,5 +56,13 @@ export class UsersController {
     })
     return this.profile(user.id)
   }
-  @Delete() async remove(@CurrentUser() user: AuthUser) { await this.prisma.$transaction([this.prisma.session.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } }), this.prisma.user.update({ where: { id: user.id }, data: { status: 'DELETED', nickname: '已注销用户', avatarUrl: null, bio: '', deletedAt: new Date() } })]); return { ok: true } }
+  @Delete() async remove(@CurrentUser() user: AuthUser) {
+    const now = new Date()
+    await this.prisma.$transaction([
+      this.prisma.session.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: now } }),
+      this.prisma.listing.updateMany({ where: { sellerId: user.id, deletedAt: null }, data: { status: 'OFF_SHELF', deletedAt: now, version: { increment: 1 } } }),
+      this.prisma.user.update({ where: { id: user.id }, data: { status: 'DELETED', nickname: '已注销用户', avatarUrl: null, bio: '', deletedAt: now } })
+    ])
+    return { ok: true }
+  }
 }

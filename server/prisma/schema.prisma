@@ -261,6 +261,10 @@ model Report {
   updatedAt DateTime @updatedAt
   reporter User @relation("Reporter", fields: [reporterId], references: [id])
   @@index([status, createdAt])
+  @@index([reporterId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  // One reporter can keep only one report for a target; repeated submissions are idempotent.
+  @@unique([reporterId, targetType, targetId])
 }
 
 model Block {

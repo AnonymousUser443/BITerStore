@@ -7,14 +7,25 @@ import {
   UnauthorizedException
 } from '@nestjs/common'
 import { createHash, randomBytes } from 'node:crypto'
-import { signAccessToken, type AuthUser } from '../../common/auth.js'
+import { effectiveCampusStatus, signAccessToken, verifyAccessToken, type AuthUser } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
 import { IdentityService } from '../identity/identity.service.js'
 
-const hash = (value: string) => createHash('sha256').update(value).digest('hex')
+export const hashRefreshToken = (value: string) => createHash('sha256').update(value).digest('hex')
 
-type SessionUser = AuthUser & { status?: string }
+type SessionUser = AuthUser & {
+  status?: string
+  campusIdentities?: Array<{ expiresAt: Date | null; revokedAt: Date | null }>
+}
+
+const authUserInclude = {
+  user: {
+    include: {
+      campusIdentities: { orderBy: { verifiedAt: 'desc' as const }, take: 1, select: { expiresAt: true, revokedAt: true } }
+    }
+  }
+} as const
 
 @Injectable()
 export class AuthService {
@@ -51,13 +62,14 @@ export class AuthService {
     const appId = process.env.WECHAT_MINI_APP_ID || 'dev-mini-program'
     let account = await this.prisma.wechatAccount.findUnique({
       where: { appId_openid: { appId, openid: identity.openid } },
-      include: { user: true }
+      include: authUserInclude
     })
     if (!account && identity.unionid) {
-      account = await this.prisma.wechatAccount.findFirst({ where: { unionid: identity.unionid }, include: { user: true } })
+      account = await this.prisma.wechatAccount.findFirst({ where: { unionid: identity.unionid }, include: authUserInclude })
     }
     if (!account) throw new ConflictException('该微信尚未绑定，请先使用学号登录后在“我的”中绑定微信')
     if (account.user.campusStatus !== 'VERIFIED') throw new ConflictException('该微信尚未绑定已认证学号，请先使用学号登录后重新绑定')
+    if (effectiveCampusStatus(account.user) !== 'VERIFIED') throw new ConflictException('campus identity is not verified')
     await this.prisma.wechatAccount.update({
       where: { id: account.id },
       data: { lastLoginAt: new Date(), unionid: identity.unionid || account.unionid }
@@ -99,7 +111,9 @@ export class AuthService {
   async startWebLogin() {
     await this.redis.ensureConnected()
     const state = randomBytes(24).toString('base64url')
-    await this.redis.client.setex(`web-login:${state}`, 300, JSON.stringify({ status: 'PENDING' }))
+    // Keep the pending marker as a scalar so the callback claim can compare it
+    // atomically without parsing JSON inside Redis Lua.
+    await this.redis.client.setex(`web-login:${state}`, 300, 'PENDING')
     const appid = process.env.WECHAT_WEB_APP_ID || ''
     const redirect = process.env.WECHAT_WEB_REDIRECT_URI || ''
     const authorizeUrl = appid && redirect
@@ -110,76 +124,117 @@ export class AuthService {
 
   async webStatus(state: string) {
     await this.redis.ensureConnected()
-    const raw = await this.redis.client.get(`web-login:${state}`)
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(state)) throw new BadRequestException('登录请求不存在或已过期')
+    const key = `web-login:${state}`
+    const raw = await this.redis.client.get(key)
     if (!raw) throw new BadRequestException('登录请求不存在或已过期')
-    return JSON.parse(raw)
+    let parsed: { status?: string }
+    try {
+      parsed = raw === 'PENDING' ? { status: 'PENDING' } : JSON.parse(raw) as { status?: string }
+    } catch {
+      throw new BadRequestException('登录请求不存在或已过期')
+    }
+    if (parsed.status !== 'AUTHENTICATED') return parsed
+    // A completed browser login is a one-time exchange. Redis GETDEL is
+    // atomic, so two polling tabs cannot both receive the same session.
+    const consumed = typeof this.redis.client.getdel === 'function'
+      ? await this.redis.client.getdel(key)
+      : await this.redis.client.eval("local value = redis.call('GET', KEYS[1]); if value and string.find(value, '\"status\"%s*:%s*\"AUTHENTICATED\"') then redis.call('DEL', KEYS[1]); return value end; return nil", 1, key) as string | null
+    if (!consumed) throw new BadRequestException('登录请求不存在或已使用')
+    return JSON.parse(consumed)
   }
 
   async webCallback(code: string, state: string, device?: string) {
     await this.redis.ensureConnected()
     const key = `web-login:${state}`
-    if (!await this.redis.client.get(key)) throw new BadRequestException('state 无效或已使用')
-    const appid = process.env.WECHAT_WEB_APP_ID || ''
-    const secret = process.env.WECHAT_WEB_APP_SECRET || ''
-    let identity: { openid: string; unionid?: string }
-    if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_AUTH === 'true' && code.startsWith('dev-')) {
-      identity = { openid: code, unionid: code }
-    } else {
-      if (!appid || !secret) throw new BadGatewayException('微信网站登录尚未配置')
-      const url = new URL('https://api.weixin.qq.com/sns/oauth2/access_token')
-      url.search = new URLSearchParams({ appid, secret, code, grant_type: 'authorization_code' }).toString()
-      const body = await fetch(url).then((response) => response.json()) as typeof identity & { errcode?: number }
-      if (!body.openid || body.errcode) throw new UnauthorizedException('微信网页授权失败')
-      identity = body
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(state)) throw new BadRequestException('state 无效或已使用')
+    const claimed = await this.redis.client.eval(
+      "local value = redis.call('GET', KEYS[1]); if value == 'PENDING' or value == '{\"status\":\"PENDING\"}' then redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2]); return 1 else return 0 end",
+      1, key, JSON.stringify({ status: 'PROCESSING' }), 300
+    )
+    if (Number(claimed) !== 1) throw new BadRequestException('state 无效或已使用')
+    try {
+      const appid = process.env.WECHAT_WEB_APP_ID || ''
+      const secret = process.env.WECHAT_WEB_APP_SECRET || ''
+      let identity: { openid: string; unionid?: string }
+      if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_AUTH === 'true' && code.startsWith('dev-')) {
+        identity = { openid: code, unionid: code }
+      } else {
+        if (!appid || !secret) throw new BadGatewayException('微信网站登录尚未配置')
+        const url = new URL('https://api.weixin.qq.com/sns/oauth2/access_token')
+        url.search = new URLSearchParams({ appid, secret, code, grant_type: 'authorization_code' }).toString()
+        const body = await fetch(url).then((response) => response.json()) as typeof identity & { errcode?: number }
+        if (!body.openid || body.errcode) throw new UnauthorizedException('微信网页授权失败')
+        identity = body
+      }
+      const webAppId = appid || 'dev-web'
+      let account = await this.prisma.wechatAccount.findUnique({
+        where: { appId_openid: { appId: webAppId, openid: identity.openid } },
+        include: authUserInclude
+      })
+      if (!account && identity.unionid) {
+        account = await this.prisma.wechatAccount.findFirst({ where: { unionid: identity.unionid }, include: authUserInclude })
+      }
+      if (!account) throw new ConflictException('该微信尚未绑定，请先使用学号登录并绑定微信')
+      if (account.user.campusStatus !== 'VERIFIED') throw new ConflictException('该微信尚未绑定已认证学号，请先使用学号登录后重新绑定')
+      if (effectiveCampusStatus(account.user) !== 'VERIFIED') throw new ConflictException('campus identity is not verified')
+      const tokens = await this.issue(account.user, 'h5', device)
+      await this.redis.client.setex(key, 60, JSON.stringify({ status: 'AUTHENTICATED', ...tokens }))
+      return { status: 'authenticated' }
+    } catch (error) {
+      await this.redis.client.setex(key, 300, 'PENDING').catch(() => undefined)
+      throw error
     }
-    const webAppId = appid || 'dev-web'
-    let account = await this.prisma.wechatAccount.findUnique({
-      where: { appId_openid: { appId: webAppId, openid: identity.openid } },
-      include: { user: true }
-    })
-    if (!account && identity.unionid) {
-      account = await this.prisma.wechatAccount.findFirst({ where: { unionid: identity.unionid }, include: { user: true } })
-    }
-    if (!account) throw new ConflictException('该微信尚未绑定，请先使用学号登录并绑定微信')
-    if (account.user.campusStatus !== 'VERIFIED') throw new ConflictException('该微信尚未绑定已认证学号，请先使用学号登录后重新绑定')
-    const tokens = await this.issue(account.user, 'h5', device)
-    await this.redis.client.setex(key, 60, JSON.stringify({ status: 'AUTHENTICATED', ...tokens }))
-    return { status: 'authenticated' }
   }
 
   private async issue(user: SessionUser, platform: string, device?: string) {
+    const issuedUser = user.campusIdentities ? { ...user, campusStatus: effectiveCampusStatus(user) } : user
     if (user.status && user.status !== 'ACTIVE') throw new ForbiddenException('账号当前不可用')
     const refreshToken = randomBytes(48).toString('base64url')
     const expiresAt = new Date(Date.now() + Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 86400000)
-    await this.prisma.session.create({
+    const session = await this.prisma.session.create({
       data: {
         userId: user.id,
-        refreshTokenHash: hash(refreshToken),
+        refreshTokenHash: hashRefreshToken(refreshToken),
         platform: platform.trim().slice(0, 30) || 'unknown',
         device: device?.trim().slice(0, 60) || null,
         expiresAt
       }
     })
     return {
-      accessToken: await signAccessToken(user),
+      accessToken: await signAccessToken(issuedUser, false, session?.id),
       refreshToken,
       expiresIn: Number(process.env.ACCESS_TOKEN_TTL_SECONDS || 900),
-      user: { id: user.id, role: user.role, campusStatus: user.campusStatus }
+      user: { id: user.id, role: user.role, campusStatus: issuedUser.campusStatus }
     }
   }
 
   async refresh(refreshToken: string) {
-    const session = await this.prisma.session.findUnique({ where: { refreshTokenHash: hash(refreshToken) }, include: { user: true } })
+    const session = await this.prisma.session.findUnique({ where: { refreshTokenHash: hashRefreshToken(refreshToken) }, include: authUserInclude })
     if (!session || session.revokedAt || session.expiresAt <= new Date() || session.user.status !== 'ACTIVE' || session.user.campusStatus !== 'VERIFIED') {
       throw new UnauthorizedException('刷新凭证无效')
     }
-    await this.prisma.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } })
+    if (effectiveCampusStatus(session.user) !== 'VERIFIED') throw new UnauthorizedException('campus identity is not verified')
+    const revoked = await this.prisma.session.updateMany({ where: { id: session.id, revokedAt: null }, data: { revokedAt: new Date() } })
+    if (revoked.count !== 1) throw new UnauthorizedException('刷新凭证已被使用')
     return this.issue(session.user, session.platform, session.device || undefined)
   }
 
-  async logout(refreshToken?: string) {
+  async logout(refreshToken?: string, accessToken?: string) {
+    const now = new Date()
     if (refreshToken) {
-      await this.prisma.session.updateMany({ where: { refreshTokenHash: hash(refreshToken) }, data: { revokedAt: new Date() } })
+      await this.prisma.session.updateMany({ where: { refreshTokenHash: hashRefreshToken(refreshToken) }, data: { revokedAt: now } })
+    }
+    if (accessToken) {
+      try {
+        const { payload } = await verifyAccessToken(accessToken)
+        if (typeof payload.sid === 'string' && typeof payload.sub === 'string') {
+          await this.prisma.session.updateMany({ where: { id: payload.sid, userId: payload.sub, revokedAt: null }, data: { revokedAt: now } })
+        }
+      } catch {
+        // Logout remains idempotent when the access token is already expired
+        // or belongs to an older signing key.
+      }
     }
     return { ok: true }
   }

@@ -15,10 +15,10 @@ export class MediaController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get(':id')
-  @Header('Cache-Control', 'public, max-age=31536000, immutable')
+  @Header('Cache-Control', 'public, max-age=300, must-revalidate')
   async get(@Param('id') id: string) {
     const image = await this.prisma.listingImage.findFirst({
-      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null } }
+      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } }
     })
     if (!image) throw new NotFoundException('图片不存在')
     try {

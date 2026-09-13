@@ -15,6 +15,7 @@
     "seed": "tsx prisma/seed.ts",
     "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
     "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
+    "uploads:cleanup-pending": "node dist/src/maintenance/cleanup-pending-uploads.js",
     "admin:promote": "tsx scripts/promote-admin.ts",
     "admin:reset-totp": "tsx scripts/reset-admin-totp.ts"
   },

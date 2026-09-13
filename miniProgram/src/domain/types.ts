@@ -10,7 +10,7 @@ export interface StoredMedia { id: string; uri: string; mime: string; size: numb
 export interface Listing {
   id: string; title: string; author: string; isbn: string; category: string; course: string;
   price: number; originalPrice: number; condition: Condition; campus: Campus; description: string;
-  status: ListingStatus; sellerId: string; seller?: Seller; createdAt: string; tags: string[]; tone: string; mediaIds: string[]; imageUrls?: string[]
+  status: ListingStatus; sellerId: string; seller?: Seller; createdAt: string; version?: number; tags: string[]; tone: string; mediaIds: string[]; imageUrls?: string[]
 }
 export interface ListingFilters {
   query: string; category: string; campus: Campus | '全部'; condition: Condition | '全部';

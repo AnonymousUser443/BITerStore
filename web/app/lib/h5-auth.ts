@@ -21,6 +21,15 @@ export interface H5Profile extends H5SessionUser {
 
 type H5Session = { expiresIn: number; user: H5SessionUser };
 let refreshSessionPromise: Promise<boolean> | undefined;
+let authExpiryNotified = false;
+
+function notifyAuthExpired() {
+  if (authExpiryNotified || typeof window === 'undefined') return;
+  authExpiryNotified = true;
+  window.dispatchEvent(new CustomEvent('biterstore:auth-expired'));
+}
+
+export function resetH5AuthExpiryNotice() { authExpiryNotified = false; }
 
 function messageOf(body: unknown, fallback: string) {
   if (body && typeof body === 'object' && 'message' in body) {
@@ -55,17 +64,25 @@ function refreshH5Session(): Promise<boolean> {
 export async function h5ApiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   let result = await rawRequest<T>(path, init);
   if (result.response.status === 401 && retry && path !== '/auth/refresh') {
-    if (await refreshH5Session()) result = await rawRequest<T>(path, init);
+    try {
+      if (await refreshH5Session()) result = await rawRequest<T>(path, init);
+      else notifyAuthExpired();
+    } catch {
+      notifyAuthExpired();
+    }
   }
+  if (result.response.status === 401 && path !== '/auth/refresh') notifyAuthExpired();
   if (!result.response.ok) throw new Error(messageOf(result.body, `请求失败（${result.response.status}）`));
   return result.body as T;
 }
 
 export async function loginWithCampusCookie(registrationToken: string): Promise<H5Session> {
-  return h5ApiRequest<H5Session>('/auth/campus', {
+  const session = await h5ApiRequest<H5Session>('/auth/campus', {
     method: 'POST',
     body: JSON.stringify({ registrationToken, platform: 'h5', sessionTransport: 'cookie' }),
   }, false);
+  resetH5AuthExpiryNotice();
+  return session;
 }
 
 export function getH5Profile(): Promise<H5Profile> {

@@ -20,7 +20,7 @@ import {
   type BitLoginChallenge,
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
-import { compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
+import { clearImages, compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
 import type { Book, BookFilters, ChatThread, Condition, FeedbackType, ListingStatus, Notification, PublishDraft, User } from '../lib/types';
 
@@ -50,7 +50,7 @@ const UI_ASSETS = [
 
 const CurrentUserContext = createContext<User | undefined>(undefined);
 function warmAccountSnapshots() { return Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()]); }
-const PROFILE_SNAPSHOT_KEY = 'biterstore:v1:snapshot:profile';
+const PROFILE_SNAPSHOT_PREFIX = 'biterstore:v1:snapshot:profile:';
 const routeScrollPositions = new Map<string, number>();
 const ROUTE_HISTORY_INDEX_KEY = '__biterstoreHistoryIndex';
 let latestRouteHistoryIndex: number | undefined;
@@ -91,12 +91,29 @@ function rememberRouteScroll(locationKey: string) {
   routeScrollPositions.set(locationKey, container?.scrollTop ?? window.scrollY);
 }
 
+function profileSnapshotKey(account = demoRepository.getAuthenticatedSid() || 'anonymous') {
+  return `${PROFILE_SNAPSHOT_PREFIX}${encodeURIComponent(account)}`;
+}
 function readProfileSnapshot(): User | undefined {
-  try { return JSON.parse(window.localStorage.getItem(PROFILE_SNAPSHOT_KEY) || 'null') as User | undefined; } catch { return undefined; }
+  try { return JSON.parse(window.localStorage.getItem(profileSnapshotKey()) || 'null') as User | undefined; } catch { return undefined; }
 }
 function writeProfileSnapshot(profile?: User) {
-  if (profile) window.localStorage.setItem(PROFILE_SNAPSHOT_KEY, JSON.stringify(profile));
-  else window.localStorage.removeItem(PROFILE_SNAPSHOT_KEY);
+  const key = profileSnapshotKey();
+  if (profile) window.localStorage.setItem(key, JSON.stringify(profile));
+  else window.localStorage.removeItem(key);
+}
+function clearProfileSnapshots() {
+  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => Boolean(value) && value.startsWith(PROFILE_SNAPSHOT_PREFIX))) {
+    window.localStorage.removeItem(key);
+  }
+  window.localStorage.removeItem('biterstore:v1:snapshot:profile');
+}
+function clearLocalAccountArtifacts() {
+  clearProfileSnapshots();
+  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => Boolean(value) && (value.startsWith('biterstore:v1:api-draft:') || value === 'biterstore:v1:api-draft'))) {
+    window.localStorage.removeItem(key);
+  }
+  void clearImages().catch(() => undefined);
 }
 
 function profileToUser(profile: H5Profile): User {
@@ -328,6 +345,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
     setLoading(true); setError(''); setPassword('');
     try {
       await logoutH5Session();
+      clearLocalAccountArtifacts();
       demoRepository.markAuthenticated('guest');
       onGuest();
       navigate('/home');
@@ -440,8 +458,15 @@ function BookDetailPage({ id, navigate, notify }: { id: string; navigate: (to: s
     catch (cause) { notify(cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'); }
     finally { setPendingAction(undefined); }
   };
+  const report = async () => {
+    if (!requireAccount('请先使用学号登录后举报商品')) return;
+    try {
+      await demoRepository.reportBook(book.id, '商品信息不当或疑似虚假');
+      notify('举报已提交');
+    } catch (cause) { notify(cause instanceof Error ? cause.message : '举报提交失败'); }
+  };
   const contactLabel = ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系';
-  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span>{book.course.trim() ? <span><BookOpen />{book.course}</span> : null}<span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => notify('举报入口已记录')}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
+  return <AppShell navigate={navigate} title="商品详情" back className="detail-page"><DetailGallery images={displayImages} book={book} unavailable={unavailable} /><section className="detail-card"><div className="detail-title"><div><span className={`status-pill ${book.status}`}>{statusLabel(book.status)}</span><h1>{book.title}</h1><p>{book.author}</p></div><button disabled={pendingAction === 'favorite'} onClick={toggleFavorite} aria-label={ownListing ? '自己的商品不能收藏' : favoriteActive ? '取消收藏' : '收藏'}><Heart fill={favoriteActive ? 'currentColor' : 'none'} /></button></div><div className="detail-price"><strong>¥{formatPrice(book.price)}</strong><span>{book.condition}</span></div><div className="detail-facts"><span><MapPin />{book.campus}校区</span>{book.course.trim() ? <span><BookOpen />{book.course}</span> : null}<span><Info />ISBN {book.isbn}</span></div><div className="description-block"><h2>书籍简介</h2><p>{book.description}</p><div>{book.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div></div></section><section className="seller-card"><Avatar user={seller} size={52} /><div><h3>{seller.name} <ShieldCheck /></h3><p>{seller.campus}校区 · 已完成校园认证</p><span>{seller.responseTime}</span></div><button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{contactLabel}</button></section><div className="safety-note"><ShieldCheck />建议在校内公共场所当面验书，确认书况后再付款。</div><div className="detail-cta"><button onClick={() => void report()}><CircleAlert />举报</button><button className="primary-button" disabled={unavailable || pendingAction === 'contact'} onClick={contact}><MessageCircle />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</button></div></AppShell>;
 }
 
 function DetailGallery({ images, book, unavailable }: { images: string[]; book: Book; unavailable: boolean }) {
@@ -469,7 +494,7 @@ function DetailGallery({ images, book, unavailable }: { images: string[]; book: 
 
 function PublishPage({ navigate, notify }: { navigate: (to: string) => void; notify: (text: string) => void }) {
   const [step, setStep] = useState(1); const [draft, setDraft] = useState<PublishDraft>(() => ({ ...emptyDraft, clientRequestId: newPublishRequestId() })); const [images, setImages] = useState<string[]>([]); const [aiLoading, setAiLoading] = useState(false); const [errors, setErrors] = useState<string[]>([]); const publishingRef = useRef(false); const coverInputRef = useRef<HTMLInputElement>(null); const isbnInputRef = useRef<HTMLInputElement>(null); const extraInputRef = useRef<HTMLInputElement>(null);
-  const [defaultImageStoreKey] = useState(() => `draft-${Date.now()}`);
+  const [defaultImageStoreKey] = useState(() => `draft-${encodeURIComponent(demoRepository.getAuthenticatedSid() || 'anonymous')}-${Date.now()}`);
   useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft({ ...value, clientRequestId: value.clientRequestId || newPublishRequestId() }); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
   const update = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => setDraft((valueDraft) => ({ ...valueDraft, [key]: value }));
   const persistImages = async (next: string[]) => { const key = draft.imageStoreKey ?? defaultImageStoreKey; await saveImages(key, next); setImages(next); setDraft((current) => ({ ...current, imageStoreKey: key })); };
@@ -582,7 +607,7 @@ function ProfilePage({ navigate, notify, currentUser, onProfileUpdated, onLogout
     <div className="profile-reminder"><Image src="/assets/tobby-heart.webp" alt="Tobby 比心提醒" width={760} height={760} /><p><strong>Tobby 提醒：</strong>让闲置继续流动，也会遇见更多书友。</p><button onClick={() => navigate('/category')}>去逛逛 <ChevronRight /></button></div>
     <section className="profile-menu"><h2>书籍管理</h2><MenuButton icon={BookOpen} label="我的发布" detail="在售、已售、草稿与下架" onClick={() => navigate('/my-listings')} /><MenuButton icon={Heart} label="我的收藏" detail="把想看的书放在这里" onClick={() => navigate('/favorites')} /></section>
     <section className="profile-menu"><h2>体验与帮助</h2><MenuButton icon={MessageCircle} label="问题反馈" detail="提交 Bug 或建议，帮助我们改进" onClick={() => navigate('/feedback')} /><MenuButton icon={RefreshCw} label="重新观看新手指引" detail="再次认识搜索、商品卡与发布" onClick={() => navigate('/onboarding')} /></section>
-    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().then(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }).catch(() => notify('退出失败，请检查网络后重试')); }} danger /></section>
+    <section className="profile-menu"><h2>账号与安全</h2><MenuButton icon={ShieldCheck} label="退出登录" detail="清除本机的校园认证状态" onClick={() => { void logoutH5Session().catch(() => notify('服务器退出请求未完成，本机已清理会话')).finally(() => { demoRepository.clearAuthentication(); onLogout(); navigate('/login'); }); }} danger /></section>
   </AppShell>;
 }
 
@@ -728,6 +753,19 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
   }, []);
+  useEffect(() => {
+    const handler = () => {
+      const sid = demoRepository.getAuthenticatedSid();
+      if (!sid || sid === 'guest') return;
+      demoRepository.clearAuthentication();
+      clearLocalAccountArtifacts();
+      setCurrentUser(undefined);
+      setAuthMode('anonymous');
+      if (window.location.pathname !== '/login') navigate('/login');
+    };
+    window.addEventListener('biterstore:auth-expired', handler);
+    return () => window.removeEventListener('biterstore:auth-expired', handler);
+  }, [navigate]);
   useLayoutEffect(() => {
     if (routeTransition !== 'back') return;
     const restoreScroll = () => {
@@ -775,13 +813,23 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
         writeProfileSnapshot(profile);
         setCurrentUser(profile);
         setAuthMode('authenticated');
-      } else if (!demoRepository.getAuthenticatedSid()) { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }
+      } else if (sid && sid !== 'guest') {
+        demoRepository.clearAuthentication();
+        clearLocalAccountArtifacts();
+        setCurrentUser(undefined);
+        setAuthMode('anonymous');
+        if (window.location.pathname !== '/login') navigate('/login');
+      } else if (!sid) {
+        writeProfileSnapshot();
+        setCurrentUser(undefined);
+        setAuthMode('anonymous');
+      }
     });
     return () => { active = false; };
-  }, []);
+  }, [navigate]);
   const notify = useCallback((text: string) => setToast(text), []);
   const updateCurrentUser = useCallback((profile: User) => { setCurrentUser((current) => { const next = preserveSnapshot(current, profile); if (next !== current) writeProfileSnapshot(profile); return next; }); }, []);
-  const clearCurrentUser = useCallback(() => { writeProfileSnapshot(); setCurrentUser(undefined); setAuthMode('anonymous'); }, []);
+  const clearCurrentUser = useCallback(() => { clearLocalAccountArtifacts(); setCurrentUser(undefined); setAuthMode('anonymous'); }, []);
   const toastProgress = Number(toast.match(/正在上传并发布\s+(\d+)%$/)?.[1] || 0);
   if (!assetsReady) return <main className="app-stage"><div className="route-view"><BootScreen progress={assetProgress} /></div></main>;
   const privatePaths = ['/publish', '/messages', '/profile', '/favorites', '/my-listings', '/feedback'];

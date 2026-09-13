@@ -14,7 +14,7 @@ describe('H5 cookie sessions', () => {
   beforeEach(() => {
     process.env.NODE_ENV = 'production'
     process.env.REFRESH_TOKEN_TTL_DAYS = '30'
-    auth = { campus: vi.fn().mockResolvedValue(session), refresh: vi.fn().mockResolvedValue(session), logout: vi.fn().mockResolvedValue({ ok: true }) }
+    auth = { campus: vi.fn().mockResolvedValue(session), refresh: vi.fn().mockResolvedValue(session), logout: vi.fn().mockResolvedValue({ ok: true }), webStatus: vi.fn() }
     controller = new AuthController(auth)
     reply = { setCookie: vi.fn(), clearCookie: vi.fn() }
   })
@@ -26,6 +26,7 @@ describe('H5 cookie sessions', () => {
     expect(result).toEqual({ expiresIn: 900, user: session.user })
     expect(auth.campus).toHaveBeenCalledWith('jwt', 'h5', 'phone')
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ sameSite: 'strict', path: '/api/v1/auth' }))
+    expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_access', expect.objectContaining({ path: '/api/v1' }))
     expect(reply.setCookie).toHaveBeenCalledWith('biterstore_access', 'access-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1' }))
     expect(reply.setCookie).toHaveBeenCalledWith('biterstore_refresh', 'refresh-token', expect.objectContaining({ httpOnly: true, secure: true, sameSite: 'lax', path: '/api/v1', maxAge: 2592000 }))
   })
@@ -46,6 +47,14 @@ describe('H5 cookie sessions', () => {
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_access', expect.objectContaining({ path: '/api/v1' }))
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1/auth' }))
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ path: '/api/v1' }))
+  })
+
+  it('keeps the authenticated marker when web-login polling exchanges for cookies', async () => {
+    auth.webStatus.mockResolvedValue({ status: 'AUTHENTICATED', ...session })
+    const result = await controller.status('state-token', 'cookie', reply)
+    expect(result).toEqual({ status: 'AUTHENTICATED', expiresIn: 900, user: session.user })
+    expect(auth.webStatus).toHaveBeenCalledWith('state-token')
+    expect(reply.setCookie).toHaveBeenCalledTimes(2)
   })
 })
 

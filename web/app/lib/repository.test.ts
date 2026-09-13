@@ -113,6 +113,45 @@ describe('demoRepository persistence', () => {
     }));
   });
 
+  it('uses the protected owner endpoint for inactive listing details and status changes', async () => {
+    demoRepository.markAuthenticated('user-real');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'listing-a', title: '我的下架商品', priceCents: 1200, condition: '八成新', campus: '良乡', status: 'OFF_SHELF', sellerId: 'user-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ version: 4 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(demoRepository.getBook('listing-a')).resolves.toMatchObject({ id: 'listing-a', status: 'offline' });
+    await demoRepository.updateListingStatus('listing-a', 'available');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/v1/listings/mine/listing-a');
+    expect(String(fetchMock.mock.calls[2][0])).toContain('/api/v1/listings/mine/listing-a');
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({ body: JSON.stringify({ status: 'ACTIVE', version: 4 }) });
+  });
+
+  it('scopes the in-memory favorite state to the signed-in account', async () => {
+    demoRepository.markAuthenticated('user-a');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'listing-a', title: '收藏书', priceCents: 1200, condition: '八成新', campus: '良乡', status: 'ACTIVE', sellerId: 'seller-a', createdAt: '2026-08-28T00:00:00.000Z', images: [] }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await demoRepository.listFavorites();
+
+    demoRepository.markAuthenticated('user-b');
+    await expect(demoRepository.toggleFavorite('listing-a')).resolves.toBe(true);
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PUT' });
+  });
+
+  it('submits listing reports through the real API', async () => {
+    demoRepository.markAuthenticated('user-real');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'report-1' }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await demoRepository.reportBook('listing-a', '商品信息不当或疑似虚假');
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/reports', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ targetType: 'LISTING', targetId: 'listing-a', reason: '商品信息不当或疑似虚假' })
+    }));
+  });
+
   it('formats API conversation timestamps for compact message cards', async () => {
     demoRepository.markAuthenticated('user-real');
     vi.useFakeTimers();

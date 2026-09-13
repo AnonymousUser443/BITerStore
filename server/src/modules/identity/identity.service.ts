@@ -51,13 +51,18 @@ export class IdentityService {
     const subject = String(payload.sub).trim()
     const studentNumber = subject.replace(/^dev-/, '')
     if (!/^\d{8,12}$/.test(studentNumber)) throw new BadRequestException('校园认证凭证未包含有效学号')
+    const expiresAt = payload.identity_expires_at !== undefined && payload.identity_expires_at !== null
+      ? new Date(Number(payload.identity_expires_at) * 1000)
+      : null
+    if (payload.identity_expires_at !== undefined && (!expiresAt || Number.isNaN(expiresAt.getTime()))) throw new BadRequestException('campus identity expiry is invalid')
+    if (expiresAt && expiresAt <= new Date()) throw new UnauthorizedException('校园认证身份已过期')
     return {
       provider: process.env.BIT_LOGIN_ISSUER || 'bit-login',
       subjectHash: createHash('sha256').update(subject).digest('hex'),
       studentNumber,
       defaultNickname: `BITer${studentNumber}`.slice(0, 24),
       jti: String(payload.jti),
-      expiresAt: payload.identity_expires_at ? new Date(Number(payload.identity_expires_at) * 1000) : null
+      expiresAt
     }
   }
 
@@ -100,5 +105,15 @@ export class IdentityService {
     })
     return { status: 'VERIFIED', verifiedAt: new Date().toISOString() }
   }
-  async status(userId: string) { const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { campusStatus: true, campusIdentities: { orderBy: { verifiedAt: 'desc' }, take: 1, select: { verifiedAt: true, expiresAt: true } } } }); return { status: user.campusStatus, ...user.campusIdentities[0] } }
+  async status(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { campusStatus: true, campusIdentities: { orderBy: { verifiedAt: 'desc' }, take: 1, select: { verifiedAt: true, expiresAt: true, revokedAt: true } } }
+    })
+    const identity = user.campusIdentities[0]
+    const status = identity?.revokedAt
+      ? 'REVOKED'
+      : identity?.expiresAt && identity.expiresAt <= new Date() ? 'EXPIRED' : user.campusStatus
+    return { status, ...identity }
+  }
 }

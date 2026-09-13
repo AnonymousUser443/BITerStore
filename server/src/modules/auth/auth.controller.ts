@@ -21,7 +21,22 @@ export class AuthController {
   ) { return this.auth.miniProgram(body.code, inferSessionDevice('weapp', body.device, userAgent)) }
   @Post('wechat/mini-program/bind') @UseGuards(AuthGuard) bindMini(@CurrentUser() user: AuthUser, @Body() body: { code: string }) { return this.auth.bindMiniProgram(user.id, body.code) }
   @Post('wechat/web/start') startWeb() { return this.auth.startWebLogin() }
-  @Get('wechat/web/status') status(@Query('state') state: string) { return this.auth.webStatus(state) }
+  @Get('wechat/web/status')
+  async status(
+    @Query('state') state: string,
+    @Query('sessionTransport') sessionTransport: 'body' | 'cookie' | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply
+  ) {
+    const result = await this.auth.webStatus(state)
+    if (sessionTransport === 'cookie' && result.status === 'AUTHENTICATED') {
+      const session = this.presentSession(reply, result as { accessToken: string; refreshToken: string; expiresIn: number; user: { id: string; role: string; campusStatus: string } }, 'cookie')
+      // Keep the state-machine result so H5/Taro polling can stop after the
+      // cookie has been issued. `presentSession` intentionally omits tokens,
+      // but the status marker is safe and required by the polling client.
+      return { status: 'AUTHENTICATED', ...session }
+    }
+    return result
+  }
   @Get('wechat/web/callback') async callback(
     @Query('code') code: string,
     @Query('state') state: string,
@@ -46,7 +61,11 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
-    const result = await this.auth.logout(body.refreshToken || request.cookies?.biterstore_refresh)
+    const refreshToken = body.refreshToken || request.cookies?.biterstore_refresh
+    const accessToken = String(request?.headers?.authorization || '').replace(/^Bearer\s+/i, '') || undefined
+    const result = accessToken
+      ? await this.auth.logout(refreshToken, accessToken)
+      : await this.auth.logout(refreshToken)
     this.clearSessionCookies(reply)
     return result
   }
@@ -62,6 +81,7 @@ export class AuthController {
     // first-party session. Lax blocks cookies on cross-site subrequests while
     // working in embedded browsers and after entry through external links.
     reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'lax', path: '/' })
+    reply.clearCookie('biterstore_access', { httpOnly: true, secure, sameSite: 'lax', path: '/api/v1' })
     reply.clearCookie('biterstore_refresh', { httpOnly: true, secure, sameSite: 'strict', path: '/api/v1/auth' })
     reply.setCookie('biterstore_access', result.accessToken, {
       httpOnly: true, secure, sameSite: 'lax', path: '/api/v1', maxAge: result.expiresIn
