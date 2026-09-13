@@ -24,9 +24,11 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params || {}
+    if (params.expired === '1') setError('登录已失效，请重新登录')
     if (process.env.TARO_ENV !== 'h5') return
     const state = Taro.getStorageSync('biterstore:web-login-state')
-    if (!state || Taro.getCurrentInstance().router?.params.wechat !== 'complete') return
+    if (!state || params.wechat !== 'complete') return
     setLoading(true)
     void pollWebLogin(state)
       .then(() => { void warmAccountSnapshots(); return navigationAdapter.switchTab('/pages/home/index') })

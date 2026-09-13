@@ -7,7 +7,9 @@ export async function requireAccount(message = '登录后才能使用此功能')
   if (session?.user.campusStatus === 'VERIFIED') return true
   if (session) await sessionStore.clear()
   await feedbackAdapter.toast(message)
-  await navigationAdapter.go('/pages/login/index')
+  // The current page may contain private cached data. Reset the navigation
+  // stack after clearing the session so Back cannot reveal it again.
+  await navigationAdapter.switchTab('/pages/login/index')
   return false
 }
 

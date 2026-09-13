@@ -10,13 +10,15 @@ import type { Listing } from '@/domain/types'
 import { feedbackAdapter, mediaAdapter, navigationAdapter } from '@/platform'
 
 export default function ListingDetailPage() {
-  const id = Taro.getCurrentInstance().router?.params.id || 'math-7'
+  const params = Taro.getCurrentInstance().router?.params
+  const id = params?.id || 'math-7'
+  const ownerView = params?.mine === '1'
   const [item, setItem] = useState<Listing | undefined>(() => demoRepository.peekListing(id))
   const [favorite, setFavorite] = useState(false)
   const [localImages, setLocalImages] = useState<string[]>([])
   const [viewerId, setViewerId] = useState<string>()
   const [pendingAction, setPendingAction] = useState<'favorite' | 'contact'>()
-  useEffect(() => { void demoRepository.getListing(id).then(setItem).catch(() => navigationAdapter.go('/pages/states/index?type=not-found')) }, [id])
+  useEffect(() => { void demoRepository.getListing(id, { owner: ownerView }).then(setItem).catch(() => navigationAdapter.go('/pages/states/index?type=not-found')) }, [id, ownerView])
   useEffect(() => { if (item?.imageUrls?.length) return setLocalImages(item.imageUrls); if (item?.mediaIds.length) void mediaAdapter.list().then((media) => setLocalImages(media.filter((value) => item.mediaIds.includes(value.id)).map((value) => value.uri))) }, [item])
   useEffect(() => {
     let active = true

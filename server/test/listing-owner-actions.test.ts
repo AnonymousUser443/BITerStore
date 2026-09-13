@@ -8,6 +8,14 @@ const body = {
 }
 
 describe('listing owner actions', () => {
+  it('returns a non-public listing only to its owner', async () => {
+    const item = { id: 'listing-id', sellerId: 'owner-id', status: 'DRAFT', version: 3 }
+    const prisma = { listing: { findFirst: vi.fn().mockResolvedValue(item) } }
+    const service = new ListingsService(prisma as never)
+    await expect(service.getMine('owner-id', 'listing-id')).resolves.toEqual(item)
+    await expect(service.getMine('other-owner', 'listing-id')).rejects.toMatchObject({ status: 403 })
+  })
+
   it('returns the original listing for a repeated publish request', async () => {
     const existing = { id: 'existing-listing', sellerId: 'owner-id', clientRequestId: body.clientRequestId }
     const prisma = {

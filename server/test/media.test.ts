@@ -26,7 +26,7 @@ describe('public listing media', () => {
     try {
       const result = await new MediaController(prisma as never).get('image-id')
       expect(result.getHeaders()).toMatchObject({ type: 'image/jpeg', length: 11 })
-      expect(prisma.listingImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-id', uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null } } })
+      expect(prisma.listingImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-id', uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } } })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

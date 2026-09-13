@@ -3,8 +3,9 @@ import { h5ApiRequest } from './h5-auth';
 import type { DemoRepository } from './repository';
 import type { Book, BookFilters, ChatThread, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
-const draftKey = 'biterstore:v1:api-draft';
+function draftKey() { return `biterstore:v1:api-draft:${encodeURIComponent(currentUserId() || 'anonymous')}`; }
 const favoriteIds = new Set<string>();
+function favoriteKey(id: string) { return `${currentUserId() || 'anonymous'}:${id}`; }
 
 interface ApiUser {
   id: string;
@@ -175,33 +176,53 @@ export const apiRepository: DemoRepository = {
     else if (filters.sort === '价格从高到低') items.sort((a, b) => b.price - a.price);
     return items;
   },
-  async getBook(id) { try { return book(await h5ApiRequest<ApiListing>(`/listings/${id}`)); } catch { return null; } },
+  async getBook(id) {
+    try { return book(await h5ApiRequest<ApiListing>(`/listings/${id}`)); }
+    catch {
+      // Public details intentionally hide inactive listings. If the signed-in
+      // owner opens one of their own historical listings, use the protected
+      // owner endpoint so the detail page remains reachable after delisting.
+      if (!currentUserId()) return null;
+      try {
+        const ownerListing = await h5ApiRequest<ApiListing>(`/listings/mine/${id}`);
+        if (!ownerListing || ownerListing.id !== id) return null;
+        return book(ownerListing);
+      } catch { return null; }
+    }
+  },
   async toggleFavorite(id) {
-    const enabled = !favoriteIds.has(id);
+    const key = favoriteKey(id);
+    const enabled = !favoriteIds.has(key);
     await h5ApiRequest(`/listings/${id}/favorite`, { method: enabled ? 'PUT' : 'DELETE', body: '{}' });
-    if (enabled) favoriteIds.add(id); else favoriteIds.delete(id);
+    if (enabled) favoriteIds.add(key); else favoriteIds.delete(key);
     return enabled;
   },
   async listFavorites() {
     const items = (await h5ApiRequest<ApiListing[]>('/listings/favorites/mine')).map(book);
-    items.forEach((item) => favoriteIds.add(item.id));
+    const accountPrefix = `${currentUserId() || 'anonymous'}:`;
+    for (const key of [...favoriteIds]) if (key.startsWith(accountPrefix)) favoriteIds.delete(key);
+    items.forEach((item) => favoriteIds.add(favoriteKey(item.id)));
     return items;
   },
-  async saveDraft(draft) { localStorage.setItem(draftKey, JSON.stringify(draft)); },
-  async getDraft() { try { return JSON.parse(localStorage.getItem(draftKey) || 'null') as PublishDraft | null; } catch { return null; } },
+  async reportBook(id, reason) {
+    await h5ApiRequest('/reports', { method: 'POST', body: JSON.stringify({ targetType: 'LISTING', targetId: id, reason }) });
+  },
+  async saveDraft(draft) { localStorage.setItem(draftKey(), JSON.stringify(draft)); },
+  async getDraft() { try { return JSON.parse(localStorage.getItem(draftKey()) || 'null') as PublishDraft | null; } catch { return null; } },
   async publishListing(draft, onProgress) {
     onProgress?.(1);
     const imageIds = await uploadDraftImages(draft, onProgress);
     onProgress?.(94);
     const created = book(await h5ApiRequest<ApiListing>('/listings', { method: 'POST', body: JSON.stringify(draftPayload(draft, imageIds)) }));
-    localStorage.removeItem(draftKey);
+    localStorage.removeItem(draftKey());
     onProgress?.(100);
     return created;
   },
   async updateListingStatus(id, status) {
-    const current = await h5ApiRequest<ApiListing>(`/listings/${id}`);
+    const current = await h5ApiRequest<ApiListing>(`/listings/mine/${id}`);
+    if (!Number.isFinite(Number(current.version))) throw new Error('商品版本信息缺失，请刷新后重试');
     const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : 'ACTIVE';
-    await h5ApiRequest(`/listings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: current.version }) });
+    await h5ApiRequest(`/listings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
   },
   async listMyListings() {
     const result = await h5ApiRequest<{ items: ApiListing[] }>('/listings/mine/all?limit=50');

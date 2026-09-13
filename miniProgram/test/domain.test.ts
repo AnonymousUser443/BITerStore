@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { preserveSnapshot } from '@/domain/snapshot'
 import Taro from '@tarojs/taro'
 import { apiRequest, sessionStore } from '@/domain/api'
+import { loginWithCampus } from '@/domain/auth'
 import { defaultFilters, filterListings } from '@/domain/filters'
 import { seedListings } from '@/domain/seed'
 import { listingAssistant } from '@/domain/assistant'
@@ -28,7 +29,18 @@ describe('domain', () => {
     expect(preserveSnapshot(current, [{ id: 'book-a', title: '线性代数' }])).not.toBe(current)
   })
 
+  it('uses the owner listing endpoint for private listing status changes', async () => {
+    await sessionStore.set({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'owner-a', role: 'USER', campusStatus: 'VERIFIED' } })
+    vi.mocked(Taro.request)
+      .mockResolvedValueOnce({ statusCode: 200, data: { version: 7 } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: { ok: true } } as never)
+    await apiRepository.updateListingStatus('draft-a', 'available')
+    expect(vi.mocked(Taro.request).mock.calls[0]?.[0]).toMatchObject({ url: 'http://api.test/listings/mine/draft-a' })
+    expect(vi.mocked(Taro.request).mock.calls[1]?.[0]).toMatchObject({ url: 'http://api.test/listings/draft-a/status', data: { status: 'ACTIVE', version: 7 } })
+  })
+
   beforeEach(async () => {
+    vi.unstubAllEnvs()
     memory.clear()
     vi.stubGlobal('__API_URL__', 'http://api.test')
     vi.mocked(Taro.request).mockReset().mockResolvedValue({ statusCode: 200, data: { ok: true } } as never)
@@ -40,6 +52,31 @@ describe('domain', () => {
     await sessionStore.set(session)
     await apiRequest('/me')
     expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ header: expect.objectContaining({ Authorization: 'Bearer access-now' }) }))
+  })
+  it('H5 校园登录仅保存非敏感会话元数据并使用 HttpOnly Cookie', async () => {
+    vi.stubEnv('TARO_ENV', 'h5')
+    const cookieSession = { expiresIn: 900, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: cookieSession } as never)
+    await expect(loginWithCampus('registration-jwt')).resolves.toMatchObject(cookieSession)
+    expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://api.test/auth/campus', credentials: 'include',
+      data: { registrationToken: 'registration-jwt', platform: 'h5', sessionTransport: 'cookie' },
+      header: { 'Content-Type': 'application/json' }
+    }))
+    expect(await sessionStore.get()).toMatchObject({ transport: 'cookie', user: { id: 'user-a' } })
+    expect((await sessionStore.get())?.accessToken).toBeUndefined()
+    expect((await sessionStore.get())?.refreshToken).toBeUndefined()
+  })
+  it('H5 Cookie 刷新失败时清理会话、草稿和账号快照', async () => {
+    vi.stubEnv('TARO_ENV', 'h5')
+    const session = { expiresIn: 3600, transport: 'cookie' as const, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    memory.set('biterstore:taro:v1:api-draft:user-a', { title: '私有草稿' })
+    memory.set('biterstore:taro:v1:api-snapshot:profile:user-a', { name: '同学 A' })
+    vi.mocked(Taro.request).mockResolvedValue({ statusCode: 401, data: { message: '登录已失效' } } as never)
+    await expect(apiRequest('/me')).rejects.toThrow('登录已失效')
+    expect(await sessionStore.get()).toBeNull()
+    expect([...memory.keys()].filter((key) => key.startsWith('biterstore:taro:v1:'))).toEqual([])
   })
   it('访问令牌失效时并发请求只刷新一次并使用新令牌重试', async () => {
     const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }

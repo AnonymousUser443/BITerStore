@@ -10,7 +10,10 @@ const npmCliPath = process.env.npm_execpath
 if (!npmCliPath) {
   throw new Error('请通过 npm run audit:dependencies 执行依赖审计')
 }
-const audit = spawnSync(process.execPath, [npmCliPath, 'audit', '--json'], {
+if (process.env.npm_config_offline === 'true' || process.env.npm_config_offline === '1') {
+  throw new Error('依赖安全审计必须访问 npm registry；离线缓存结果不能作为在线审计证据')
+}
+const audit = spawnSync(process.execPath, [npmCliPath, 'audit', '--json', '--prefer-online'], {
   cwd: path.join(scriptDirectory, '..'),
   encoding: 'utf8',
   maxBuffer: 20 * 1024 * 1024,

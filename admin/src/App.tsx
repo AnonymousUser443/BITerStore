@@ -260,7 +260,8 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
     setQuery({})
   }
 
-  function logout() {
+  async function logout() {
+    try { await apiRequest('/auth/logout', { method: 'POST', body: '{}' }) } catch { /* local logout still clears the elevated token */ }
     sessionStorage.removeItem(ADMIN_TOKEN_KEY)
     onSessionExpired()
   }

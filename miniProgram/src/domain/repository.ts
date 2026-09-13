@@ -9,7 +9,7 @@ const KEYS = { listings: 'listings', favorites: 'favorites', threads: 'threads',
 let filterCache: ListingFilters | undefined
 let listingCache: Listing[] = seedListings
 export interface DemoRepository {
-  listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string): Promise<Listing>; peekListing(id: string): Listing | undefined;
+  listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string, options?: { owner?: boolean }): Promise<Listing>; peekListing(id: string): Listing | undefined;
   toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>; peekFavorites(): Listing[] | undefined;
   reportListing(id: string, reason: string): Promise<void>;
   saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
