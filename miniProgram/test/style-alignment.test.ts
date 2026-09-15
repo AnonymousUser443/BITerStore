@@ -80,7 +80,7 @@ describe('Golden Reference style alignment', () => {
     const css = read('src/golden.css')
     expect(ui).toContain('listing.imageUrls?.[0]')
     expect(ui).toContain("className='book-cover-image'")
-    expect(ui).toContain('BITerStore 校园藏书')
+    expect(ui).toContain('梨苑儿校园藏书')
     expect(css).toContain('.book-cover-image { width: 100%; height: 100%; display: block; object-fit: cover; }')
   })
 

@@ -146,7 +146,7 @@ function AccessGate({ onAuthenticated }: { onAuthenticated: (user: AdminIdentity
   return <main className="access-page">
     <section className="access-card">
       <div className="brand-mark"><ShieldCheck size={28} /></div>
-      <p className="eyebrow">BITerStore · Governance</p>
+      <p className="eyebrow">梨苑儿 · 平台治理</p>
       <h1>校园二手书治理后台</h1>
       {stage === 'checking' && <div className="access-message"><span className="spinner" />正在检查管理员会话…</div>}
 
@@ -288,7 +288,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
   const current = navigation.find((item) => item.key === view)!
   return <div className="admin-shell">
     <aside className="sidebar">
-      <div className="sidebar-brand"><div className="brand-mark small"><ShieldCheck size={21} /></div><div><strong>BITerStore</strong><span>平台治理中心</span></div></div>
+      <div className="sidebar-brand"><div className="brand-mark small"><ShieldCheck size={21} /></div><div><strong>梨苑儿</strong><span>平台治理中心</span></div></div>
       <nav>{navigation.map(({ key, label, hint, icon: Icon }) => <button key={key} className={view === key ? 'active' : ''} onClick={() => changeView(key)}><Icon size={19} /><span><strong>{label}</strong><small>{hint}</small></span></button>)}</nav>
       <div className="operator"><span className="avatar">{identity.nickname.slice(0, 1)}</span><div><strong>{identity.nickname}</strong><small>{labels[identity.role]}</small></div><button title="退出后台" onClick={logout}><LogOut size={18} /></button></div>
     </aside>

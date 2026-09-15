@@ -1,4 +1,4 @@
-# BITerStore 开发进度
+# 梨苑儿（BITerStore）开发进度
 
 最后更新：2026-09-03
 
@@ -133,7 +133,7 @@
 - [ ] 冻结 MVP 范围、数据字典、商品状态机、验收指标与团队负责人
 - [x] 完成 Taro React 迁移成本验证并正式重启双端迁移；旧 H5 保留为 Golden Reference
 - [ ] 部署加固后的 BIT-Login 专用实例，只开放认证路由并收紧 CORS、网关与限流
-- [ ] 完成一次不写业务数据库的 challenge → registration JWT → BITerStore 后端验签技术验证
+- [ ] 完成一次不写业务数据库的 challenge → registration JWT → 梨苑儿后端验签技术验证
 - [ ] 完成原 H5 在 360–430px 真机上的视觉、分享、图片选择和返回栈验收
 - [ ] 部署原 H5 到正式 HTTPS 域名；若仍需微信小程序入口，再评估合规的 `web-view` 壳与业务域名配置
 

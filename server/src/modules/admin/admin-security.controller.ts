@@ -63,7 +63,9 @@ export class AdminSecurityController {
     if (record.adminTotpEnabled) throw new BadRequestException('动态验证码已启用，如需重置请由服务器管理员执行安全重置')
     const secret = createTotpSecret()
     await this.prisma.user.update({ where: { id: user.id }, data: { adminTotpSecret: encryptTotp(secret), adminTotpEnabled: false } })
-    return { secret, otpauthUrl: `otpauth://totp/BITerStore:${user.id}?secret=${secret}&issuer=BITerStore` }
+    const issuer = '梨苑儿'
+    const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(user.id)}`
+    return { secret, otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}` }
   }
 
   @Post('totp/enable')

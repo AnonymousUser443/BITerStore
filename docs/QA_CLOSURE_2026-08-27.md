@@ -1,4 +1,4 @@
-# BITerStore 双端前端 QA 收尾记录
+# 梨苑儿（BITerStore）双端前端 QA 收尾记录
 
 日期：2026-08-27
 

@@ -36,7 +36,7 @@ export default defineConfig<'webpack5'>(async (merge) => {
       ]
     : [{ from: 'src/assets', to: 'dist/assets' }]
   const baseConfig: UserConfigExport<'webpack5'> = {
-    projectName: 'BITerStore', date: '2026-08-26', designWidth: 390,
+    projectName: '梨苑儿', date: '2026-08-26', designWidth: 390,
     deviceRatio: { 390: 2, 750: 1 }, sourceRoot: 'src', outputRoot: 'dist',
     framework: 'react',
     compiler: { type: 'webpack5', prebundle: { exclude: ['lucide-react'] } },

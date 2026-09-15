@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: 'BITerStore' })
+export default definePageConfig({ navigationBarTitleText: '梨苑儿' })

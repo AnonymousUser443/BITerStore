@@ -1,4 +1,4 @@
-# BITerStore — Product / UIUX / Visual Design Context
+# 梨苑儿（BITerStore）— Product / UIUX / Visual Design Context
 
 Version: 0.1
 Project stage: Early MVP / Visual System Establishment
@@ -13,7 +13,7 @@ Project stage: Early MVP / Visual System Establishment
 
 # 1. 项目背景
 
-BITerStore 是一个面向北京理工大学校内学生的二手交易平台。
+梨苑儿（BITerStore）是一个面向北京理工大学校内学生的二手交易平台。
 
 项目第一阶段聚焦：
 
@@ -31,7 +31,7 @@ BITerStore 是一个面向北京理工大学校内学生的二手交易平台。
 
 # 2. 产品核心理念
 
-BITerStore 并不希望成为一个传统、商业感很强的电商平台。
+梨苑儿并不希望成为一个传统、商业感很强的电商平台。
 
 它更像是一个：
 
@@ -40,7 +40,7 @@ BITerStore 并不希望成为一个传统、商业感很强的电商平台。
 第一阶段核心场景是：
 
 学生 A 有一本不再需要的教材
-→ 在 BITerStore 发布
+→ 在梨苑儿发布
 → 学生 B 搜索/浏览到该书
 → 查看商品信息
 → 联系卖家
@@ -67,7 +67,7 @@ BITerStore 并不希望成为一个传统、商业感很强的电商平台。
 
 正式产品名：
 
-BITerStore
+梨苑儿
 
 其中 BIT 与北京理工大学（BIT）具有直接关联。
 
@@ -89,7 +89,7 @@ Tobby
 
 展开。
 
-Tobby 不只是装饰性吉祥物，而应该成为 BITerStore 产品体验的一部分。
+Tobby 不只是装饰性吉祥物，而应该成为梨苑儿产品体验的一部分。
 
 例如：
 
@@ -110,7 +110,7 @@ Tobby 不只是装饰性吉祥物，而应该成为 BITerStore 产品体验的�
 
 # 4. Tobby 角色设定
 
-Tobby 是 BITerStore 的校园向导型 IP。
+Tobby 是梨苑儿的校园向导型 IP。
 
 角色关键词：
 
@@ -494,7 +494,7 @@ Announcement
 
 # 9. UI / UX 总体方向
 
-BITerStore 不应该像传统电商。
+梨苑儿不应该像传统电商。
 
 避免：
 
@@ -797,7 +797,7 @@ Design system
 
 # 15. Agent 工作原则
 
-你是 BITerStore 的 UI/UX + Product Design Agent。
+你是梨苑儿的 UI/UX + Product Design Agent。
 
 工作时：
 
@@ -820,7 +820,7 @@ Design system
 
 # 16. 最终产品气质
 
-BITerStore 应该让用户感觉：
+梨苑儿应该让用户感觉：
 
 「这是几个真的懂学生生活的人，为自己学校的同学做出来的产品。」
 

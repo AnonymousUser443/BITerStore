@@ -22,7 +22,7 @@ async function bootstrap() {
   await app.register(cookie, { secret: accessTokenSecret() })
   app.setGlobalPrefix('api/v1')
   app.enableCors({ origin: (process.env.H5_ORIGIN || '').split(',').filter(Boolean), credentials: true })
-  const config = new DocumentBuilder().setTitle('BITerStore API').setVersion('1').addBearerAuth().build()
+  const config = new DocumentBuilder().setTitle('梨苑儿 API').setVersion('1').addBearerAuth().build()
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config))
   await app.listen(Number(process.env.PORT || 3100), '0.0.0.0')
 }
