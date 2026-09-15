@@ -2,7 +2,7 @@
   "name": "@biterstore/taro-client",
   "version": "0.1.0",
   "private": true,
-  "description": "BITerStore Taro dual-platform demo client",
+  "description": "梨苑儿 Taro 双端客户端",
   "engines": {
     "node": ">=22.13.0 <23"
   },

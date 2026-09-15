@@ -107,7 +107,7 @@ describe('authenticated Golden H5', () => {
     const bookCover = mobileApp.slice(mobileApp.indexOf('function BookCover'), mobileApp.indexOf('function BottomNav'))
     expect(bookCover).toContain('book.images?.[0]')
     expect(bookCover).toContain('className="book-cover-image"')
-    expect(bookCover).toContain('BITerStore 校园藏书')
+    expect(bookCover).toContain('梨苑儿校园藏书')
     expect(styles).toContain('.book-cover-image { width: 100%; height: 100%; display: block; object-fit: cover; }')
   })
 

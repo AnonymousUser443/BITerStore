@@ -113,7 +113,7 @@ export const feedbackAdapter: FeedbackAdapter = {
   async confirm(title, content) { const result = await Taro.showModal({ title, content }); return result.confirm }
 }
 export interface ShareAdapter { shareListing(id: string, title: string): Promise<void> }
-export const shareAdapter: ShareAdapter = { async shareListing(id, title) { await Taro.setClipboardData({ data: `${title} · BITerStore /books/${id}` }); await feedbackAdapter.toast('分享链接已复制') } }
+export const shareAdapter: ShareAdapter = { async shareListing(id, title) { await Taro.setClipboardData({ data: `${title} · 梨苑儿 /books/${id}` }); await feedbackAdapter.toast('分享链接已复制') } }
 
 function bitLoginMessage(data: unknown) {
   if (data && typeof data === 'object' && 'detail' in data) {

@@ -169,11 +169,11 @@ function newPublishRequestId() {
 }
 
 function Brand() {
-  return <span className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>BITerStore</span></span>;
+  return <span className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>梨苑儿</span></span>;
 }
 
 function BootScreen({ progress }: { progress: number }) {
-  return <section className="phone-shell boot-screen" aria-live="polite"><div className="paper-texture" aria-hidden="true" /><div className="boot-brand"><Brand /><span>移动校园书站</span></div><div className="boot-visual"><i aria-hidden="true" /><Image src="/assets/tobby-cheer.webp" alt="Tobby 正在准备 BITerStore" width={760} height={760} priority /></div><div className="boot-copy"><p>APP RESOURCE PACK</p><h1>托比正在从服务器<br />下载 App 资源包……</h1><span>第一次见面会稍久一点，之后打开就会快很多。</span></div><div className="boot-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${Math.max(5, progress)}%` }} /></div><div className="boot-status"><span>正在初始化界面与角色素材</span><strong>{progress}%</strong></div><small>请稍候，书页马上就准备好啦 ❧</small></section>;
+  return <section className="phone-shell boot-screen" aria-live="polite"><div className="paper-texture" aria-hidden="true" /><div className="boot-brand"><Brand /><span>移动校园书站</span></div><div className="boot-visual"><i aria-hidden="true" /><Image src="/assets/tobby-cheer.webp" alt="Tobby 正在准备梨苑儿" width={760} height={760} priority /></div><div className="boot-copy"><p>APP RESOURCE PACK</p><h1>托比正在从服务器<br />下载 App 资源包……</h1><span>第一次见面会稍久一点，之后打开就会快很多。</span></div><div className="boot-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${Math.max(5, progress)}%` }} /></div><div className="boot-status"><span>正在初始化界面与角色素材</span><strong>{progress}%</strong></div><small>请稍候，书页马上就准备好啦 ❧</small></section>;
 }
 
 function Avatar({ user, size = 42 }: { user: User; size?: number }) {
@@ -194,7 +194,7 @@ function BookCover({ book, compact = false }: { book: Book; compact?: boolean })
       {cover ? <img className="book-cover-image" src={cover} alt={`${book.title} 封面`} /> : <>
         <span className="cover-leaf">❧</span>
         <strong>{book.title}</strong>
-        {!compact && <small>BITerStore 校园藏书</small>}
+        {!compact && <small>梨苑儿校园藏书</small>}
       </>}
     </div>
   );
@@ -279,14 +279,14 @@ function WelcomePage({ navigate }: { navigate: (to: string) => void }) {
       <div className="welcome-decoration" aria-hidden="true" />
       <header className="welcome-brand"><Brand /><span className="leaf-seal"><Leaf /></span></header>
       <div className="welcome-copy"><span>你好呀，我是托比 <Leaf size={14} /></span><h1>欢迎来到你的<br /><em>校园二手书小站</em></h1><p>搜索闲置教材、发布旧书、站内联系，<br />在校内安心完成交易。</p></div>
-      <Image className="welcome-tobby" src="/assets/tobby-master-transparent.webp" alt="Tobby 欢迎你来到 BITerStore" width={760} height={760} priority />
+      <Image className="welcome-tobby" src="/assets/tobby-master-transparent.webp" alt="Tobby 欢迎你来到梨苑儿" width={760} height={760} priority />
       <div className="welcome-steps">
         {[['01', Search, '找书', '搜索教材与参考书'], ['02', MessageCircle, '联系', '站内沟通更方便'], ['03', PackageCheck, '交易', '线下见面更安心']].map(([n, Icon, title, text]) => {
           const StepIcon = Icon as typeof Search;
           return <div key={String(n)}><small>{n as string}</small><StepIcon /><strong>{title as string}</strong><span>{text as string}</span></div>;
         })}
       </div>
-      <div className="welcome-actions"><button className="primary-button" onClick={() => navigate('/onboarding')}>进入 BITerStore</button><button className="secondary-button" onClick={() => navigate('/onboarding')}>先看看如何使用</button><p>❧ 北理工校内试运行中 ❧</p></div>
+      <div className="welcome-actions"><button className="primary-button" onClick={() => navigate('/onboarding')}>进入梨苑儿</button><button className="secondary-button" onClick={() => navigate('/onboarding')}>先看看如何使用</button><p>❧ 北理工校内试运行中 ❧</p></div>
     </section>
   );
 }
@@ -370,7 +370,7 @@ function LoginPage({ navigate, onAuthenticated, onGuest }: { navigate: (to: stri
     catch (cause) { setError(cause instanceof Error ? cause.message : '短信验证失败'); }
     finally { setLoading(false); }
   };
-  return <section className="phone-shell login-page"><div className="paper-texture" aria-hidden="true" /><header className="login-brand"><Brand /></header><div className="login-hero"><Image src="/assets/tobby-hello.webp" alt="Tobby 欢迎北理同学" width={760} height={760} priority /><div><p className="eyebrow">BIT CAMPUS IDENTITY</p><h1>{challenge ? '确认是你本人' : '北理同学，你好'}</h1><p>{challenge ? <>验证码已发送至 <strong>{challenge.masked_phone || '绑定手机'}</strong></> : '使用学校统一身份认证登录，完成校园身份验证。'}</p></div></div><div className="login-card">{challenge ? <><label><span>短信验证码</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ''))} placeholder="请输入验证码" autoFocus /></label><button className="primary-button" disabled={loading} onClick={verifySms}>{loading ? <><RefreshCw className="spin" />正在验证</> : '继续验证'}</button><button className="login-link" disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError(''); }}>返回重新登录</button></> : <><label><span>学号</span><input inputMode="numeric" autoComplete="username" value={sid} onChange={(event) => setSid(event.target.value.replace(/\D/g, ''))} placeholder="请输入北理工学号" autoFocus /></label><label><span>统一身份认证密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login(); }} placeholder="请输入密码" /></label><button className="primary-button" disabled={loading} onClick={login}>{loading ? <><RefreshCw className="spin" />正在安全验证</> : '登录 BITerStore'}</button><div className="guest-divider"><span>或</span></div><button className="secondary-button guest-button" disabled={loading} onClick={continueAsGuest}>游客访问</button><p className="guest-note">先逛逛校园书架，之后可在“我的”页面重新登录。</p></>}{error && <div className="login-error" role="alert"><CircleAlert />{error}</div>}</div><div className="login-security"><ShieldCheck /><p><strong>凭据安全说明</strong><span>密码仅用于本次学校统一身份认证，不会保存在 BITerStore 本地。</span></p></div><button className="login-guide" onClick={() => navigate('/onboarding')}>返回新手指引</button></section>;
+  return <section className="phone-shell login-page"><div className="paper-texture" aria-hidden="true" /><header className="login-brand"><Brand /></header><div className="login-hero"><Image src="/assets/tobby-hello.webp" alt="Tobby 欢迎北理同学" width={760} height={760} priority /><div><p className="eyebrow">BIT CAMPUS IDENTITY</p><h1>{challenge ? '确认是你本人' : '北理同学，你好'}</h1><p>{challenge ? <>验证码已发送至 <strong>{challenge.masked_phone || '绑定手机'}</strong></> : '使用学校统一身份认证登录，完成校园身份验证。'}</p></div></div><div className="login-card">{challenge ? <><label><span>短信验证码</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={smsCode} onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ''))} placeholder="请输入验证码" autoFocus /></label><button className="primary-button" disabled={loading} onClick={verifySms}>{loading ? <><RefreshCw className="spin" />正在验证</> : '继续验证'}</button><button className="login-link" disabled={loading} onClick={() => { setChallenge(undefined); setSmsCode(''); setError(''); }}>返回重新登录</button></> : <><label><span>学号</span><input inputMode="numeric" autoComplete="username" value={sid} onChange={(event) => setSid(event.target.value.replace(/\D/g, ''))} placeholder="请输入北理工学号" autoFocus /></label><label><span>统一身份认证密码</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void login(); }} placeholder="请输入密码" /></label><button className="primary-button" disabled={loading} onClick={login}>{loading ? <><RefreshCw className="spin" />正在安全验证</> : '登录梨苑儿'}</button><div className="guest-divider"><span>或</span></div><button className="secondary-button guest-button" disabled={loading} onClick={continueAsGuest}>游客访问</button><p className="guest-note">先逛逛校园书架，之后可在“我的”页面重新登录。</p></>}{error && <div className="login-error" role="alert"><CircleAlert />{error}</div>}</div><div className="login-security"><ShieldCheck /><p><strong>凭据安全说明</strong><span>密码仅用于本次学校统一身份认证，不会保存在梨苑儿本地。</span></p></div><button className="login-guide" onClick={() => navigate('/onboarding')}>返回新手指引</button></section>;
 }
 
 function HomePage({ navigate }: { navigate: (to: string) => void }) {
@@ -733,7 +733,7 @@ const stateContent: Record<string, { title: string; text: string; image: string;
 function StatePage({ type, navigate }: { type: string; navigate: (to: string) => void }) {
   if (type === 'index') return <AppShell navigate={navigate} title="演示与状态" back className="states-index"><div className="state-grid">{Object.entries(stateContent).filter(([key]) => key !== '404').map(([key, value]) => <button onClick={() => navigate(`/states/${key}`)} key={key}><img src={value.image} alt="" /><span>{value.title}</span><ChevronRight /></button>)}</div></AppShell>;
   const content = stateContent[type] ?? stateContent['404']; const destination = type === 'published' ? '/my-listings' : type === 'empty' ? '/publish' : ['searching', 'no-results', 'unavailable'].includes(type) ? '/category' : '/home';
-  return <section className="phone-shell full-state"><div className="paper-texture" /><Brand /><div className="state-orbit" /><Image src={content.image} alt={content.title} width={760} height={760} priority /><h1>{content.title}</h1><p>{content.text}</p>{['loading', 'searching'].includes(type) && <span className="loading-bar"><i /></span>}<button className="primary-button" onClick={() => navigate(destination)}>{content.button}</button><small>BITerStore · 让每一本书继续被需要</small></section>;
+  return <section className="phone-shell full-state"><div className="paper-texture" /><Brand /><div className="state-orbit" /><Image src={content.image} alt={content.title} width={760} height={760} priority /><h1>{content.title}</h1><p>{content.text}</p>{['loading', 'searching'].includes(type) && <span className="loading-bar"><i /></span>}<button className="primary-button" onClick={() => navigate(destination)}>{content.button}</button><small>梨苑儿 · 让每一本书继续被需要</small></section>;
 }
 
 export function MobileApp({ initialPath }: { initialPath: string }) {

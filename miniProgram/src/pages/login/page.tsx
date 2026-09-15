@@ -136,7 +136,7 @@ export default function LoginPage() {
       {__BITERSTORE_E2E__ && <Button id='e2e-login-bypass' className='login-link' onClick={e2eLogin}>自动化测试登录</Button>}
     </View>
 
-    <View className='login-security'><Glyph name='shield' /><View><Text>隐私说明</Text><Text>校园密码只发送到认证服务；BITerStore 只接收一次性登录凭证，不保存密码、短信验证码或教务 Cookie。</Text></View></View>
+    <View className='login-security'><Glyph name='shield' /><View><Text>隐私说明</Text><Text>校园密码只发送到认证服务；梨苑儿只接收一次性登录凭证，不保存密码、短信验证码或教务 Cookie。</Text></View></View>
     <Button className='login-guide' onClick={() => navigationAdapter.back()}>返回</Button>
   </View>
 }

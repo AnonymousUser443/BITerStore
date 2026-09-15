@@ -1,4 +1,4 @@
-# BITerStore Agent Rules
+# 梨苑儿（BITerStore）Agent Rules
 
 - `web/` 是视觉与行为 Golden Reference；迁移期间不得删除、重命名或为实现便利而重设计。
 - 可见页面修改完成后必须运行 `miniProgram` 的 lint、test、H5 build 和 WeApp build；微信服务端口可用时还必须运行仓库内 E2E。

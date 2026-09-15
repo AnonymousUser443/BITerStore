@@ -9,7 +9,7 @@ export default defineAppConfig({
   ],
   window: {
     navigationStyle: 'custom',
-    navigationBarTitleText: 'BITerStore', navigationBarTextStyle: 'black',
+    navigationBarTitleText: '梨苑儿', navigationBarTextStyle: 'black',
     navigationBarBackgroundColor: '#fffdf8', backgroundColor: '#f7f4ea', backgroundTextStyle: 'dark'
   },
   ...(process.env.TARO_ENV === 'weapp' ? {

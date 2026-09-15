@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="./web/public/favicon.svg" width="72" alt="BITerStore Logo" />
-  <h1>BITerStore</h1>
+  <img src="./web/public/favicon.svg" width="72" alt="梨苑儿 Logo" />
+  <h1>梨苑儿</h1>
   <p><strong>让每一本书，继续被需要。</strong></p>
   <p>面向北京理工大学校园场景的移动端二手书交互原型</p>
 
@@ -21,7 +21,7 @@
   </p>
 </div>
 
-<img src="./web/public/og.png" width="100%" alt="BITerStore 品牌封面：让每一本书继续被需要" />
+<img src="./web/public/og.png" width="100%" alt="梨苑儿品牌封面：让每一本书继续被需要" />
 
 > [!NOTE]
 > 部署预览目前保留项目所有者访问门禁。公开访客可以通过下方截图了解完整界面，或在本地运行全部交互。
@@ -30,7 +30,9 @@
 
 教材不该在一次课程结束后就被遗忘。
 
-BITerStore 希望把校园里的闲置书籍重新连接起来：同学可以按课程、成色、校区和价格找到需要的书，也可以快速发布旧书、联系卖家并约定校内当面交易。产品以温和的纸张质感、低饱和鼠尾草绿和书童角色 **Tobby**，降低传统二手平台的交易感，保留校园社区应有的信任与温度。
+梨苑儿希望把校园里的闲置书籍重新连接起来：同学可以按课程、成色、校区和价格找到需要的书，也可以快速发布旧书、联系卖家并约定校内当面交易。产品以温和的纸张质感、低饱和鼠尾草绿和书童角色 **Tobby**，降低传统二手平台的交易感，保留校园社区应有的信任与温度。
+
+> 品牌中文名：**梨苑儿**；`BITerStore` 仅作为仓库、包名和接口兼容所需的技术标识保留。
 
 这个仓库不是把设计稿贴成网页。页面中的标题、卡片、筛选、表单、聊天、按钮、状态和导航均由真实 DOM 与可交互组件实现。
 
@@ -44,13 +46,13 @@ BITerStore 希望把校园里的闲置书籍重新连接起来：同学可以按
 ## 📱 移动端画廊
 
 <div align="center">
-  <img src="./qa-screenshots/home-390-refined.jpg" width="23%" alt="BITerStore 首页" />
+  <img src="./qa-screenshots/home-390-refined.jpg" width="23%" alt="梨苑儿首页" />
   &nbsp;
-  <img src="./qa-screenshots/category-390-refined.jpg" width="23%" alt="BITerStore 分类与筛选" />
+  <img src="./qa-screenshots/category-390-refined.jpg" width="23%" alt="梨苑儿分类与筛选" />
   &nbsp;
-  <img src="./qa-screenshots/onboarding-390-refined.jpg" width="23%" alt="BITerStore 新手引导" />
+  <img src="./qa-screenshots/onboarding-390-refined.jpg" width="23%" alt="梨苑儿新手引导" />
   &nbsp;
-  <img src="./qa-screenshots/profile-390-refined.jpg" width="23%" alt="BITerStore 个人中心" />
+  <img src="./qa-screenshots/profile-390-refined.jpg" width="23%" alt="梨苑儿个人中心" />
 </div>
 
 <p align="center"><sub>以 390px 为主要验收宽度，同时覆盖 360px 与 430px；桌面访问时显示居中的移动应用画布。</sub></p>

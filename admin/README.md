@@ -1,4 +1,4 @@
-# BITerStore 后台管理使用手册
+# 梨苑儿（BITerStore）后台管理使用手册
 
 后台地址：`https://store.young581.com/admin/`
 
