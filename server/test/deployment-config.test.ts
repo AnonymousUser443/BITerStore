@@ -8,6 +8,7 @@ describe('production gateway', () => {
     const h5Dockerfile = readFileSync(resolve(process.cwd(), '../miniProgram/Dockerfile.h5'), 'utf8')
 
     expect(h5Dockerfile).toContain('COPY miniProgram/nginx.h5.conf /etc/nginx/conf.d/default.conf')
+    expect(h5Nginx).toContain('absolute_redirect off;')
     expect(h5Nginx).toContain('return 302 /books?id=$1;')
     expect(h5Nginx).toContain('return 302 /chat?id=$1;')
     expect(h5Nginx).toContain('return 302 /notifications?type=$1;')
@@ -87,7 +88,7 @@ describe('production service isolation and recovery', () => {
     expect(compose).toContain('cap_drop: ["ALL"]')
     expect(compose).toContain('REDIS_USERNAME: biterstore')
     expect(compose).toContain('networks: [data]')
-    expect(compose).toContain('data:\n    internal: true')
+    expect(compose).toMatch(/data:\r?\n\s+internal: true/)
     expect(compose).toContain("health/ready")
     expect(compose).toContain('api: { condition: service_healthy }')
   })
