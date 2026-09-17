@@ -3,6 +3,7 @@ import {
   AlertTriangle, BookOpen, Check, ChevronLeft, ChevronRight, ClipboardList, Copy,
   ExternalLink, KeyRound, LayoutDashboard, LogOut, MessageSquareText, RefreshCw, Search, ShieldCheck, Users, X
 } from 'lucide-react'
+import { ListingDetailDialog } from './ListingDetailDialog'
 import { ADMIN_TOKEN_KEY, ApiError, apiBlob, apiRequest, queryString, refreshBrowserSession, requestId } from './api'
 import type {
   AdminIdentity, AuditRow, ElevatedSession, FeedbackRow, ListingRow, Metrics, PageResult,
@@ -384,11 +385,12 @@ function UsersTable({ rows, identity, onAction }: { rows: UserRow[]; identity: A
 }
 
 function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (actions: PendingAction[]) => void }) {
-  return <Table headers={['商品', '卖家', '价格 / 校区', '状态', '互动', '发布时间', '操作']}>{rows.map((row) => {
+  const [detailId, setDetailId] = useState<string>()
+  return <><Table headers={['商品', '卖家', '价格 / 校区', '状态', '互动', '发布时间', '操作']}>{rows.map((row) => {
     const { cover, isbnEvidence } = listingReviewImages(row)
     const actions = listingActions(row)
     return <tr key={row.id}>
-      <td data-label="商品"><div className="listing-cell"><div className="listing-review-images"><span title="商品封面">{cover ? <ModerationImage id={cover.id} alt={`${row.title} 封面审核图`} /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<em>封面</em></span><span title="ISBN 凭证">{isbnEvidence ? <ModerationImage id={isbnEvidence.id} alt={`${row.title} ISBN 凭证`} /> : <span className="cover-placeholder missing"><BookOpen size={19} /></span>}<em>ISBN</em></span></div><div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code><a className="listing-detail-link" href={listingDetailHref(row.id)} target="_blank" rel="noreferrer">查看详情 <ExternalLink size={12} /></a></div></div></td>
+      <td data-label="商品"><div className="listing-cell"><div className="listing-review-images"><span title="商品封面">{cover ? <ModerationImage id={cover.id} alt={`${row.title} 封面审核图`} /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<em>封面</em></span><span title="ISBN 凭证">{isbnEvidence ? <ModerationImage id={isbnEvidence.id} alt={`${row.title} ISBN 凭证`} /> : <span className="cover-placeholder missing"><BookOpen size={19} /></span>}<em>ISBN</em></span></div><div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code><button className="table-detail-button" onClick={() => setDetailId(row.id)}>查看详情</button></div></div></td>
       <td data-label="卖家">{row.seller.nickname}<small className="inline-note">{labels[row.seller.status] || row.seller.status}</small></td>
       <td data-label="价格 / 校区"><strong>¥{(row.priceCents / 100).toFixed(2)}</strong><small className="inline-note">{row.campus}</small></td>
       <td data-label="状态"><Status value={row.status} label={listingStatusLabels[row.status]} />{row.moderationDecision === 'IGNORE' && <Status value="IGNORE" subtle />}</td>
@@ -398,21 +400,22 @@ function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (acti
         ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button>
         : <span className="muted">不可操作</span>}</td>
     </tr>
-  })}</Table>
+  })}</Table>{detailId && <ListingDetailDialog id={detailId} onClose={() => setDetailId(undefined)} />}</>
 }
 
 function ReportsTable({ rows, onAction }: { rows: ReportRow[]; onAction: (actions: PendingAction[]) => void }) {
-  return <Table headers={['举报内容', '举报对象', '举报人', '状态', '提交时间', '操作']}>{rows.map((row) => {
+  const [detailId, setDetailId] = useState<string>()
+  return <><Table headers={['举报内容', '举报对象', '举报人', '状态', '提交时间', '操作']}>{rows.map((row) => {
     const actions = reportActions(row)
     return <tr key={row.id}>
       <td data-label="举报内容"><strong>{row.reason}</strong>{row.evidence && <small className="inline-note evidence">证据：{row.evidence}</small>}{row.resolution && <small className="inline-note resolution">结论：{row.resolution}</small>}</td>
-      <td data-label="举报对象"><span>{row.target?.label || `${row.targetType} ${shortId(row.targetId)}`}</span>{row.target?.status && <Status value={row.target.status} label={row.targetType === 'LISTING' ? listingStatusLabels[row.target.status] : undefined} subtle />}{row.targetType === 'LISTING' && <a className="listing-detail-link" href={listingDetailHref(row.targetId)} target="_blank" rel="noreferrer">查看商品详情 <ExternalLink size={12} /></a>}</td>
+      <td data-label="举报对象"><span>{row.target?.label || `${row.targetType} ${shortId(row.targetId)}`}</span>{row.target?.status && <Status value={row.target.status} label={row.targetType === 'LISTING' ? listingStatusLabels[row.target.status] : undefined} subtle />}{row.targetType === 'LISTING' && <button className="table-detail-button" onClick={() => setDetailId(row.targetId)}>查看商品详情</button>}</td>
       <td data-label="举报人">{row.reporter.nickname}</td>
       <td data-label="状态"><Status value={row.status} /></td>
       <td data-label="提交时间">{dateTime(row.createdAt)}</td>
       <td data-label="操作">{actions.length ? <button type="button" className="action-trigger" onClick={() => onAction(actions)}>处置</button> : <span className="muted">不可操作</span>}</td>
     </tr>
-  })}</Table>
+  })}</Table>{detailId && <ListingDetailDialog id={detailId} onClose={() => setDetailId(undefined)} />}</>
 }
 
 function FeedbackTable({ rows }: { rows: FeedbackRow[] }) {
@@ -535,10 +538,6 @@ function ModerationImage({ id, alt }: { id: string; alt: string }) {
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [id])
   return url ? <img src={url} alt={alt} /> : <span className="cover-placeholder"><BookOpen size={19} /></span>
-}
-
-export function listingDetailHref(id: string) {
-  return `/books/${encodeURIComponent(id)}`
 }
 
 export function listingReviewImages(row: ListingRow) {

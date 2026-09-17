@@ -399,3 +399,14 @@ taro-image-core > img { width: 100%; height: 100%; left: 0 !important; top: 0 !i
 @media (min-width: 700px) { #app { padding: 0; } .taro_page { box-sizing: border-box; padding: 16px; display: grid; place-items: start center; background: radial-gradient(circle at 20% 0%,rgba(174,182,154,.45),transparent 32rem),linear-gradient(135deg,#e8e5dc,#cbcfc3); } .hero-title { font-size: 34px; } .welcome-title { font-size: 44px; } }
 @media (min-width: 700px) { .login-page { width: min(100%, 430px); margin-inline: auto; } }
 @media (min-width: 1024px) { .taro_page { padding: 24px; place-items: center; } .onboarding-tobby { width: 440px; max-height: 44vh; object-fit: contain; } }
+
+.report-progress-list { margin: 18px 0; }
+.report-progress-list h2, .report-progress-title { display: block; margin: 0 0 12px; font-size: 19px; font-weight: 700; color: var(--olive); }
+.report-progress-card { margin-bottom: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--paper); overflow-wrap: anywhere; }
+.report-progress-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.report-progress-heading h3, .report-target { margin: 0; flex: 1; font-size: 15px; line-height: 1.5; font-weight: 700; }
+.report-progress-heading > span, .report-progress-heading > text:last-child { flex-shrink: 0; color: var(--olive); font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #edf0e3; }
+.report-progress-card p, .report-copy { display: block; margin: 10px 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.report-progress-card .report-number { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.report-progress-card time, .report-time { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+.notification-feed p, .notification-feed .feed-copy { white-space: pre-wrap; overflow-wrap: anywhere; }

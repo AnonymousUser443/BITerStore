@@ -1,3 +1,7 @@
+/* Keep wheel, touch and keyboard scrolling without visible scrollbar rails. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
 :root {
   --sage: #6f7956;
   --olive: #4f5940;
@@ -1224,3 +1228,14 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .hero-copy h1 { font-size: 29px; }
   .hero-tobby { width: 180px; height: 180px; bottom: -24px; }
 }
+
+.report-progress-list { margin: 18px 0; }
+.report-progress-list h2, .report-progress-title { display: block; margin: 0 0 12px; font-size: 19px; font-weight: 700; color: var(--olive); }
+.report-progress-card { margin-bottom: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--paper); overflow-wrap: anywhere; }
+.report-progress-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.report-progress-heading h3, .report-target { margin: 0; flex: 1; font-size: 15px; line-height: 1.5; font-weight: 700; }
+.report-progress-heading > span, .report-progress-heading > text:last-child { flex-shrink: 0; color: var(--olive); font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #edf0e3; }
+.report-progress-card p, .report-copy { display: block; margin: 10px 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.report-progress-card .report-number { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.report-progress-card time, .report-time { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+.notification-feed p, .notification-feed .feed-copy { white-space: pre-wrap; overflow-wrap: anywhere; }

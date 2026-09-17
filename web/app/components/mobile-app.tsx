@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- avatars and user uploads can be IndexedDB data URLs. */
 
 import Image from 'next/image';
+import { ReportProgressList } from './report-progress';
 import {
   ArrowLeft, Bell, BookOpen, Bookmark, Camera, Check, ChevronDown, ChevronRight,
   CircleAlert, Filter, Grid2X2, Heart, Home, ImagePlus, Info, Leaf, MapPin,
@@ -593,9 +594,9 @@ function NotificationDetailPage({ type, navigate }: { type: string; navigate: (t
   const notificationType = (['like', 'comment', 'system', 'follow'].includes(type) ? type : 'system') as Notification['type'];
   const [items, setItems] = useState<Notification[]>();
   useEffect(() => { demoRepository.listNotifications().then(async (values) => { const next = values.filter((item) => item.type === notificationType); const unreadIds = next.filter((item) => item.unread > 0).map((item) => item.id); if (unreadIds.length) await demoRepository.markNotificationsRead(unreadIds); setItems((current) => preserveSnapshot(current, next.map((item) => ({ ...item, unread: 0 })))); }); }, [notificationType]);
-  const summary = items?.[0] ?? { id: notificationType, type: notificationType, title: { like: '赞与收藏', comment: '评论与回复', system: '系统通知', follow: '新的关注' }[notificationType], subtitle: '暂无新通知', unread: 0 };
+  const summary = { title: { like: '赞与收藏', comment: '评论与回复', system: '系统通知', follow: '新的关注' }[notificationType], subtitle: notificationType === 'system' ? '审核结果、举报进度与账号提醒。' : '查看此分类的最新消息。' };
   const Icon = { like: Heart, comment: MessageCircle, system: Bell, follow: UserRound }[notificationType];
-  return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? formatMessageTime(item.createdAt) : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
+  return <AppShell active="/messages" navigate={navigate} title={summary.title} back className="notification-detail-page"><section className={`notification-detail-hero ${notificationType}`}><span className={`notice-icon ${notificationType}`}><Icon /></span><div><p>消息分类</p><h1>{summary.title}</h1><span>{summary.subtitle}</span></div><b>{items?.reduce((total, item) => total + item.unread, 0) || 0} 条未读</b></section>{notificationType === 'system' && <ReportProgressList />}{items === undefined ? <InlineLoading /> : items.length ? <div className="notification-feed">{items.map((item, index) => <article key={item.id}><span className="feed-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.title}</strong><p>{item.subtitle}</p><time>{item.createdAt ? formatMessageTime(item.createdAt) : ''}</time></div></article>)}</div> : <div className="inline-state"><Image src="/assets/tobby-question.webp" alt="暂无通知" width={760} height={760} /><h3>暂无此类通知</h3></div>}<div className="notification-safe"><ShieldCheck />这里显示的是你的真实站内通知。</div></AppShell>;
 }
 
 function ConversationBookMessage({ thread, book, currentUser, user, navigate }: { thread: ChatThread; book: Book; currentUser?: User; user: User; navigate: (to: string) => void }) {
@@ -826,7 +827,10 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     setPath(internalPath);
   }, []);
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: PopStateEvent) => {
+      // This application owns its history entries. Taro handling the same pop
+      // would asynchronously mount another page after this one has rendered.
+      if (typeof event.state?.[ROUTE_HISTORY_INDEX_KEY] === 'number') event.stopImmediatePropagation();
       rememberRouteScroll(locationKeyRef.current);
       locationKeyRef.current = currentLocationKey();
       const previousIndex = latestRouteHistoryIndex;
@@ -835,8 +839,11 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
       setRouteTransition(previousIndex !== undefined && currentIndex < previousIndex ? 'back' : 'forward');
       setPath(appPathFromUrl(window.location.href));
     };
-    window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
+    const previousRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+    window.addEventListener('popstate', handler, true);
+    window.addEventListener('biterstore:popstate', handler as EventListener);
+    return () => { window.removeEventListener('popstate', handler, true); window.removeEventListener('biterstore:popstate', handler as EventListener); window.history.scrollRestoration = previousRestoration; };
   }, []);
   useEffect(() => {
     const handler = () => {

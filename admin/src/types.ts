@@ -85,6 +85,16 @@ export interface ListingRow {
   _count: { favorites: number; conversations: number }
 }
 
+export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'title' | 'author' | 'isbn' | 'category' | 'priceCents' | 'campus' | 'status' | 'seller' | 'createdAt'> {
+  course: string
+  condition: string
+  description: string
+  originalPriceCents?: number | null
+  tags: string[]
+  deletedAt?: string | null
+  images: Array<{ id: string; role: string; moderationStatus: string; moderationReason?: string | null }>
+}
+
 export interface ReportRow {
   id: string
   targetType: string

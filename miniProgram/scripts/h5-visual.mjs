@@ -4,6 +4,8 @@ import { createServer } from 'node:http'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { root } from './weapp-env.mjs'
+import { checkBackNavigation } from './h5-interaction-regressions.mjs'
+import { checkAdminReview } from './admin-review-regression.mjs'
 
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
 const browserCandidates = [
@@ -50,12 +52,14 @@ const allTargets = [
   ['messages-768', 768, 1024, '/messages'],
   ['messages-1440', 1440, 900, '/messages'],
   ['notification-390', 390, 900, '/notifications?type=comment'],
+  ['notification-system-390', 390, 900, '/notifications?type=system'],
   ['notification-768', 768, 1024, '/messages/notifications/comment'],
   ['chat-320', 320, 700, '/chat?id=thread-lin'],
   ['chat-390', 390, 900, '/chat?id=thread-lin'],
   ['chat-768', 768, 1024, '/chat?id=thread-lin'],
   ['chat-1440', 1440, 900, '/chat?id=thread-lin'],
   ['detail-390', 390, 900, '/books?id=math-7'],
+  ['detail-owner-review-390', 390, 900, '/books?id=qa-owned'],
   ['detail-guest-390', 390, 900, '/books?id=math-7&qa_guest=1'],
   ['detail-direct-390', 390, 900, '/books/math-7'],
   ['detail-600', 600, 900, '/books?id=math-7'],
@@ -97,6 +101,7 @@ const expectedPageClass = {
   'notification-390': 'notification-detail-page',
   'chat-390': 'chat-page',
   'detail-guest-390': 'detail-page',
+  'detail-owner-review-390': 'detail-page',
   'detail-direct-390': 'detail-page',
   'not-found-390': 'full-state',
   'favorites-390': 'simple-list-page',
@@ -111,6 +116,7 @@ const expectedPageClass = {
 }
 
 const authenticatedFixture = `(() => {
+  if (location.pathname.startsWith('/admin/')) return;
   const guest = new URL(location.href).searchParams.has('qa_guest');
   const user = {
     id: 'qa-student', studentNumber: '1120260001', nickname: '视觉巡检用户', avatarUrl: null,
@@ -124,7 +130,7 @@ const authenticatedFixture = `(() => {
     condition: '九成新', campus: '良乡', description: '页面巡检用商品', status: 'ACTIVE',
     sellerId: seller.id, seller, createdAt: '2026-08-29T08:00:00.000Z', tags: ['教材'], images: [], version: 1
   };
-  const ownedListing = { ...listing, id: 'qa-owned', title: '我的巡检商品', sellerId: user.id, seller: user };
+  const ownedListing = { ...listing, id: 'qa-owned', title: '我的待审核商品', status: 'PENDING_REVIEW', sellerId: user.id, seller: user };
   const message = { id: '12', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
   const conversation = {
     id: 'thread-lin', listingId: listing.id, listing, buyerId: user.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
@@ -154,11 +160,14 @@ const authenticatedFixture = `(() => {
     if (path === '/me') body = user;
     else if (path === '/listings/favorites/mine') body = [listing];
     else if (path === '/listings/mine/all') body = { items: [ownedListing] };
+    else if (path === '/listings/mine/qa-owned') body = ownedListing;
+    else if (path === '/listings/qa-owned') return new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     else if (path === '/listings' && method === 'GET') body = { items: [listing] };
     else if (path === '/conversations' && method === 'GET') body = [conversation];
     else if (path === '/conversations/thread-lin' && method === 'GET') body = conversation;
     else if (path === '/conversations/thread-lin/messages' && method === 'GET') body = { items: [message] };
     else if (path === '/blocks' && method === 'GET') body = [];
+    else if (path === '/reports/mine') body = { items: [{ id: 'report-qa', targetType: 'LISTING', targetId: 'math-7', targetLabel: '商品《高等数学（第七版）》', reason: '商品描述与图片不符', status: 'RESOLVED', resolution: '已核实并下架相关商品。', createdAt: '2026-09-17T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' }], nextCursor: null };
     else if (path === '/notifications') body = [{
       id: 'qa-notification', type: 'COMMENT', title: '新的留言', body: '巡检消息',
       readAt: null, createdAt: '2026-08-29T08:30:00.000Z'
@@ -260,7 +269,7 @@ if (!process.env.BITERSTORE_H5_URL) {
     previewServer.listen(Number(previewUrl.port || 80), previewUrl.hostname, resolve)
   })
 }
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
 const pages = []
@@ -325,6 +334,8 @@ try {
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
   }
+  await checkBackNavigation(client, preview, artifactDir)
+  if (process.env.BITERSTORE_CHECK_ADMIN === '1') await checkAdminReview(client, artifactDir)
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height, , scale = 1]) => `${width}x${height}@${scale}x`), pages, diagnostics }))
   if (diagnostics.length) process.exitCode = 1
 } finally {

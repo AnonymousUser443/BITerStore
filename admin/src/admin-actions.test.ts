@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { accessSummary, listingActions, listingDetailHref, listingReviewImages, reportActions, userActions } from './App'
+import { accessSummary, listingActions, listingReviewImages, reportActions, userActions } from './App'
+import { listingReviewPath } from './ListingDetailDialog'
 import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
@@ -50,8 +51,8 @@ describe('admin action visibility', () => {
     expect(reportActions(report('RESOLVED'))).toEqual([])
   })
 
-  it('builds a safe H5 product detail URL', () => {
-    expect(listingDetailHref('listing/id with spaces')).toBe('/books/listing%2Fid%20with%20spaces')
+  it('loads review details through the authenticated admin API, including encoded ids', () => {
+    expect(listingReviewPath('listing/id with spaces')).toBe('/admin/listings/listing%2Fid%20with%20spaces')
   })
 
   it('shows both the cover and private ISBN evidence in the moderation queue', () => {

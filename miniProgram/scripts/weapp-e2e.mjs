@@ -335,6 +335,16 @@ try {
     if ((await app.currentPage())?.path !== 'pages/my-listings/index') throw new Error('确认已售后离开了我的发布页面')
   }))
   results.push(await scenario('messages-notification-text-image', async () => { await app.reLaunch('/pages/messages/index'); let page = await pageAt('pages/messages/index'); await shot('visual-messages'); page = await tapForRoute(await required(page, '#e2e-notification-comment'), 'pages/notification/detail'); await required(page, '#e2e-notification-detail-comment'); await shot('visual-notification'); await app.reLaunch('/pages/messages/index'); page = await pageAt('pages/messages/index'); page = await tapForRoute(await required(page, '#e2e-thread-thread-lin'), 'pages/chat/index'); await (await required(page, '#e2e-message-input')).input('你好，还在吗？'); await (await required(page, '#e2e-message-send')).tap(); await sleep(280); await (await required(page, '#e2e-message-image')).tap(); await sleep(280); await required(page, '#e2e-chat-end'); await shot('visual-chat'); const thread = (await stored('threads'))?.find((item) => item.id === 'thread-lin'); if (!thread?.messages.some((item) => item.text === '你好，还在吗？') || !thread.messages.some((item) => item.kind === 'image')) throw new Error('文字或 fixture 图片消息未持久化') }))
+  results.push(await scenario('report-progress-details', async () => {
+    await app.reLaunch('/pages/notification/detail?type=system')
+    const page = await pageAt('pages/notification/detail')
+    await requiredEventually(page, '#e2e-report-progress')
+    const target = await (await requiredEventually(page, '.report-target')).text()
+    const number = await (await required(page, '.report-number')).text()
+    const copy = (await Promise.all((await page.$$('.report-copy')).map((element) => element.text()))).join('\n')
+    if (!target.includes('高等数学') || !number.includes('report-qa') || !copy.includes('商品描述与图片不符') || !copy.includes('已核实并下架')) throw new Error('举报进度缺少对象、编号、原因或处理结果')
+    await shot('visual-report-progress')
+  }))
   results.push(await scenario('profile-feedback-submit', async () => {
     await app.reLaunch('/pages/profile/index')
     let page = await pageAt('pages/profile/index')

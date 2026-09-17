@@ -1,5 +1,6 @@
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, NotFoundException, Optional, Post, Query, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, NotFoundException, Optional, Param, Post, Query, UseGuards } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
+import { reportProgressBody, reportStatusLabels, reportTargetLabels } from '../moderation/report-progress.js'
 import { AdminGuard, AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { CatalogCacheService } from '../../infra/catalog-cache.service.js'
 import { PrismaService } from '../../infra/prisma.service.js'
@@ -175,6 +176,23 @@ export class AdminController {
       this.prisma.listing.count({ where })
     ])
     return pageResult(items, total, page, pageSize)
+  }
+
+  @Get('listings/:id')
+  async listingDetail(@Param('id') id: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+      select: {
+        id: true, version: true, title: true, author: true, isbn: true,
+        category: true, course: true, condition: true, description: true,
+        priceCents: true, originalPriceCents: true, campus: true, tags: true,
+        status: true, deletedAt: true, createdAt: true, updatedAt: true,
+        seller: { select: { id: true, nickname: true, status: true } },
+        images: { where: { uploadedAt: { not: null } }, orderBy: { sortOrder: 'asc' }, select: { id: true, role: true, moderationStatus: true, moderationReason: true } }
+      }
+    })
+    if (!listing) throw new NotFoundException('商品不存在')
+    return listing
   }
 
   @Get('reports')
@@ -360,14 +378,15 @@ export class AdminController {
       }
 
       if (body.targetType === 'REPORT') {
-        const target = await tx.report.findUnique({ where: { id: body.targetId }, select: { id: true, reporterId: true, status: true } })
+        const target = await tx.report.findUnique({ where: { id: body.targetId }, select: { id: true, reporterId: true, status: true, targetType: true, targetId: true, reason: true } })
         if (!target) throw new NotFoundException('举报工单不存在')
         if (!reportStatusTransitions[target.status]?.includes(body.action)) throw new BadRequestException('当前工单状态不支持此操作')
         await tx.report.update({
           where: { id: target.id },
           data: { status: body.action as 'PROCESSING' | 'RESOLVED' | 'REJECTED', resolution: reason, assigneeId: actor.id }
         })
-        await tx.notification.create({ data: { userId: target.reporterId, type: 'system', title: '举报处理进度', body: reason.slice(0, 300) } })
+        const label = await reportTargetLabels(tx, [target])
+        await tx.notification.create({ data: { userId: target.reporterId, type: 'system', title: `举报处理进度 · ${reportStatusLabels[body.action]}`, body: reportProgressBody(target, label(target), body.action, reason) } })
       }
 
       await tx.moderationAction.create({ data: { operatorId: actor.id, targetType: body.targetType, targetId: body.targetId, action: body.action, reason } })

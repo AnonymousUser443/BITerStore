@@ -2,6 +2,7 @@ import { PropsWithChildren, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import '../../web/app/globals.css'
 import './h5.css'
+import './h5/history-owner'
 
 function getStoredAuthenticatedSid() {
   if (typeof localStorage === 'undefined') return ''

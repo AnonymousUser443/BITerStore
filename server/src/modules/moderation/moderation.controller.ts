@@ -10,6 +10,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   ServiceUnavailableException,
   UseGuards
@@ -20,6 +21,7 @@ import { assertNotMuted, AuthGuard, CurrentUser, NotMutedGuard, VerifiedGuard, t
 import { accessTokenSecret } from '../../common/security-config.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
+import { reportTargetLabels } from './report-progress.js'
 
 const reportTargetTypes = ['LISTING', 'USER', 'MESSAGE'] as const
 type ReportTargetType = typeof reportTargetTypes[number]
@@ -68,6 +70,24 @@ export class ModerationController {
       orderBy: { createdAt: 'desc' },
       include: { blockedUser: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } }
     }).then((rows) => rows.map((row) => ({ ...row.blockedUser, blockedAt: row.createdAt })))
+  }
+
+  @Get('reports/mine')
+  async myReports(@CurrentUser() user: AuthUser, @Query('cursor') cursor?: string) {
+    if (cursor !== undefined && !this.normalizeTargetId(cursor)) throw new BadRequestException('举报分页标识无效')
+    if (cursor) {
+      const ownCursor = await this.prisma.report.findFirst({ where: { id: cursor, reporterId: user.id }, select: { id: true } })
+      if (!ownCursor) throw new BadRequestException('举报分页标识无效')
+    }
+    const rows = await this.prisma.report.findMany({
+      where: { reporterId: user.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 21,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, targetType: true, targetId: true, reason: true, status: true, resolution: true, createdAt: true, updatedAt: true }
+    })
+    const page = rows.slice(0, 20)
+    const label = await reportTargetLabels(this.prisma, page)
+    return { items: page.map((row) => ({ ...row, targetLabel: label(row) })), nextCursor: rows.length > 20 ? page[19].id : null }
   }
 
   @Post('reports')
