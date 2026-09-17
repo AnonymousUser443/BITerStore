@@ -12,6 +12,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 RUN chmod 0444 /app/package*.json \
+  && chmod -R a+rX /app/prisma \
   && mkdir -p /app/uploads \
   && chown -R node:node /app/uploads
 USER node
