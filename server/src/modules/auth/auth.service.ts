@@ -189,7 +189,7 @@ export class AuthService {
 
   private async issue(user: SessionUser, platform: string, device?: string) {
     const issuedUser = user.campusIdentities ? { ...user, campusStatus: effectiveCampusStatus(user) } : user
-    if (user.status && user.status !== 'ACTIVE') throw new ForbiddenException('账号当前不可用')
+    if (user.status && !['ACTIVE', 'MUTED'].includes(user.status)) throw new ForbiddenException('账号当前不可用')
     const refreshToken = randomBytes(48).toString('base64url')
     const expiresAt = new Date(Date.now() + Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 86400000)
     const session = await this.prisma.session.create({
@@ -211,7 +211,7 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     const session = await this.prisma.session.findUnique({ where: { refreshTokenHash: hashRefreshToken(refreshToken) }, include: authUserInclude })
-    if (!session || session.revokedAt || session.expiresAt <= new Date() || session.user.status !== 'ACTIVE' || session.user.campusStatus !== 'VERIFIED') {
+    if (!session || session.revokedAt || session.expiresAt <= new Date() || !['ACTIVE', 'MUTED'].includes(session.user.status) || session.user.campusStatus !== 'VERIFIED') {
       throw new UnauthorizedException('刷新凭证无效')
     }
     if (effectiveCampusStatus(session.user) !== 'VERIFIED') throw new UnauthorizedException('campus identity is not verified')

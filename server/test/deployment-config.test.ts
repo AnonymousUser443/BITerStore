@@ -3,6 +3,14 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('production gateway', () => {
+  it('preserves private media cache headers through the legacy media alias', () => {
+    const nginx = readFileSync(resolve(process.cwd(), '../deploy/nginx.conf'), 'utf8')
+    const mediaLocation = nginx.split('location /media/ {')[1].split('\n  }')[0]
+    expect(mediaLocation).toContain('rewrite ^/media/(.*)$ /api/v1/media/$1 break;')
+    expect(mediaLocation).not.toMatch(/proxy_hide_header\s+Cache-Control/)
+    expect(mediaLocation).not.toMatch(/add_header\s+Cache-Control/)
+  })
+
   it('canonicalizes dynamic H5 links and redirects unknown pages to the in-app 404', () => {
     const h5Nginx = readFileSync(resolve(process.cwd(), '../miniProgram/nginx.h5.conf'), 'utf8')
     const h5Dockerfile = readFileSync(resolve(process.cwd(), '../miniProgram/Dockerfile.h5'), 'utf8')
@@ -122,6 +130,7 @@ describe('production service isolation and recovery', () => {
     expect(backup).toContain('rm -f /tmp/biterstore-backup-ready')
     expect(backupHealth).toContain('test -f /tmp/biterstore-backup-ready')
     expect(restoreDrill).toContain('mktemp /tmp/biterstore-restore.dump.XXXXXX')
+    expect(restoreDrill).toContain('gpg --batch --yes --quiet')
     expect(restoreDrill).not.toContain('mktemp /tmp/biterstore-restore-XXXXXX.dump')
     expect(backupDockerfile).toContain("sed -i 's/\\r$//' /usr/local/bin/*.sh")
     expect(gitAttributes).toContain('*.sh text eol=lf')

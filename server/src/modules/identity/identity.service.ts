@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
-import { createHash, createHmac } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { importSPKI, jwtVerify } from 'jose'
 import { campusIdentityHashSecret } from '../../common/security-config.js'
 import { PrismaService } from '../../infra/prisma.service.js'
@@ -63,7 +63,7 @@ export class IdentityService {
       subjectHash: createHmac('sha256', campusIdentityHashSecret()).update(subject).digest('hex'),
       legacySubjectHash: createHash('sha256').update(subject).digest('hex'),
       studentNumber,
-      defaultNickname: `BITer${studentNumber}`.slice(0, 24),
+      defaultNickname: `BITer-${randomBytes(5).toString('hex')}`,
       jti: String(payload.jti),
       expiresAt
     }
@@ -94,7 +94,7 @@ export class IdentityService {
               studentNumber: claims.studentNumber,
               ...(recoverableDeletedUser
                 ? { status: 'ACTIVE', deletedAt: null, nickname: claims.defaultNickname, campus: null, bio: '', role: 'USER', adminTotpSecret: null, adminTotpEnabled: false }
-                : legacyDefaultNicknames.has(currentUser.nickname) ? { nickname: claims.defaultNickname } : {})
+                : legacyDefaultNicknames.has(currentUser.nickname) || currentUser.nickname === `BITer${claims.studentNumber}` ? { nickname: claims.defaultNickname } : {})
             }
           })
         : await tx.user.create({ data: { studentNumber: claims.studentNumber, nickname: claims.defaultNickname, campusStatus: 'VERIFIED' } })

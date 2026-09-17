@@ -1,0 +1,124 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [server, web, admin, miniProgram]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.1
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+      - run: npm ci
+      - if: matrix.package == 'server'
+        run: npm run prisma:generate
+      - run: npm run lint --if-present
+      - run: npm run typecheck --if-present
+      - run: npm test
+      - if: matrix.package != 'miniProgram'
+        run: npm run build
+      - if: matrix.package == 'miniProgram'
+        run: |
+          npm run build:h5
+          node scripts/h5-performance.mjs
+          npm run build:weapp
+
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.1
+      - run: node --test
+        working-directory: deploy/book-metadata-worker
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa
+          POSTGRES_DB: repair_ci
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U qa -d repair_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://qa:qa@127.0.0.1:5432/repair_ci
+      REDIS_URL: redis://127.0.0.1:6379
+      UPLOAD_STORAGE: local
+      LOCAL_UPLOAD_DIR: /tmp/biterstore-ci-uploads
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.1
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci && npm run prisma:generate && npm run prisma:deploy && npm run build
+        working-directory: server
+      - name: Standard startup and readiness
+        working-directory: server
+        run: |
+          npm start > /tmp/biterstore-ci-start.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/api/v1/health/ready; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/biterstore-ci-start.log
+          exit 1
+      - name: Encrypted backup restore into a disposable database
+        run: |
+          docker build -t biterstore-backup-ci deploy/backup
+          docker run --rm --network host --entrypoint sh \
+            -v "$PWD:/work:ro" -e PGPASSWORD=qa biterstore-backup-ci \
+            /work/deploy/backup/verify-ci.sh
+      - name: Nginx configuration syntax
+        run: |
+          docker run --rm --entrypoint nginx \
+            --add-host api:127.0.0.1 --add-host h5:127.0.0.1 \
+            --add-host admin:127.0.0.1 --add-host bit-login:127.0.0.1 \
+            -v "$PWD/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:1.27-alpine -t

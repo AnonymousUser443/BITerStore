@@ -130,6 +130,8 @@ export function securityHeadersForRequest(request: { url?: string; protocol?: st
       || path.startsWith('/api/v1/reports')
       || path.startsWith('/api/v1/moderation')
       || path.startsWith('/api/v1/media/review')
+      || path.startsWith('/api/v1/media/owner')
+      || path.startsWith('/api/v1/media/conversation')
       || path.startsWith('/api/v1/listings/mine')
       || path.startsWith('/api/v1/listings/favorites')) ? { 'Cache-Control': 'no-store' } : {}),
     ...(process.env.NODE_ENV === 'production' && isHttpsRequest(request) ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {})

@@ -69,6 +69,7 @@ export interface UserRow {
 
 export interface ListingRow {
   id: string
+  version: number
   title: string
   author: string
   isbn: string
@@ -123,6 +124,7 @@ export interface AuditRow {
 export interface PendingAction {
   targetType: TargetType
   targetId: string
+  version?: number
   targetLabel: string
   action: string
   actionLabel: string

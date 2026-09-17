@@ -49,18 +49,18 @@ describe('BIT-Login registration JWT', () => {
   it('accepts a valid one-time registration JWT', async () => {
     await expect(service.loginOrCreate(await token())).resolves.toMatchObject({ id: 'student-1', campusStatus: 'VERIFIED' })
     expect(prisma.$transaction).toHaveBeenCalledOnce()
-    expect(tx.user.create).toHaveBeenCalledWith({ data: { studentNumber: '1120230000', nickname: 'BITer1120230000', campusStatus: 'VERIFIED' } })
+    expect(tx.user.create).toHaveBeenCalledWith({ data: { studentNumber: '1120230000', nickname: expect.stringMatching(/^BITer-[a-f0-9]{10}$/), campusStatus: 'VERIFIED' } })
   })
 
   it('upgrades only a legacy default nickname on the next campus login', async () => {
     tx.campusIdentity.findUnique.mockResolvedValue({ userId: 'student-1' })
     tx.user.findUniqueOrThrow.mockResolvedValue({ id: 'student-1', nickname: '北理同学' })
-    tx.user.update.mockResolvedValue({ id: 'student-1', nickname: 'BITer1120230000', campusStatus: 'VERIFIED' })
+    tx.user.update.mockResolvedValue({ id: 'student-1', nickname: expect.stringMatching(/^BITer-[a-f0-9]{10}$/), campusStatus: 'VERIFIED' })
 
     await service.loginOrCreate(await token())
 
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { campusStatus: 'VERIFIED', studentNumber: '1120230000', nickname: 'BITer1120230000' }
+      data: { campusStatus: 'VERIFIED', studentNumber: '1120230000', nickname: expect.stringMatching(/^BITer-[a-f0-9]{10}$/) }
     }))
   })
 
@@ -72,9 +72,21 @@ describe('BIT-Login registration JWT', () => {
     await service.loginOrCreate(await token())
 
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: 'ACTIVE', deletedAt: null, studentNumber: '1120230000', nickname: 'BITer1120230000', role: 'USER' })
+      data: expect.objectContaining({ status: 'ACTIVE', deletedAt: null, studentNumber: '1120230000', nickname: expect.stringMatching(/^BITer-[a-f0-9]{10}$/), role: 'USER' })
     }))
     expect(tx.campusIdentity.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ userId: 'student-1', revokedAt: null }) }))
+  })
+
+  it.each([['BITer1120230000', true], ['自定义昵称', false], ['BITer-1234567890', false]])('handles existing nickname %s without exposing the student number', async (nickname, replace) => {
+    tx.campusIdentity.findUnique.mockResolvedValue({ userId: 'student-1' })
+    tx.user.findUniqueOrThrow.mockResolvedValue({ id: 'student-1', nickname, status: 'ACTIVE' })
+    tx.user.update.mockResolvedValue({ id: 'student-1', status: 'ACTIVE' })
+    await service.loginOrCreate(await token())
+    const data = tx.user.update.mock.calls[0][0].data
+    if (replace) {
+      expect(data.nickname).toMatch(/^BITer-[a-f0-9]{10}$/)
+      expect(data.nickname).not.toContain('1120230000')
+    } else expect(data.nickname).toBeUndefined()
   })
 
   it('upgrades a legacy unsalted identity hash when the student logs in', async () => {

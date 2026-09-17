@@ -105,7 +105,7 @@ function writeProfileSnapshot(profile?: User) {
   else window.localStorage.removeItem(key);
 }
 function clearProfileSnapshots() {
-  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => Boolean(value) && value.startsWith(PROFILE_SNAPSHOT_PREFIX))) {
+  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => value !== null && value.startsWith(PROFILE_SNAPSHOT_PREFIX))) {
     window.localStorage.removeItem(key);
   }
   window.localStorage.removeItem('biterstore:v1:snapshot:profile');
@@ -114,7 +114,7 @@ function clearLocalAccountArtifacts() {
   demoRepository.clearAuthentication();
   clearProfileSnapshots();
   const privatePrefixes = ['biterstore:v1:api-draft:', 'biterstore:v1:snapshot:mine:', 'biterstore:v1:snapshot:favorites:', 'biterstore:v1:snapshot:threads:', 'biterstore:v1:snapshot:thread:', 'biterstore:v1:snapshot:notifications:'];
-  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => Boolean(value) && (value === 'biterstore:v1:api-draft' || privatePrefixes.some((prefix) => value.startsWith(prefix))))) {
+  for (const key of Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).filter((value): value is string => value !== null && (value === 'biterstore:v1:api-draft' || privatePrefixes.some((prefix) => value.startsWith(prefix))))) {
     window.localStorage.removeItem(key);
   }
   void clearImages().catch(() => undefined);
@@ -770,9 +770,9 @@ function MyListingsPage({ navigate, notify }: { navigate: (to: string) => void; 
     if (updatingId) return;
     setUpdatingId(book.id);
     try {
-      await demoRepository.updateListingStatus(book.id, status);
+      const actual = await demoRepository.updateListingStatus(book.id, status);
       setConfirmingSoldId(undefined);
-      notify(status === 'sold' ? '已标记为已售' : '已重新上架'); load();
+      notify(actual === 'reviewing' ? '已提交审核' : actual === 'sold' ? '已标记为已售' : '已重新上架'); load();
     } catch (cause) { notify(cause instanceof Error ? cause.message : '状态更新失败，请稍后重试'); }
     finally { setUpdatingId(undefined); }
   };

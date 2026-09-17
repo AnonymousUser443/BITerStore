@@ -127,7 +127,7 @@ const authenticatedFixture = `(() => {
   const ownedListing = { ...listing, id: 'qa-owned', title: '我的巡检商品', sellerId: user.id, seller: user };
   const message = { id: '12', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
   const conversation = {
-    id: 'thread-lin', listingId: listing.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
+    id: 'thread-lin', listingId: listing.id, listing, buyerId: user.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
     unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }], messages: [message]
   };
   if (guest) {
@@ -156,6 +156,7 @@ const authenticatedFixture = `(() => {
     else if (path === '/listings/mine/all') body = { items: [ownedListing] };
     else if (path === '/listings' && method === 'GET') body = { items: [listing] };
     else if (path === '/conversations' && method === 'GET') body = [conversation];
+    else if (path === '/conversations/thread-lin' && method === 'GET') body = conversation;
     else if (path === '/conversations/thread-lin/messages' && method === 'GET') body = { items: [message] };
     else if (path === '/blocks' && method === 'GET') body = [];
     else if (path === '/notifications') body = [{

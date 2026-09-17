@@ -26,9 +26,9 @@ export default function MyListingsPage() {
     if (updatingId) return
     setUpdatingId(item.id)
     try {
-      await demoRepository.updateListingStatus(item.id, status)
+      const actual = await demoRepository.updateListingStatus(item.id, status)
       setConfirmingSoldId(undefined)
-      await feedbackAdapter.toast(status === 'sold' ? '已标记为已售' : '已重新上架')
+      await feedbackAdapter.toast(actual === 'reviewing' ? '已提交审核' : actual === 'sold' ? '已标记为已售' : '已重新上架')
       await load()
     } catch (cause) {
       await feedbackAdapter.toast(cause instanceof Error ? cause.message : '状态更新失败，请稍后重试')

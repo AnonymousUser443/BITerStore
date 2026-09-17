@@ -7,6 +7,7 @@ import { beginNavigationFeedback, getNavigationChromeStyle, markNavigationReady,
 import type { Listing, ListingStatus } from '@/domain/types'
 import { ChatScroll } from './ChatScroll'
 import { Glyph } from './Glyph'
+import { ListingImage } from './ListingImage'
 
 export function Brand() {
   return <View className='brand'><View className='brand-mark'><View className='brand-leaf' /><View className='brand-leaf' /></View><Text className='brand-label'>梨苑儿</Text></View>
@@ -50,7 +51,7 @@ export function StatusTag({ status }: { status: ListingStatus }) { const labels:
 
 export function BookCover({ listing, compact = false }: { listing: Listing; compact?: boolean }) {
   const cover = listing.imageUrls?.[0]
-  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <Image className='book-cover-image' src={cover} webp={isNetworkWebp(cover)} mode='aspectFill' /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>梨苑儿校园藏书</Text>}</>}</View>
+  return <View className={`book-cover ${listing.tone} ${compact ? 'compact' : ''} ${cover ? 'has-image' : ''}`}>{cover ? <ListingImage className='book-cover-image' src={cover} /> : <><Text className='cover-leaf'>❧</Text><Text className='cover-title'>{listing.title}</Text>{!compact && <Text className='cover-caption'>梨苑儿校园藏书</Text>}</>}</View>
 }
 
 export function BookTile({ listing, href, onTap }: { listing: Listing; href?: string; onTap?: () => void }) {

@@ -22,7 +22,7 @@ esac
 
 plain_file="$(mktemp /tmp/biterstore-restore.dump.XXXXXX)"
 trap 'rm -f "$plain_file"' EXIT INT TERM
-gpg --batch --quiet --no-symkey-cache --pinentry-mode loopback \
+gpg --batch --yes --quiet --no-symkey-cache --pinentry-mode loopback \
   --passphrase-file "$BACKUP_ENCRYPTION_PASSPHRASE_FILE" --output "$plain_file" --decrypt "$archive"
 pg_restore --list "$plain_file" >/dev/null
 pg_restore --exit-on-error --no-owner --no-privileges --dbname "$RESTORE_DATABASE_URL" "$plain_file"

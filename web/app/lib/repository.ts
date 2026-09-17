@@ -129,7 +129,7 @@ export interface DemoRepository {
   saveDraft(draft: PublishDraft): Promise<void>;
   getDraft(): Promise<PublishDraft | null>;
   publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Book>;
-  updateListingStatus(id: string, status: ListingStatus): Promise<void>;
+  updateListingStatus(id: string, status: ListingStatus): Promise<ListingStatus>;
   deleteListing(id: string): Promise<void>;
   listMyListings(): Promise<Book[]>;
   listMyListingsPage(cursor?: string): Promise<{ items: Book[]; nextCursor: string | null }>;
@@ -176,7 +176,7 @@ const localRepository: DemoRepository = {
     const book: Book = { id: `listing-${Date.now()}`, title: draft.title, author: draft.author, isbn: draft.isbn, category: draft.category, course: draft.course, price: Number(draft.price), originalPrice: Number(draft.originalPrice || draft.price), condition: draft.condition, campus: draft.campus, description: draft.description, status: 'available', sellerId: CURRENT_USER_ID, createdAt: new Date().toISOString(), tags: draft.tags, tone: 'sage', imageStoreKey: draft.imageStoreKey };
     write(KEYS.books, [book, ...read(KEYS.books, seedBooks)]); localStorage.removeItem(KEYS.draft); await wait(480); onProgress?.(100); return book;
   },
-  async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); },
+  async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); return status; },
   async deleteListing(id) { write(KEYS.books, read(KEYS.books, seedBooks).filter((book) => book.id !== id)); await wait(120); },
   async listMyListings() { return (await this.listMyListingsPage()).items; },
   async listMyListingsPage(cursor) { await wait(); const all = read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); const found = cursor ? all.findIndex((book) => book.id === cursor) + 1 : 0; const start = Math.max(found, 0); const items = all.slice(start, start + 20); return { items, nextCursor: start + items.length < all.length ? items.at(-1)?.id || null : null }; },
@@ -257,7 +257,7 @@ export const demoRepository: DemoRepository = {
     updateSnapshots((items) => [created, ...items.filter((item) => item.id !== created.id)], [LIST_SNAPSHOT_PREFIX]);
     return created;
   },
-  async updateListingStatus(id, status) { await accountRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },
+  async updateListingStatus(id, status) { const actual = await accountRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status: actual } : item)); return actual; },
   async deleteListing(id) { await accountRepository().deleteListing(id); knownBooks.delete(bookCacheKey(id)); updateSnapshots((items) => items.filter((item) => item.id !== id)); },
   async listMyListings() { return (await this.listMyListingsPage()).items; },
   async listMyListingsPage(cursor) {

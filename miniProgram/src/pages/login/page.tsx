@@ -86,7 +86,7 @@ export default function LoginPage() {
     setError('')
     try {
       const result = await loginWithWechat()
-      if ('accessToken' in result) { void warmAccountSnapshots(); await navigationAdapter.switchTab('/pages/home/index') }
+      if ('user' in result) { void warmAccountSnapshots(); await navigationAdapter.switchTab('/pages/home/index') }
       else if (result.authorizeUrl) await externalNavigationAdapter.open(result.authorizeUrl)
       else setError('微信网站登录尚未配置，请先使用学号登录')
     } catch (cause) {

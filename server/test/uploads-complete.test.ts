@@ -40,16 +40,17 @@ describe('upload completion', () => {
     await writeFile(join(root, row.objectKey), bytes)
     process.env.UPLOAD_STORAGE = 'local'
     process.env.LOCAL_UPLOAD_DIR = root
+    let stored = { ...row, uploadedAt: null as Date | null }
     const prisma = {
       listingImage: {
-        findFirst: vi.fn().mockResolvedValue(row),
-        update: vi.fn().mockImplementation(({ data }) => ({ ...row, ...data }))
+        findFirst: vi.fn(async () => stored),
+        updateMany: vi.fn(async ({ data }) => { stored = { ...stored, ...data }; return { count: 1 } })
       }
     }
     try {
       const result = await new UploadsController(prisma as never).complete({ id: 'owner-id' } as never, row.id)
-      expect(result.objectKey).toBe('media/owner-id/image-id.png')
-      expect(prisma.listingImage.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ width: 1, height: 1, mime: 'image/png' }) }))
+      expect(result.objectKey).toMatch(/^media\/owner-id\/image-id-[\w-]+\.png$/)
+      expect(prisma.listingImage.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ width: 1, height: 1, mime: 'image/png' }) }))
       expect(await readFile(join(root, result.objectKey))).toEqual(bytes)
       await expect(access(join(root, row.objectKey))).rejects.toBeDefined()
     } finally {

@@ -227,7 +227,8 @@ export const apiRepository: DemoRepository = {
     const current = await h5ApiRequest<ApiListing>(`/listings/mine/${encodedId}`);
     if (!Number.isFinite(Number(current.version))) throw new Error('商品版本信息缺失，请刷新后重试');
     const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : 'ACTIVE';
-    await h5ApiRequest(`/listings/${encodedId}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
+    const updated = await h5ApiRequest<ApiListing>(`/listings/${encodedId}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
+    return book(updated).status;
   },
   async listMyListings() { return (await this.listMyListingsPage()).items; },
   async listMyListingsPage(cursor) {
@@ -244,11 +245,10 @@ export const apiRepository: DemoRepository = {
   },
   async getThread(id) {
     const encodedId = encodeURIComponent(id);
-    const [messages, conversations] = await Promise.all([
-      h5ApiRequest<ApiMessagePage>(`/conversations/${encodedId}/messages?limit=30`), h5ApiRequest<{ items: ApiConversation[] } | ApiConversation[]>('/conversations?limit=50'),
+    const [messages, found] = await Promise.all([
+      h5ApiRequest<ApiMessagePage>(`/conversations/${encodedId}/messages?limit=30`), h5ApiRequest<ApiConversation>(`/conversations/${encodedId}`),
     ]);
-    const found = (Array.isArray(conversations) ? conversations : conversations.items).find((item) => item.id === id);
-    if (!found) return null;
+    if (!found || found.id !== id) return null;
     const value = thread({ ...found, messages: messages.items, blocked: messages.blocked ?? found.blocked, olderCursor: messages.olderCursor });
     const latest = messages.items.at(-1);
     // Reading a conversation advances the cursor through every visible

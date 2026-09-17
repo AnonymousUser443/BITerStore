@@ -515,7 +515,7 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 }
 
 export function listingActions(row: ListingRow): PendingAction[] {
-  const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, targetLabel: row.title, action, actionLabel, tone })
+  const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, version: row.version, targetLabel: row.title, action, actionLabel, tone })
   if (!row.moderationDecision && row.status === 'PENDING_REVIEW') return [base('ACTIVE', '审核通过'), base('BLOCKED', '审核拒绝', 'danger')]
   return !row.moderationDecision && ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
     ? [base('IGNORE', '忽略'), base('BLOCKED', '违规屏蔽', 'danger')]

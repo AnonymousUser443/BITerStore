@@ -2,6 +2,14 @@ import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inj
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
+
+const conversationInclude = {
+  listing: { select: { id: true, title: true, author: true, isbn: true, category: true, course: true, priceCents: true, originalPriceCents: true, condition: true, campus: true, description: true, status: true, sellerId: true, createdAt: true, deletedAt: true, seller: { select: { status: true } }, tags: true, images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' }, moderationStatus: 'APPROVED' }, orderBy: { sortOrder: 'asc' }, select: { id: true } } } },
+  members: { include: { user: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } },
+  messages: { orderBy: { id: 'desc' }, take: 1 }
+} satisfies Prisma.ConversationInclude
+type ConversationSummary = Prisma.ConversationGetPayload<{ include: typeof conversationInclude }>
+
 @Injectable()
 export class ConversationsService {
   constructor(private readonly prisma: PrismaService, private readonly redis: RedisService) {}
@@ -13,25 +21,44 @@ export class ConversationsService {
       orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: {
-        listing: { select: { id: true, title: true, author: true, isbn: true, category: true, course: true, priceCents: true, originalPriceCents: true, condition: true, campus: true, description: true, status: true, sellerId: true, createdAt: true, deletedAt: true, tags: true, images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' }, moderationStatus: 'APPROVED' }, orderBy: { sortOrder: 'asc' }, select: { id: true } } } },
-        members: { include: { user: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } } },
-        messages: { orderBy: { id: 'desc' }, take: 1 }
-      }
+      include: conversationInclude
     })
     const page = conversations.slice(0, limit)
+    const items = await this.presentConversations(userId, page)
+    return { items, nextCursor: conversations.length > limit ? page.at(-1)?.id || null : null }
+  }
+
+  async get(userId: string, id: string) {
+    if (!id || id.length > 100 || !/^[A-Za-z0-9_-]+$/.test(id)) throw new BadRequestException('会话标识无效')
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, members: { some: { userId } } },
+      include: conversationInclude
+    })
+    if (!conversation) throw new NotFoundException('会话不存在或无权访问')
+    return (await this.presentConversations(userId, [conversation]))[0]
+  }
+
+  private async presentConversations(userId: string, page: ConversationSummary[]) {
     const otherUserIds = [...new Set(page.map((conversation) => conversation.buyerId === userId ? conversation.sellerId : conversation.buyerId))]
     const blockedUsers = await this.blockedUsers(userId, otherUserIds)
     const unreadCounts = await this.unreadCounts(userId, page.map((conversation) => conversation.id))
-    const items = page.map((conversation) => ({
-      ...conversation,
-      blocked: blockedUsers.has(conversation.buyerId === userId ? conversation.sellerId : conversation.buyerId),
-      unread: unreadCounts.get(conversation.id) || 0,
-      listing: { ...conversation.listing, status: conversation.listing.deletedAt ? 'OFF_SHELF' : conversation.listing.status, images: conversation.listing.images.map((image) => ({ ...image, url: `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/media/${encodeURIComponent(image.id)}` })) },
-      members: conversation.members.map((member) => ({ ...member, lastReadMessageId: member.lastReadMessageId?.toString() ?? null })),
-      messages: [...conversation.messages].reverse().map((message) => ({ ...message, id: message.id.toString() }))
-    }))
-    return { items, nextCursor: conversations.length > limit ? page.at(-1)?.id || null : null }
+    return page.map((conversation) => {
+      // Seller status is only needed for media authorization, not the public
+      // seller profile consumed by clients (which comes from the members).
+      const { seller, ...listing } = conversation.listing
+      const visibleImages = !listing.deletedAt
+        && ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF'].includes(listing.status)
+        && ['ACTIVE', 'MUTED'].includes(seller.status)
+      const mediaBase = `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/media/conversation/${encodeURIComponent(conversation.id)}`
+      return {
+        ...conversation,
+        blocked: blockedUsers.has(conversation.buyerId === userId ? conversation.sellerId : conversation.buyerId),
+        unread: unreadCounts.get(conversation.id) || 0,
+        listing: { ...listing, status: listing.deletedAt ? 'OFF_SHELF' : listing.status, images: visibleImages ? listing.images.map((image) => ({ ...image, url: `${mediaBase}/${encodeURIComponent(image.id)}` })) : [] },
+        members: conversation.members.map((member) => ({ ...member, lastReadMessageId: member.lastReadMessageId?.toString() ?? null })),
+        messages: [...conversation.messages].reverse().map((message) => ({ ...message, id: message.id.toString() }))
+      }
+    })
   }
   async create(userId: string, listingId: string) {
     if (!listingId || listingId.length > 100 || !/^[A-Za-z0-9_-]+$/.test(listingId)) throw new BadRequestException('商品标识无效')
@@ -95,14 +122,16 @@ export class ConversationsService {
     return { ...message, id: message.id.toString() }
   }
   async read(userId: string, id: string, messageId: string) {
-    const access = await this.access(userId, id)
+    await this.access(userId, id)
     let parsed: bigint
     try { parsed = BigInt(messageId) } catch { throw new BadRequestException('消息标识无效') }
     if (parsed < 0n) throw new BadRequestException('消息标识无效')
     const target = await this.prisma.message.findFirst({ where: { id: parsed, conversationId: id }, select: { id: true } })
     if (!target) throw new BadRequestException('消息不属于该会话')
-    const currentRead = access.member.lastReadMessageId || 0n
-    if (parsed > currentRead) await this.prisma.conversationMember.update({ where: { conversationId_userId: { conversationId: id, userId } }, data: { lastReadMessageId: parsed } })
+    await this.prisma.conversationMember.updateMany({
+      where: { conversationId: id, userId, OR: [{ lastReadMessageId: null }, { lastReadMessageId: { lt: parsed } }] },
+      data: { lastReadMessageId: parsed }
+    })
     try { await this.redis.ensureConnected(); await this.redis.client.del(`unread:${userId}:${id}`) } catch {}
     return { ok: true }
   }

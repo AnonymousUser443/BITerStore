@@ -168,6 +168,28 @@ function initializeMediaOwner() {
 }
 initializeMediaOwner()
 export function setMediaOwner(userId?: string) { mediaOwnerId = userId?.trim() || 'anonymous'; mediaOwnerInitialized = true }
+let privateMediaGeneration = 0
+const privateMediaFiles = new Set<string>()
+export const privateMediaAdapter = {
+  async release(path: string) {
+    if (!privateMediaFiles.delete(path)) return
+    await new Promise<void>((resolve) => Taro.getFileSystemManager().unlink({ filePath: path, complete: () => resolve() }))
+  },
+  async download(url: string, accessToken: string) {
+    const generation = privateMediaGeneration
+    const result = await Taro.downloadFile({ url, header: { Authorization: `Bearer ${accessToken}` } })
+    if (result.tempFilePath) privateMediaFiles.add(result.tempFilePath)
+    if (generation !== privateMediaGeneration || result.statusCode < 200 || result.statusCode >= 300) {
+      await this.release(result.tempFilePath)
+      if (generation !== privateMediaGeneration) throw new Error('会话已切换或退出')
+    }
+    return result
+  },
+  async clear() {
+    privateMediaGeneration += 1
+    await Promise.all([...privateMediaFiles].map((path) => this.release(path)))
+  }
+}
 function openMediaDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = globalThis.indexedDB.open(mediaDatabaseName(), 1)
@@ -256,6 +278,7 @@ export const mediaAdapter: MediaAdapter = {
   },
   async list() { const items = await storageAdapter.get<StoredMedia[]>(mediaStorageKey(), []); return process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined' ? listH5Media(items) : items },
   async clear() {
+    await privateMediaAdapter.clear()
     const existing = await storageAdapter.get<StoredMedia[]>(mediaStorageKey(), [])
     if (process.env.TARO_ENV === 'h5' && typeof globalThis.indexedDB !== 'undefined') {
       await deleteH5MediaDatabase(mediaDatabaseName())

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { preserveSnapshot } from '@/domain/snapshot'
 import Taro from '@tarojs/taro'
-import { apiRequest, sessionStore } from '@/domain/api'
+import { apiRequest, resolveMediaSource, sessionStore } from '@/domain/api'
+import { privateMediaAdapter } from '@/platform'
 import { loginWithCampus } from '@/domain/auth'
 import { defaultFilters, filterListings } from '@/domain/filters'
 import { formatMessageTime, formatThreadTime, mergeMessagesChronologically } from '@/domain/date-time'
@@ -11,6 +12,9 @@ import { demoRepository } from '@/domain/repository'
 import { apiRepository } from '@/domain/api-repository'
 
 const memory = new Map<string, unknown>()
+function mockRequest(implementation: (options: { url: string; header?: Record<string, string> }) => Promise<unknown>) {
+  vi.mocked(Taro.request).mockImplementation(implementation as unknown as typeof Taro.request)
+}
 vi.mock('@tarojs/taro', () => ({ default: {
   getStorageSync: vi.fn((key) => memory.get(key) ?? ''),
   setStorageSync: vi.fn((key, data) => { memory.set(key, data) }),
@@ -20,6 +24,7 @@ vi.mock('@tarojs/taro', () => ({ default: {
   setStorage: vi.fn(async ({ key, data }) => { memory.set(key, data) }), removeStorage: vi.fn(async ({ key }) => { memory.delete(key) }),
   getStorageInfo: vi.fn(async () => ({ keys: [...memory.keys()] })), showToast: vi.fn(), showModal: vi.fn(async () => ({ confirm: true })),
   request: vi.fn(async () => ({ statusCode: 200, data: { ok: true } })),
+  downloadFile: vi.fn(), getFileSystemManager: vi.fn(() => ({ unlink: vi.fn(({ complete }) => complete()) })),
   navigateTo: vi.fn(), redirectTo: vi.fn(), reLaunch: vi.fn(), switchTab: vi.fn(), navigateBack: vi.fn(), getCurrentInstance: vi.fn(() => ({ router: { path: '' } })), setClipboardData: vi.fn(),
   getWindowInfo: vi.fn(() => ({ windowWidth: 390, statusBarHeight: 44 })), getMenuButtonBoundingClientRect: vi.fn(() => ({ left: 294, bottom: 82 }))
 } }))
@@ -46,8 +51,8 @@ describe('domain', () => {
     await sessionStore.set({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'owner-a', role: 'USER', campusStatus: 'VERIFIED' } })
     vi.mocked(Taro.request)
       .mockResolvedValueOnce({ statusCode: 200, data: { version: 7 } } as never)
-      .mockResolvedValueOnce({ statusCode: 200, data: { ok: true } } as never)
-    await apiRepository.updateListingStatus('draft/a', 'available')
+      .mockResolvedValueOnce({ statusCode: 200, data: { status: 'PENDING_REVIEW', version: 8 } } as never)
+    await expect(apiRepository.updateListingStatus('draft/a', 'available')).resolves.toBe('reviewing')
     expect(vi.mocked(Taro.request).mock.calls[0]?.[0]).toMatchObject({ url: 'http://api.test/listings/mine/draft%2Fa' })
     expect(vi.mocked(Taro.request).mock.calls[1]?.[0]).toMatchObject({ url: 'http://api.test/listings/draft%2Fa/status', data: { status: 'ACTIVE', version: 7 } })
   })
@@ -58,6 +63,30 @@ describe('domain', () => {
     vi.stubGlobal('__API_URL__', 'http://api.test')
     vi.mocked(Taro.request).mockReset().mockResolvedValue({ statusCode: 200, data: { ok: true } } as never)
     await sessionStore.clear()
+  })
+  it('loads protected images with credentials, refreshes once, and removes files on logout', async () => {
+    vi.stubEnv('TARO_ENV', 'weapp')
+    await sessionStore.set({ accessToken: 'old', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'owner', role: 'USER', campusStatus: 'VERIFIED' } })
+    vi.mocked(Taro.downloadFile).mockReset()
+      .mockResolvedValueOnce({ statusCode: 401, tempFilePath: '/tmp/failed' } as never)
+      .mockResolvedValueOnce({ statusCode: 200, tempFilePath: '/tmp/protected' } as never)
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { accessToken: 'new', refreshToken: 'new-refresh', expiresIn: 3600 } } as never)
+    await expect(resolveMediaSource('http://api.test/media/owner/cover')).resolves.toBe('/tmp/protected')
+    expect(Taro.downloadFile).toHaveBeenLastCalledWith({ url: 'http://api.test/media/owner/cover', header: { Authorization: 'Bearer new' } })
+    const release = vi.spyOn(privateMediaAdapter, 'release')
+    await sessionStore.clear()
+    expect(release).toHaveBeenCalledWith('/tmp/protected')
+    release.mockRestore()
+  })
+
+  it('never sends a session token to public or foreign image URLs', async () => {
+    vi.stubEnv('TARO_ENV', 'weapp')
+    vi.mocked(Taro.downloadFile).mockReset()
+    const publicImage = 'http://api.test/media/cover'
+    const foreignImage = 'https://foreign.test/media/owner/cover'
+    expect(await resolveMediaSource(publicImage)).toBe(publicImage)
+    expect(await resolveMediaSource(foreignImage)).toBe(foreignImage)
+    expect(Taro.downloadFile).not.toHaveBeenCalled()
   })
   it('无请求体的写请求会发送空 JSON 对象', async () => { await apiRequest('/empty', { method: 'POST' }); expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', data: {} })) })
   it('登录会话写入后下一次请求立即携带访问令牌', async () => {
@@ -95,7 +124,7 @@ describe('domain', () => {
     const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
     await sessionStore.set(session)
     let refreshRequests = 0
-    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+    mockRequest(async (options) => {
       if (options.url.endsWith('/auth/refresh')) {
         refreshRequests += 1
         await Promise.resolve()
@@ -111,7 +140,7 @@ describe('domain', () => {
   it('访问令牌即将过期时先刷新再请求受保护接口', async () => {
     const session = { accessToken: 'access-old', refreshToken: 'refresh-old', expiresIn: 1, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
     await sessionStore.set(session)
-    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+    mockRequest(async (options) => {
       if (options.url.endsWith('/auth/refresh')) {
         return { statusCode: 200, data: { ...session, accessToken: 'access-new', refreshToken: 'refresh-new', expiresIn: 3600 } } as never
       }
@@ -126,13 +155,13 @@ describe('domain', () => {
     await sessionStore.set(session)
     let releaseDelayed: ((value: { statusCode: number; data: { message: string } }) => void) | undefined
     let refreshRequests = 0
-    vi.mocked(Taro.request).mockImplementation(async (options: { url: string; header?: Record<string, string> }) => {
+    mockRequest(async (options) => {
       if (options.url.endsWith('/auth/refresh')) {
         refreshRequests += 1
         return { statusCode: 200, data: { ...session, accessToken: 'access-new', refreshToken: 'refresh-new' } } as never
       }
       if (options.url.endsWith('/notifications') && options.header?.Authorization === 'Bearer access-old') {
-        return await new Promise((resolve) => { releaseDelayed = resolve }) as never
+        return await new Promise<{ statusCode: number; data: { message: string } }>((resolve) => { releaseDelayed = resolve })
       }
       return options.header?.Authorization === 'Bearer access-new'
         ? { statusCode: 200, data: { ok: true } } as never
@@ -221,16 +250,17 @@ describe('domain', () => {
         { id: '11', senderId: 'seller', content: '第二条未读', createdAt: '2026-08-31T01:01:00.000Z' },
         conversation.messages[0]
       ] } } as never)
-      .mockResolvedValueOnce({ statusCode: 200, data: { items: [conversation] } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: conversation } as never)
       .mockResolvedValueOnce({ statusCode: 200, data: { ok: true } } as never)
       .mockResolvedValueOnce({ statusCode: 200, data: { items: [{ ...conversation, unread: 0 }] } } as never)
 
     const summaries = await apiRepository.listThreads()
     expect(summaries[0]).toMatchObject({ unread: 2, messages: [{ id: '12', text: '我刚补充了一句' }] })
     const loaded = await apiRepository.getThread('thread-read')
+    expect(vi.mocked(Taro.request).mock.calls.some(([options]) => options.url === 'http://api.test/conversations/thread-read')).toBe(true)
     expect(loaded.messages.map((item) => item.id)).toEqual(['10', '11', '12'])
     expect(loaded.unread).toBe(0)
-    expect(vi.mocked(Taro.request).mock.calls.some(([options]) => options.url === 'http://api.test/conversations/thread-read/read' && options.method === 'POST' && options.data?.messageId === '12')).toBe(true)
+    expect(vi.mocked(Taro.request).mock.calls.some(([options]) => options.url === 'http://api.test/conversations/thread-read/read' && options.method === 'POST' && (options.data as { messageId?: string })?.messageId === '12')).toBe(true)
 
     await apiRepository.listThreads()
     expect(apiRepository.peekThread('thread-read')?.messages.map((item) => item.id)).toEqual(['10', '11', '12'])

@@ -31,7 +31,7 @@ const reportStatusTransitions: Record<string, readonly string[]> = {
 }
 
 type TargetType = keyof typeof actionsByTarget
-type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string }
+type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string; version?: number }
 
 function pageOptions(pageRaw?: string, pageSizeRaw?: string) {
   const page = Math.max(1, Number.parseInt(pageRaw || '1', 10) || 1)
@@ -325,21 +325,24 @@ export class AdminController {
         const target = await tx.listing.findUnique({
           where: { id: body.targetId },
           select: {
-            id: true, title: true, sellerId: true, status: true, deletedAt: true,
+            id: true, title: true, sellerId: true, status: true, deletedAt: true, version: true, moderationDecision: true,
             images: { where: { uploadedAt: { not: null } }, select: { role: true } }
           }
         })
         if (!target) throw new NotFoundException('商品不存在')
         if (target.deletedAt) throw new BadRequestException('当前商品状态不支持此操作')
+        if (!Number.isSafeInteger(body.version) || body.version !== target.version) throw new ConflictException('商品已更新，请刷新后重新审核')
         if (body.action === 'IGNORE') {
           if (!listingActionSources.IGNORE.includes(target.status)) throw new BadRequestException('当前商品状态不支持忽略')
-          await tx.listing.update({ where: { id: target.id }, data: { moderationDecision: 'IGNORE', moderatedAt: new Date() } })
+          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: { moderationDecision: target.moderationDecision === 'ACTIVE' ? 'ACTIVE' : 'IGNORE', moderatedAt: new Date(), version: { increment: 1 } } })
+          if (!changed.count) throw new ConflictException('商品已更新，请刷新后重新审核')
         } else {
           if (!listingActionSources[body.action]?.includes(target.status)) throw new BadRequestException('当前商品状态不支持此操作')
           if (body.action === 'ACTIVE' && (!target.images.some((image) => image.role === 'COVER') || !target.images.some((image) => image.role === 'ISBN'))) {
             throw new BadRequestException('商品缺少已上传的封面或 ISBN 页，不能审核上架')
           }
-          await tx.listing.update({ where: { id: target.id }, data: { status: body.action as 'ACTIVE' | 'OFF_SHELF' | 'BLOCKED', moderationDecision: body.action, moderatedAt: new Date(), version: { increment: 1 } } })
+          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: { status: body.action as 'ACTIVE' | 'OFF_SHELF' | 'BLOCKED', moderationDecision: body.action, moderatedAt: new Date(), version: { increment: 1 } } })
+          if (!changed.count) throw new ConflictException('商品已更新，请刷新后重新审核')
           if (body.action === 'ACTIVE') {
             await tx.listingImage.updateMany({ where: { listingId: target.id, uploadedAt: { not: null } }, data: { moderationStatus: 'APPROVED', moderationReason: null, moderatedAt: new Date() } })
           } else if (body.action === 'BLOCKED') {

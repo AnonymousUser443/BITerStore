@@ -127,11 +127,11 @@ describe('demoRepository persistence', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'listing-a', title: '我的下架商品', priceCents: 1200, condition: '八成新', campus: '良乡', status: 'OFF_SHELF', sellerId: 'user-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ version: 4 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      .mockResolvedValueOnce(new Response('{"status":"PENDING_REVIEW","version":5}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(demoRepository.getBook('listing-a')).resolves.toMatchObject({ id: 'listing-a', status: 'offline' });
-    await demoRepository.updateListingStatus('listing-a', 'available');
+    await expect(demoRepository.updateListingStatus('listing-a', 'available')).resolves.toBe('reviewing');
     expect(String(fetchMock.mock.calls[1][0])).toContain('/api/v1/listings/mine/listing-a');
     expect(String(fetchMock.mock.calls[2][0])).toContain('/api/v1/listings/mine/listing-a');
     expect(fetchMock.mock.calls[3][1]).toMatchObject({ body: JSON.stringify({ status: 'ACTIVE', version: 4 }) });
@@ -199,7 +199,7 @@ describe('demoRepository persistence', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ items: [conversation] }))
       .mockResolvedValueOnce(response(messagePage))
-      .mockResolvedValueOnce(response({ items: [conversation] }))
+      .mockResolvedValueOnce(response(conversation))
       .mockResolvedValueOnce(response({ ok: true }))
       .mockResolvedValueOnce(response({ items: [{ ...conversation, unread: 0 }] }));
     vi.stubGlobal('fetch', fetchMock);

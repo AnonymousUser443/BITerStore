@@ -8,7 +8,7 @@ const user = (values: Partial<UserRow> = {}): UserRow => ({
   adminTotpEnabled: false, createdAt: '', updatedAt: '', recentAccess: [], _count: { listings: 0, reports: 0 }, ...values
 })
 const listing = (status: string): ListingRow => ({
-  id: 'listing-1', title: '测试教材', author: '作者', isbn: '9780000000000', category: '教材',
+  id: 'listing-1', version: 7, title: '测试教材', author: '作者', isbn: '9780000000000', category: '教材',
   priceCents: 1200, campus: '良乡', status, viewCount: 0, createdAt: '',
   seller: { id: 'seller-1', nickname: '卖家', status: 'ACTIVE' }, images: [],
   _count: { favorites: 0, conversations: 0 }
@@ -39,6 +39,7 @@ describe('admin action visibility', () => {
   })
 
   it('only offers state-appropriate listing and report actions', () => {
+    expect(listingActions(listing('PENDING_REVIEW'))[0].version).toBe(7)
     expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
     expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
     expect(listingActions(listing('PENDING_REVIEW')).map((item) => item.action)).toEqual(['ACTIVE', 'BLOCKED'])

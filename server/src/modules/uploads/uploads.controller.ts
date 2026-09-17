@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, HttpException, HttpStatus, Optional, Param, Post, Put, ServiceUnavailableException, UseGuards } from '@nestjs/common'
-import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { BadRequestException, Body, ConflictException, Controller, Delete, HttpException, HttpStatus, Optional, Param, Post, Put, ServiceUnavailableException, UseGuards } from '@nestjs/common'
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { assertNotMuted, AuthGuard, CurrentUser, NotMutedGuard, type AuthUser } from '../../common/auth.js'
@@ -82,43 +82,65 @@ export class UploadsController {
   @Post(':id/complete') async complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     assertNotMuted(user)
     await this.enforceRate(user.id, 'complete', Number(process.env.UPLOAD_COMPLETE_PER_MINUTE || 60))
-    const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, uploadedAt: null } }); if (!row) throw new BadRequestException('上传记录不存在或已完成')
+    const findOwned = () => this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id } })
+    const row = await findOwned()
+    if (!row) throw new BadRequestException('上传记录不存在或已取消')
+    if (row.uploadedAt) return row
     const extension = row.objectKey.split('.').pop() || 'jpg'
-    const finalObjectKey = `media/${user.id}/${row.id}.${extension}`
-    let metadata: ImageMetadata
-    if (this.useR2()) {
-      try {
+    // Every attempt owns a separate destination. A losing concurrent request
+    // must never overwrite or delete the winning request's committed object.
+    const finalObjectKey = `media/${user.id}/${row.id}-${randomUUID()}.${extension}`
+    let committed = false
+    try {
+      let bytes: Buffer
+      if (this.useR2()) {
         const head = await this.s3.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET, Key: row.objectKey }))
         if (head.ContentLength !== row.size || this.normalizeMime(head.ContentType) !== this.normalizeMime(row.mime)) throw new ImageValidationError('上传文件与申请信息不一致')
-        const bytes = await this.readR2(row.objectKey)
-        if (bytes.length !== row.size) throw new ImageValidationError('上传文件与申请大小不一致')
-        metadata = await this.validateImage(bytes, row.mime)
-        await this.s3.send(new CopyObjectCommand({ Bucket: process.env.R2_BUCKET, CopySource: `${process.env.R2_BUCKET}/${row.objectKey}`, Key: finalObjectKey, ContentType: metadata.mime, MetadataDirective: 'REPLACE' }))
-      } catch (cause) {
-        await this.deleteR2(row.objectKey)
-        throw this.asBadRequest(cause)
-      }
-    } else {
-      try {
+        bytes = await this.readR2(row.objectKey)
+      } else {
         const file = await stat(this.localPath(row.objectKey)).catch(() => null)
         if (!file || file.size !== row.size) throw new ImageValidationError('上传文件与申请信息不一致')
-        const bytes = await readFile(this.localPath(row.objectKey))
-        metadata = await this.validateImage(bytes, row.mime)
-        await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
-        await rename(this.localPath(row.objectKey), this.localPath(finalObjectKey))
-      } catch (cause) {
-        await unlink(this.localPath(row.objectKey)).catch(() => undefined)
-        throw this.asBadRequest(cause)
+        bytes = await readFile(this.localPath(row.objectKey))
       }
-    }
-    try {
-      const completed = await this.prisma.listingImage.update({ where: { id }, data: { objectKey: finalObjectKey, uploadedAt: new Date(), width: metadata.width, height: metadata.height, mime: metadata.mime, size: row.size } })
-      if (this.useR2()) await this.deleteR2(row.objectKey)
+      if (bytes.length !== row.size || bytes.length > MAX_IMAGE_BYTES) throw new ImageValidationError('上传文件与申请大小不一致')
+      const metadata = await this.validateImage(bytes, row.mime)
+      if (this.useR2()) {
+        // Persist the exact inspected bytes, not a mutable presigned PUT key.
+        await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
+      } else {
+        await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
+        await writeFile(this.localPath(finalObjectKey), bytes, { flag: 'wx' })
+      }
+      const result = await this.prisma.listingImage.updateMany({
+        where: { id, ownerId: user.id, uploadedAt: null, objectKey: row.objectKey },
+        data: { objectKey: finalObjectKey, uploadedAt: new Date(), width: metadata.width, height: metadata.height, mime: metadata.mime, size: bytes.length }
+      })
+      committed = result.count === 1
+      if (!committed) {
+        await this.removeObject(finalObjectKey).catch(() => undefined)
+        const winner = await findOwned()
+        if (winner?.uploadedAt) return winner
+        throw new ConflictException('上传已取消，请重新上传')
+      }
+      // Pending cleanup is best-effort; failure cannot undo a committed upload.
+      await this.removeObject(row.objectKey).catch(() => undefined)
+      const completed = await findOwned()
+      if (!completed) throw new ConflictException('上传已取消，请重新上传')
       return completed
     } catch (cause) {
-      if (this.useR2()) await this.deleteR2(finalObjectKey)
-      else await rename(this.localPath(finalObjectKey), this.localPath(row.objectKey)).catch(() => undefined)
-      throw cause
+      if (!committed) {
+        // A winner may have removed pending while this request was reading it.
+        // Also resolve an ambiguous database response before deleting anything:
+        // the update may have committed even if its response was interrupted.
+        const winner = await findOwned()
+        if (winner?.uploadedAt) {
+          if (winner.objectKey !== finalObjectKey) await this.removeObject(finalObjectKey).catch(() => undefined)
+          return winner
+        }
+        await this.removeObject(finalObjectKey).catch(() => undefined)
+      }
+      if (cause instanceof HttpException) throw cause
+      throw this.asBadRequest(cause)
     }
   }
 
@@ -127,12 +149,12 @@ export class UploadsController {
     const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, listingId: null } })
     if (!row) throw new BadRequestException('上传记录不存在、已绑定商品或已取消')
     const removed = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.listingImage.deleteMany({ where: { id, ownerId: user.id, listingId: null } })
+      const result = await tx.listingImage.deleteMany({ where: { id, ownerId: user.id, listingId: null, objectKey: row.objectKey } })
       if (!result.count) return 0
       await this.removeObject(row.objectKey)
       return result.count
     })
-    if (!removed) throw new BadRequestException('上传记录已绑定商品或已取消')
+    if (!removed) throw new ConflictException('上传记录已变化，请刷新后重试')
     return { cancelled: true }
   }
 
@@ -185,14 +207,18 @@ export class UploadsController {
     const response = await this.s3.send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey }))
     const body = response.Body
     if (!body) throw new ImageValidationError('对象内容为空')
-    if (typeof body.transformToByteArray === 'function') return Buffer.from(await body.transformToByteArray())
+    if (response.ContentLength !== undefined && response.ContentLength > MAX_IMAGE_BYTES) {
+      (body as { destroy?: () => void }).destroy?.()
+      throw new ImageValidationError('上传文件超过 5MB')
+    }
     const chunks: Buffer[] = []
-    for await (const chunk of body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk))
+    let size = 0
+    for await (const chunk of body as AsyncIterable<Uint8Array>) {
+      size += chunk.length
+      if (size > MAX_IMAGE_BYTES) throw new ImageValidationError('上传文件超过 5MB')
+      chunks.push(Buffer.from(chunk))
+    }
     return Buffer.concat(chunks)
-  }
-
-  private async deleteR2(objectKey: string) {
-    await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey })).catch(() => undefined)
   }
 
   private async removeObject(objectKey: string) {

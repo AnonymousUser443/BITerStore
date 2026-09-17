@@ -2,7 +2,7 @@ import { Controller, Get, Header, NotFoundException, Param, StreamableFile, UseG
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { readFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
-import { AdminGuard, AuthGuard } from '../../common/auth.js'
+import { AdminGuard, AuthGuard, CampusVerifiedGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { PublicCatalogRateLimitGuard } from '../listings/public-catalog-rate-limit.guard.js'
 
@@ -15,6 +15,31 @@ export class MediaController {
   })
 
   constructor(private readonly prisma: PrismaService) {}
+
+  @Get('owner/:id')
+  @UseGuards(AuthGuard)
+  @Header('Cache-Control', 'private, no-store')
+  async owner(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const image = await this.prisma.listingImage.findFirst({
+      where: { id, ownerId: user.id, uploadedAt: { not: null }, role: { not: 'ISBN' }, listing: { sellerId: user.id, deletedAt: null } }
+    })
+    if (!image) throw new NotFoundException('图片不存在')
+    return this.stream(image)
+  }
+
+  @Get('conversation/:conversationId/:id')
+  @UseGuards(AuthGuard, CampusVerifiedGuard)
+  @Header('Cache-Control', 'private, no-store')
+  async conversation(@CurrentUser() user: AuthUser, @Param('conversationId') conversationId: string, @Param('id') id: string) {
+    const image = await this.prisma.listingImage.findFirst({
+      where: {
+        id, uploadedAt: { not: null }, role: { not: 'ISBN' }, moderationStatus: 'APPROVED',
+        listing: { deletedAt: null, status: { in: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF'] }, seller: { status: { in: ['ACTIVE', 'MUTED'] } }, conversations: { some: { id: conversationId, members: { some: { userId: user.id } } } } }
+      }
+    })
+    if (!image) throw new NotFoundException('图片不存在')
+    return this.stream(image)
+  }
 
   @Get('review/:id')
   @UseGuards(AuthGuard, AdminGuard)

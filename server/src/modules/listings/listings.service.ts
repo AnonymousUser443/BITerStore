@@ -11,7 +11,7 @@ export const allowedTransitions: Record<ListingStatus, ListingStatus[]> = {
 @Injectable()
 export class ListingsService {
   constructor(private readonly prisma: PrismaService, @Optional() private readonly catalogCache?: CatalogCacheService) {}
-  private present<T extends { images?: Array<{ id: string; mime?: string; width?: number | null; height?: number | null; role?: string; sortOrder?: number }> }>(item: T) {
+  private present<T extends { images?: Array<{ id: string; mime?: string; width?: number | null; height?: number | null; role?: string; sortOrder?: number }> }>(item: T, ownerView = false) {
     const publicBase = `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/media`
     const {
       clientRequestId: _clientRequestId,
@@ -30,13 +30,13 @@ export class ListingsService {
         ...(image.height ? { height: image.height } : {}),
         ...(image.role ? { role: image.role } : {}),
         ...(image.sortOrder !== undefined ? { sortOrder: image.sortOrder } : {}),
-        url: `${publicBase}/${encodeURIComponent(image.id)}`
+        url: `${publicBase}/${ownerView ? 'owner/' : ''}${encodeURIComponent(image.id)}`
       }))
     }
   }
-  private include() {
+  private include(ownerView = false) {
     return {
-      images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' as const }, moderationStatus: 'APPROVED' as const }, orderBy: { sortOrder: 'asc' as const } },
+      images: { where: { uploadedAt: { not: null }, role: { not: 'ISBN' as const }, ...(!ownerView ? { moderationStatus: 'APPROVED' as const } : {}) }, orderBy: { sortOrder: 'asc' as const } },
       seller: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } }
     }
   }
@@ -77,16 +77,16 @@ export class ListingsService {
       : query.sort === 'price_desc'
         ? [{ priceCents: 'desc' }, { id: 'desc' }]
         : [{ createdAt: 'desc' }, { id: 'desc' }]
-    return this.prisma.listing.findMany({ where, take: query.limit + 1, ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}), orderBy, include: this.include() })
-      .then((items) => ({ items: items.slice(0, query.limit).map((item) => this.present(item)), nextCursor: items.length > query.limit ? items[query.limit - 1].id : null }))
+    return this.prisma.listing.findMany({ where, take: query.limit + 1, ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}), orderBy, include: this.include(Boolean(mine)) })
+      .then((items) => ({ items: items.slice(0, query.limit).map((item) => this.present(item, Boolean(mine))), nextCursor: items.length > query.limit ? items[query.limit - 1].id : null }))
   }
   private async getInternal(id: string, publicOnly: boolean) {
     const item = await this.prisma.listing.findFirst({
       where: { id, deletedAt: null, ...(publicOnly ? this.publicVisibility() : {}) },
-      include: this.include()
+      include: this.include(!publicOnly)
     })
     if (!item) throw new NotFoundException('商品不存在')
-    return this.present(item)
+    return this.present(item, !publicOnly)
   }
   async get(id: string) {
     if (!id || id.length > 100 || !/^[A-Za-z0-9_-]+$/.test(id)) throw new BadRequestException('商品 ID 格式无效')
@@ -161,10 +161,16 @@ export class ListingsService {
   }
   async state(userId: string, id: string, body: unknown) {
     const normalized = normalizeListingStatus(body)
-    const item = await this.getForOwner(id)
+    // Keep the internal moderation marker here; owner/public DTOs omit it.
+    const item = await this.prisma.listing.findFirst({ where: { id, deletedAt: null } })
+    if (!item) throw new NotFoundException('商品不存在')
     if (item.sellerId !== userId) throw new ForbiddenException('不能修改他人的商品')
     if (!allowedTransitions[item.status].includes(normalized.status)) throw new BadRequestException(`不允许从 ${item.status} 变更为 ${normalized.status}`)
-    if (normalized.status === 'PENDING_REVIEW' || normalized.status === 'ACTIVE') {
+    // Every content edit clears this approval in the same versioned update.
+    // A relist request for changed/unapproved content becomes a resubmission.
+    const nextStatus = normalized.status === 'ACTIVE' && item.moderationDecision !== 'ACTIVE'
+      ? 'PENDING_REVIEW' : normalized.status
+    if (nextStatus === 'PENDING_REVIEW' || nextStatus === 'ACTIVE') {
       const images = await this.prisma.listingImage.findMany({
         where: { listingId: id, uploadedAt: { not: null } },
         select: { role: true, moderationStatus: true }
@@ -172,15 +178,15 @@ export class ListingsService {
       if (!images.some((image) => image.role === 'COVER') || !images.some((image) => image.role === 'ISBN')) {
         throw new BadRequestException('提交审核或上架前必须上传封面和 ISBN 页')
       }
-      if (normalized.status === 'ACTIVE' && images.some((image) => image.role !== 'ISBN' && image.moderationStatus !== 'APPROVED')) {
+      if (nextStatus === 'ACTIVE' && images.some((image) => image.role !== 'ISBN' && image.moderationStatus !== 'APPROVED')) {
         throw new BadRequestException('商品图片尚未审核通过，不能上架')
       }
     }
     const result = await this.prisma.listing.updateMany({
-      where: { id, version: normalized.version },
+      where: { id, sellerId: userId, version: normalized.version, deletedAt: null, ...(nextStatus === 'ACTIVE' ? { moderationDecision: 'ACTIVE' } : {}) },
       data: {
-        status: normalized.status,
-        ...(normalized.status === 'PENDING_REVIEW' ? { moderationDecision: null, moderatedAt: null } : {}),
+        status: nextStatus,
+        ...(nextStatus === 'PENDING_REVIEW' ? { moderationDecision: null, moderatedAt: null } : {}),
         version: { increment: 1 }
       }
     })
