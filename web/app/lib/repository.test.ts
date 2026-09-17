@@ -160,7 +160,7 @@ describe('demoRepository persistence', () => {
     }));
   });
 
-  it('formats API conversation timestamps for compact message cards', async () => {
+  it('preserves API conversation timestamps so the UI can sort and format them', async () => {
     demoRepository.markAuthenticated('user-real');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-30T00:00:00Z'));
@@ -174,7 +174,7 @@ describe('demoRepository persistence', () => {
 
     const threads = await demoRepository.listThreads();
 
-    expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', unread: 2, updatedAt: '8月29日', messages: [{ id: '9', text: '这本书还在' }], book: { id: 'real-listing', title: '真实教材' } });
+    expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', unread: 2, updatedAt: '2026-08-29T12:24:07.770Z', messages: [{ id: '9', text: '这本书还在', createdAt: '2026-08-29T12:24:07.770Z' }], book: { id: 'real-listing', title: '真实教材' } });
     expect(peekThreads()?.[0].id).toBe('thread-real');
     expect(peekThread('thread-real')?.book?.title).toBe('真实教材');
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }));

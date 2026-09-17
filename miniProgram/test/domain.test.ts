@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro'
 import { apiRequest, sessionStore } from '@/domain/api'
 import { loginWithCampus } from '@/domain/auth'
 import { defaultFilters, filterListings } from '@/domain/filters'
+import { formatMessageTime, formatThreadTime, mergeMessagesChronologically } from '@/domain/date-time'
 import { seedListings } from '@/domain/seed'
 import { listingAssistant } from '@/domain/assistant'
 import { demoRepository } from '@/domain/repository'
@@ -23,6 +24,18 @@ vi.mock('@tarojs/taro', () => ({ default: {
   getWindowInfo: vi.fn(() => ({ windowWidth: 390, statusBarHeight: 44 })), getMenuButtonBoundingClientRect: vi.fn(() => ({ left: 294, bottom: 82 }))
 } }))
 describe('domain', () => {
+  it('formats and orders API message timestamps chronologically', () => {
+    const now = new Date(2026, 8, 17, 20, 0)
+    expect(formatMessageTime(new Date(2026, 8, 17, 9, 5).toISOString(), now)).toBe('09:05')
+    expect(formatMessageTime(new Date(2026, 8, 16, 21, 8).toISOString(), now)).toBe('昨天 21:08')
+    expect(formatThreadTime(new Date(2026, 7, 20, 9, 5).toISOString(), now)).toBe('8月20日')
+    const merged = mergeMessagesChronologically(
+      [{ id: 'later', createdAt: '2026-09-17T11:00:00.000Z' }],
+      [{ id: 'earlier', createdAt: '2026-09-17T09:00:00.000Z' }, { id: 'later', createdAt: '2026-09-17T11:00:00.000Z' }]
+    )
+    expect(merged.map((message) => message.id)).toEqual(['earlier', 'later'])
+  })
+
   it('keeps the current reference when a refreshed snapshot is unchanged', () => {
     const current = [{ id: 'book-a', title: '高等数学' }]
     expect(preserveSnapshot(current, [{ id: 'book-a', title: '高等数学' }])).toBe(current)
@@ -34,9 +47,9 @@ describe('domain', () => {
     vi.mocked(Taro.request)
       .mockResolvedValueOnce({ statusCode: 200, data: { version: 7 } } as never)
       .mockResolvedValueOnce({ statusCode: 200, data: { ok: true } } as never)
-    await apiRepository.updateListingStatus('draft-a', 'available')
-    expect(vi.mocked(Taro.request).mock.calls[0]?.[0]).toMatchObject({ url: 'http://api.test/listings/mine/draft-a' })
-    expect(vi.mocked(Taro.request).mock.calls[1]?.[0]).toMatchObject({ url: 'http://api.test/listings/draft-a/status', data: { status: 'ACTIVE', version: 7 } })
+    await apiRepository.updateListingStatus('draft/a', 'available')
+    expect(vi.mocked(Taro.request).mock.calls[0]?.[0]).toMatchObject({ url: 'http://api.test/listings/mine/draft%2Fa' })
+    expect(vi.mocked(Taro.request).mock.calls[1]?.[0]).toMatchObject({ url: 'http://api.test/listings/draft%2Fa/status', data: { status: 'ACTIVE', version: 7 } })
   })
 
   beforeEach(async () => {

@@ -14,18 +14,24 @@
 }
 
 .app-stage {
+  width: 100%;
+  min-width: 100%;
+  min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   place-items: start center;
   background:
     radial-gradient(circle at 20% 0%, rgba(174,182,154,.45), transparent 32rem),
     linear-gradient(135deg, #e8e5dc, #cbcfc3);
+  background-size: cover;
 }
 
 .phone-shell {
   position: relative;
   width: min(100%, 430px);
+  min-height: 100vh;
   min-height: 100dvh;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   background: var(--cream);

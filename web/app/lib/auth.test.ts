@@ -69,6 +69,19 @@ describe('Golden H5 authentication', () => {
     }));
   });
 
+  it('treats an anonymous restore as anonymous without broadcasting an expired login', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ message: 'not authenticated' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ message: 'no refresh session' }, 401));
+
+    await expect(restoreH5Session()).resolves.toBeNull();
+
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('shares one refresh across concurrent requests when the access cookie expires', async () => {
     const profile = { id: 'student-1', nickname: 'BITer1120230000' };
     let profileRequests = 0;

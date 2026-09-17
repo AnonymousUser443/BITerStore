@@ -14,26 +14,40 @@
 }
 
 * { box-sizing: border-box; }
-html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #deddd6; color: var(--text); }
-body { font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif; }
+html, body { width: 100%; min-width: 100%; height: 100%; min-height: 100%; margin: 0; overflow: hidden; color: var(--text); }
+html { background: #cbcfc3; }
+body {
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(174,182,154,.45), transparent 32rem),
+    linear-gradient(135deg, #e8e5dc, #cbcfc3);
+  background-attachment: fixed;
+  background-size: cover;
+}
 a { color: inherit; text-decoration: none; }
 button, input, textarea, select { font: inherit; }
 button { color: inherit; cursor: pointer; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
 .app-stage {
+  width: 100%;
+  min-width: 100%;
+  min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   place-items: start center;
   background:
     radial-gradient(circle at 20% 0%, rgba(174,182,154,.45), transparent 32rem),
     linear-gradient(135deg, #e8e5dc, #cbcfc3);
+  background-size: cover;
 }
 
 .phone-shell {
   position: relative;
   width: min(100%, 430px);
+  min-height: 100vh;
   min-height: 100dvh;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   background: var(--cream);

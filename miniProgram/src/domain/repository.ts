@@ -2,6 +2,7 @@ import { mediaAdapter, storageAdapter } from '@/platform'
 import { CURRENT_USER_ID, seedListings, seedNotifications, seedThreads, users } from './seed'
 import { defaultFilters, filterListings } from './filters'
 import { apiRepository } from './api-repository'
+import { mergeMessagesChronologically, sortMessagesChronologically } from './date-time'
 import type { ChatThread, FeedbackType, Listing, ListingFilters, ListingStatus, Message, Notification, ProfileUpdate, PublishDraft, User } from './types'
 import { AppError } from './types'
 
@@ -54,10 +55,10 @@ const localRepository: DemoRepository = {
   async listThreads() { return (await this.listThreadsPage()).items },
   async listThreadsPage(cursor) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const found = cursor ? threads.findIndex((thread) => thread.id === cursor) + 1 : 0; const start = Math.max(found, 0); const items = threads.slice(start, start + 20); return { items, nextCursor: start + items.length < threads.length ? items.at(-1)?.id || null : null } },
   peekThreads() { return storageAdapter.peek(KEYS.threads, seedThreads) },
-  async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return thread },
+  async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return { ...thread, messages: sortMessagesChronologically(thread.messages) } },
   async loadOlderMessages() { return { items: [], olderCursor: null } },
   peekThread(id) { return storageAdapter.peek(KEYS.threads, seedThreads).find((thread) => thread.id === id) },
-  async sendMessage(threadId, text, mediaId) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), kind: mediaId ? 'image' : 'text', mediaId }; const threads = (await storageAdapter.get(KEYS.threads, seedThreads)).map((x) => x.id === threadId ? { ...x, updatedAt: message.createdAt, messages: [...x.messages, message] } : x); await storageAdapter.set(KEYS.threads, threads); return message },
+  async sendMessage(threadId, text, mediaId) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toISOString(), kind: mediaId ? 'image' : 'text', mediaId }; const threads = (await storageAdapter.get(KEYS.threads, seedThreads)).map((x) => x.id === threadId ? { ...x, updatedAt: message.createdAt, messages: mergeMessagesChronologically(x.messages, [message]) } : x); await storageAdapter.set(KEYS.threads, threads); return message },
   async ensureThread(listingId) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const existing = threads.find((x) => x.listingId === listingId); if (existing) return existing.id; const listing = await this.getListing(listingId); const thread: ChatThread = { id: `thread-${listingId}`, participantId: listing.sellerId, listingId, unread: 0, updatedAt: '刚刚', messages: [] }; await storageAdapter.set(KEYS.threads, [thread, ...threads]); return thread.id },
   async listNotifications() { return storageAdapter.get(KEYS.notifications, seedNotifications) },
   async markNotificationsRead(ids) { const items = await storageAdapter.get(KEYS.notifications, seedNotifications); await storageAdapter.set(KEYS.notifications, items.map((item) => !ids || ids.includes(item.id) ? { ...item, unread: 0 } : item)) },

@@ -86,7 +86,8 @@ describe('Golden Reference style alignment', () => {
 
   it('宽屏页面不显示额外的浏览器或内容滚动条', () => {
     const h5Css = read('../web/app/globals.css')
-    expect(h5Css).toContain('html, body { width: 100%; height: 100%; margin: 0; overflow: hidden;')
+    expect(h5Css).toContain('html, body { width: 100%; min-width: 100%; height: 100%; min-height: 100%; margin: 0; overflow: hidden;')
+    expect(h5Css).toContain('min-height: 100vh;')
     expect(h5Css).not.toContain('scrollbar-width: thin; scrollbar-color: rgba(115,126,88,.5) transparent;')
   })
 
@@ -153,6 +154,9 @@ describe('Golden Reference style alignment', () => {
     expect(h5).toContain('repeat(auto-fill, minmax(340px, 1fr))')
     expect(h5).toContain('width: min(calc(100vw - 48px), 1600px)')
     expect(visual).toContain("['home-1920', 1920, 1080, '/home']")
+    expect(visual).toContain("['home-960-dpi2', 960, 540, '/home', 2]")
+    expect(visual).toContain("['not-found-390', 390, 900, '/definitely-not-a-page']")
+    expect(visual).toContain("type: 'background-not-covered'")
     expect(visual).toContain("['home-landscape-844', 844, 390, '/home']")
     expect(visual).toContain('Microsoft\\\\Edge\\\\Application\\\\msedge.exe')
     expect(visual).toContain('createServer(async (request, response) =>')

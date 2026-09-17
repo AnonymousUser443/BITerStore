@@ -1,5 +1,6 @@
 import { getImages } from './image-store';
 import { h5ApiRequest } from './h5-auth';
+import { sortMessagesChronologically } from './date-time';
 import type { DemoRepository } from './repository';
 import type { Book, BookFilters, ChatThread, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
@@ -95,22 +96,13 @@ function currentUserId() {
   try { return JSON.parse(localStorage.getItem('biterstore:v1:authenticated-sid') || '""') as string; } catch { return ''; }
 }
 
-function compactThreadTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const now = new Date();
-  if (date.toDateString() === now.toDateString()) return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}月${date.getDate()}日`;
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-}
-
 function thread(value: ApiConversation & { olderCursor?: string | null }): ChatThread {
   const other = (value.members || []).find((member) => member.userId !== currentUserId()) || (value.members || [])[0];
   const conversationBook = value.listing ? book(value.listing) : undefined;
   return {
     id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? user(other.user) : undefined, buyerId: value.buyerId,
-    bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: compactThreadTime(value.lastMessageAt),
-    book: conversationBook, messages: (value.messages || []).map(message),
+    bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: value.lastMessageAt,
+    book: conversationBook, messages: sortMessagesChronologically((value.messages || []).map(message)),
     blocked: Boolean(value.blocked),
     olderCursor: value.olderCursor || null,
   };
@@ -188,14 +180,15 @@ export const apiRepository: DemoRepository = {
   async listBooks(filters = apiDefaults) { return (await loadBookPage(filters)).items; },
   async listBooksPage(filters = apiDefaults, cursor) { return loadBookPage(filters, cursor); },
   async getBook(id) {
-    try { return book(await h5ApiRequest<ApiListing>(`/listings/${id}`)); }
+    const encodedId = encodeURIComponent(id);
+    try { return book(await h5ApiRequest<ApiListing>(`/listings/${encodedId}`)); }
     catch {
       // Public details intentionally hide inactive listings. If the signed-in
       // owner opens one of their own historical listings, use the protected
       // owner endpoint so the detail page remains reachable after delisting.
       if (!currentUserId()) return null;
       try {
-        const ownerListing = await h5ApiRequest<ApiListing>(`/listings/mine/${id}`);
+        const ownerListing = await h5ApiRequest<ApiListing>(`/listings/mine/${encodedId}`);
         if (!ownerListing || ownerListing.id !== id) return null;
         return book(ownerListing);
       } catch { return null; }
@@ -204,7 +197,7 @@ export const apiRepository: DemoRepository = {
   async toggleFavorite(id) {
     const key = favoriteKey(id);
     const enabled = !favoriteIds.has(key);
-    await h5ApiRequest(`/listings/${id}/favorite`, { method: enabled ? 'PUT' : 'DELETE', body: '{}' });
+    await h5ApiRequest(`/listings/${encodeURIComponent(id)}/favorite`, { method: enabled ? 'PUT' : 'DELETE', body: '{}' });
     if (enabled) favoriteIds.add(key); else favoriteIds.delete(key);
     return enabled;
   },
@@ -230,10 +223,11 @@ export const apiRepository: DemoRepository = {
     return created;
   },
   async updateListingStatus(id, status) {
-    const current = await h5ApiRequest<ApiListing>(`/listings/mine/${id}`);
+    const encodedId = encodeURIComponent(id);
+    const current = await h5ApiRequest<ApiListing>(`/listings/mine/${encodedId}`);
     if (!Number.isFinite(Number(current.version))) throw new Error('商品版本信息缺失，请刷新后重试');
     const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : 'ACTIVE';
-    await h5ApiRequest(`/listings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
+    await h5ApiRequest(`/listings/${encodedId}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
   },
   async listMyListings() { return (await this.listMyListingsPage()).items; },
   async listMyListingsPage(cursor) {
@@ -241,7 +235,7 @@ export const apiRepository: DemoRepository = {
     return { items: result.items.map(book), nextCursor: result.nextCursor || null };
   },
   async countMyListings() { return (await h5ApiRequest<{ count: number }>('/listings/mine/count')).count; },
-  async deleteListing(id) { await h5ApiRequest(`/listings/${id}`, { method: 'DELETE' }); },
+  async deleteListing(id) { await h5ApiRequest(`/listings/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
   async listThreads() { return (await this.listThreadsPage()).items; },
   async listThreadsPage(cursor) {
     const response = await h5ApiRequest<{ items: ApiConversation[]; nextCursor?: string | null } | ApiConversation[]>('/conversations' + queryString({ cursor, limit: 20 }));
@@ -249,8 +243,9 @@ export const apiRepository: DemoRepository = {
     return { items: page.items.map(thread), nextCursor: page.nextCursor || null };
   },
   async getThread(id) {
+    const encodedId = encodeURIComponent(id);
     const [messages, conversations] = await Promise.all([
-      h5ApiRequest<ApiMessagePage>(`/conversations/${id}/messages?limit=30`), h5ApiRequest<{ items: ApiConversation[] } | ApiConversation[]>('/conversations?limit=50'),
+      h5ApiRequest<ApiMessagePage>(`/conversations/${encodedId}/messages?limit=30`), h5ApiRequest<{ items: ApiConversation[] } | ApiConversation[]>('/conversations?limit=50'),
     ]);
     const found = (Array.isArray(conversations) ? conversations : conversations.items).find((item) => item.id === id);
     if (!found) return null;
@@ -259,12 +254,12 @@ export const apiRepository: DemoRepository = {
     // Reading a conversation advances the cursor through every visible
     // message. The newest message may be ours while older incoming messages
     // are still unread, so the sender must not gate this update.
-    if (latest?.id) await h5ApiRequest(`/conversations/${id}/read`, { method: 'POST', body: JSON.stringify({ messageId: String(latest.id) }) }).catch(() => undefined);
+    if (latest?.id) await h5ApiRequest(`/conversations/${encodedId}/read`, { method: 'POST', body: JSON.stringify({ messageId: String(latest.id) }) }).catch(() => undefined);
     value.unread = 0;
     return value;
   },
-  async loadOlderMessages(threadId, before) { const page = await h5ApiRequest<ApiMessagePage>(`/conversations/${threadId}/messages` + queryString({ before, limit: 30 })); return { items: page.items.map(message), olderCursor: page.olderCursor || null }; },
-  async sendMessage(threadId, text) { return message(await h5ApiRequest<ApiMessage>(`/conversations/${threadId}/messages`, { method: 'POST', body: JSON.stringify({ content: text }) })); },
+  async loadOlderMessages(threadId, before) { const page = await h5ApiRequest<ApiMessagePage>(`/conversations/${encodeURIComponent(threadId)}/messages` + queryString({ before, limit: 30 })); return { items: sortMessagesChronologically(page.items.map(message)), olderCursor: page.olderCursor || null }; },
+  async sendMessage(threadId, text) { return message(await h5ApiRequest<ApiMessage>(`/conversations/${encodeURIComponent(threadId)}/messages`, { method: 'POST', body: JSON.stringify({ content: text }) })); },
   async ensureThread(listingId) { return (await h5ApiRequest<{ id: string }>('/conversations', { method: 'POST', body: JSON.stringify({ listingId }) })).id; },
   async listNotifications() {
     return (await h5ApiRequest<ApiNotification[]>('/notifications')).map((value): Notification => ({

@@ -3,6 +3,18 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('production gateway', () => {
+  it('canonicalizes dynamic H5 links and redirects unknown pages to the in-app 404', () => {
+    const h5Nginx = readFileSync(resolve(process.cwd(), '../miniProgram/nginx.h5.conf'), 'utf8')
+    const h5Dockerfile = readFileSync(resolve(process.cwd(), '../miniProgram/Dockerfile.h5'), 'utf8')
+
+    expect(h5Dockerfile).toContain('COPY miniProgram/nginx.h5.conf /etc/nginx/conf.d/default.conf')
+    expect(h5Nginx).toContain('return 302 /books?id=$1;')
+    expect(h5Nginx).toContain('return 302 /chat?id=$1;')
+    expect(h5Nginx).toContain('return 302 /notifications?type=$1;')
+    expect(h5Nginx).toContain('return 302 /states?type=404;')
+    expect(h5Nginx).toContain('location = /sw.js')
+  })
+
   it('redirects HTTP entry points to HTTPS before Secure cookie authentication', () => {
     const nginx = readFileSync(resolve(process.cwd(), '../deploy/nginx.conf'), 'utf8')
 

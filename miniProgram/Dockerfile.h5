@@ -14,4 +14,4 @@ ENV BIT_LOGIN_URL=$BIT_LOGIN_URL
 RUN npm run build:h5
 FROM nginx:1.27-alpine
 COPY --from=build /workspace/miniProgram/dist /usr/share/nginx/html
-RUN printf 'server { listen 80; root /usr/share/nginx/html; location / { try_files $uri $uri/ /index.html; add_header Cache-Control "no-cache"; } location ~* \\.(js|css)$ { expires 30d; add_header Cache-Control "public, max-age=2592000, immutable"; } location ~* \\.(png|jpg|jpeg|webp|svg|ico)$ { expires 7d; add_header Cache-Control "public, max-age=604800"; } }' > /etc/nginx/conf.d/default.conf
+COPY miniProgram/nginx.h5.conf /etc/nginx/conf.d/default.conf

@@ -32,6 +32,7 @@ const allTargets = [
   ['home-1440', 1440, 900, '/home'],
   ['home-1872-831', 1872, 831, '/home'],
   ['home-1920', 1920, 1080, '/home'],
+  ['home-960-dpi2', 960, 540, '/home', 2],
   ['search-320', 320, 700, '/search'],
   ['search-390', 390, 900, '/search'],
   ['search-600', 600, 900, '/search'],
@@ -55,6 +56,8 @@ const allTargets = [
   ['chat-768', 768, 1024, '/chat?id=thread-lin'],
   ['chat-1440', 1440, 900, '/chat?id=thread-lin'],
   ['detail-390', 390, 900, '/books?id=math-7'],
+  ['detail-guest-390', 390, 900, '/books?id=math-7&qa_guest=1'],
+  ['detail-direct-390', 390, 900, '/books/math-7'],
   ['detail-600', 600, 900, '/books?id=math-7'],
   ['detail-768', 768, 1024, '/books?id=math-7'],
   ['detail-1024', 1024, 768, '/books?id=math-7'],
@@ -67,6 +70,7 @@ const allTargets = [
   ['states-390', 390, 900, '/states'],
   ['states-600', 600, 900, '/states'],
   ['states-1440', 1440, 900, '/states'],
+  ['not-found-390', 390, 900, '/definitely-not-a-page'],
   ['unavailable-390', 390, 900, '/states?type=unavailable'],
   ['profile-600', 600, 900, '/profile'],
   ['feedback-390', 390, 900, '/feedback'],
@@ -92,6 +96,9 @@ const expectedPageClass = {
   'messages-390': 'messages-page',
   'notification-390': 'notification-detail-page',
   'chat-390': 'chat-page',
+  'detail-guest-390': 'detail-page',
+  'detail-direct-390': 'detail-page',
+  'not-found-390': 'full-state',
   'favorites-390': 'simple-list-page',
   'my-listings-390': 'simple-list-page',
   'my-listings-1366-768': 'simple-list-page',
@@ -104,6 +111,7 @@ const expectedPageClass = {
 }
 
 const authenticatedFixture = `(() => {
+  const guest = new URL(location.href).searchParams.has('qa_guest');
   const user = {
     id: 'qa-student', studentNumber: '1120260001', nickname: '视觉巡检用户', avatarUrl: null,
     campus: '良乡', bio: '用于响应式页面巡检', role: 'USER', campusStatus: 'VERIFIED',
@@ -122,11 +130,16 @@ const authenticatedFixture = `(() => {
     id: 'thread-lin', listingId: listing.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
     unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }], messages: [message]
   };
-  localStorage.setItem('biterstore:v1:authenticated-sid', JSON.stringify(user.id));
-  localStorage.setItem('biterstore:v1:snapshot:profile', JSON.stringify({
+  if (guest) {
+    localStorage.removeItem('biterstore:v1:authenticated-sid');
+    localStorage.removeItem('biterstore:v1:snapshot:profile');
+  } else {
+    localStorage.setItem('biterstore:v1:authenticated-sid', JSON.stringify(user.id));
+    localStorage.setItem('biterstore:v1:snapshot:profile', JSON.stringify({
     id: user.id, studentNumber: user.studentNumber, name: user.nickname, campus: user.campus,
     verified: true, bio: user.bio, responseTime: '通常很快回复', avatarTone: 'sage'
-  }));
+    }));
+  }
   localStorage.setItem('biterstore.ui-assets.bundle', '2026.08.24.11');
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
@@ -134,6 +147,9 @@ const authenticatedFixture = `(() => {
     if (!url.pathname.startsWith('/api/v1/')) return nativeFetch(input, init);
     const path = url.pathname.slice('/api/v1'.length);
     const method = (init.method || (typeof input === 'string' ? 'GET' : input.method) || 'GET').toUpperCase();
+    if (guest && (path === '/me' || path === '/auth/refresh')) {
+      return new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
     let body;
     if (path === '/me') body = user;
     else if (path === '/listings/favorites/mine') body = [listing];
@@ -201,15 +217,37 @@ if (!process.env.BITERSTORE_H5_URL) {
   previewServer = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url || '/', preview).pathname)
+      const redirects = [
+        [/^\/books\/([A-Za-z0-9_-]+)$/, (match) => `/books?id=${encodeURIComponent(match[1])}`],
+        [/^\/messages\/notifications\/(like|comment|system|follow)$/, (match) => `/notifications?type=${encodeURIComponent(match[1])}`],
+        [/^\/messages\/([A-Za-z0-9_-]+)$/, (match) => `/chat?id=${encodeURIComponent(match[1])}`],
+        [/^\/states\/([A-Za-z0-9_-]+)$/, (match) => `/states?type=${encodeURIComponent(match[1])}`]
+      ]
+      const redirect = redirects.map(([pattern, destination]) => {
+        const match = pathname.match(pattern)
+        return match ? destination(match) : null
+      }).find(Boolean)
+      if (redirect) {
+        response.writeHead(302, { Location: redirect, 'Cache-Control': 'no-store' }).end()
+        return
+      }
       const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '')
       const requestedFile = path.resolve(distDir, relative)
       if (requestedFile !== distDir && !requestedFile.startsWith(`${distDir}${path.sep}`)) {
         response.writeHead(403).end('Forbidden')
         return
       }
+      const knownRoutes = new Set(['/', '/welcome', '/onboarding', '/login', '/home', '/search', '/category', '/books', '/publish', '/messages', '/notifications', '/chat', '/profile', '/profile/edit', '/feedback', '/favorites', '/my-listings', '/states'])
       let file = requestedFile
       let body
-      try { body = await fs.readFile(file) } catch { file = path.join(distDir, 'index.html'); body = await fs.readFile(file) }
+      try { body = await fs.readFile(file) } catch {
+        if (!knownRoutes.has(pathname)) {
+          response.writeHead(302, { Location: '/states?type=404', 'Cache-Control': 'no-store' }).end()
+          return
+        }
+        file = path.join(distDir, 'index.html')
+        body = await fs.readFile(file)
+      }
       response.writeHead(200, { 'Content-Type': contentTypes[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' })
       response.end(body)
     } catch (error) {
@@ -237,8 +275,8 @@ try {
   await client.send('Runtime.enable')
   await client.send('Storage.clearDataForOrigin', { origin: preview, storageTypes: 'all' })
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authenticatedFixture })
-  for (const [name, width, height, route] of targets) {
-    await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
+  for (const [name, width, height, route, requestedScale = 1] of targets) {
+    await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: requestedScale, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
     await client.send('Page.navigate', { url: `${preview}${route}` })
     await loaded
@@ -253,7 +291,7 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-feedback-bug')?.click()` })
       await delay(150)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const content = document.querySelector('.content-scroll'); const nav = document.querySelector('.bottom-nav'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero','.login-hero > taro-image-core','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.upload-card','.image-grid','.add-image','.tobby-tip','.tobby-tip > taro-image-core','.ai-card','.publish-actions','.notification-grid','.notification-grid > taro-button-core','.notice-copy','.notice-title','.notice-subtitle','.notice-link','.notice-chevron','.notification-feed > taro-button-core','.thread-list > taro-button-core','.thread-list h3 span','.thread-list time','.top-actions .avatar-action','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const rect = element => { const box = element.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), right: Math.round(box.right), bottom: Math.round(box.bottom) } }; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), minHeight: style.minHeight, boxSizing: style.boxSizing, display: style.display, fontSize: style.fontSize, lineHeight: style.lineHeight, margin: style.margin, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); const shellRect = shell ? rect(shell) : null; const contentRect = content ? rect(content) : null; const navRect = nav ? rect(nav) : null; const profileMenus = [...document.querySelectorAll('.profile-menu')].map((menu) => { const menuRect = menu.getBoundingClientRect(); const clippedButtons = [...menu.querySelectorAll('button')].filter((button) => { const buttonRect = button.getBoundingClientRect(); return buttonRect.top < menuRect.top - 1 || buttonRect.bottom > menuRect.bottom + 1; }).map((button) => button.innerText.trim()); return { clientHeight: menu.clientHeight, scrollHeight: menu.scrollHeight, buttonCount: menu.querySelectorAll('button').length, clippedButtons }; }); const profileHero = document.querySelector('.profile-hero'); const profileHeroRect = profileHero?.getBoundingClientRect(); const profileHeroClipped = profileHero && profileHeroRect ? [...profileHero.children].filter((child) => { const childRect = child.getBoundingClientRect(); return childRect.top < profileHeroRect.top - 1 || childRect.bottom > profileHeroRect.bottom + 1; }).map((child) => child.className || child.tagName) : []; const documentScroll = { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, clientHeight: document.documentElement.clientHeight, scrollHeight: document.documentElement.scrollHeight }; let bottomReachable = null; if (content) { const previousScrollTop = content.scrollTop; const previousScrollBehavior = content.style.scrollBehavior; const maxScrollTop = Math.max(0, content.scrollHeight - content.clientHeight); content.style.scrollBehavior = 'auto'; content.scrollTop = content.scrollHeight; bottomReachable = Math.abs(content.scrollTop - maxScrollTop) <= 1; content.scrollTop = previousScrollTop; content.style.scrollBehavior = previousScrollBehavior; } const layout = { viewport: { width: innerWidth, height: innerHeight }, shellRect, contentRect, navRect, profileMenus, profileHeroClipped, documentScroll, contentScroll: content ? { clientHeight: content.clientHeight, scrollHeight: content.scrollHeight, overflowY: getComputedStyle(content).overflowY, canScroll: content.scrollHeight > content.clientHeight + 1, bottomReachable } : null, shellInsideViewport: shellRect ? shellRect.x >= -1 && shellRect.y >= -1 && shellRect.right <= innerWidth + 1 && shellRect.bottom <= innerHeight + 1 : null, navInsideShell: shellRect && navRect ? navRect.x >= shellRect.x - 1 && navRect.y >= shellRect.y - 1 && navRect.right <= shellRect.right + 1 && navRect.bottom <= shellRect.bottom + 1 : null, contentInsideShell: shellRect && contentRect ? contentRect.x >= shellRect.x - 1 && contentRect.y >= shellRect.y - 1 && contentRect.right <= shellRect.right + 1 && contentRect.bottom <= shellRect.bottom + 1 : null }; return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, layout, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const stage = document.querySelector('.app-stage'); const shell = document.querySelector('.phone-shell'); const content = document.querySelector('.content-scroll'); const nav = document.querySelector('.bottom-nav'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero','.login-hero > taro-image-core','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.upload-card','.image-grid','.add-image','.tobby-tip','.tobby-tip > taro-image-core','.ai-card','.publish-actions','.notification-grid','.notification-grid > taro-button-core','.notice-copy','.notice-title','.notice-subtitle','.notice-link','.notice-chevron','.notification-feed > taro-button-core','.thread-list > taro-button-core','.thread-list h3 span','.thread-list time','.top-actions .avatar-action','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const rect = element => { const box = element.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), right: Math.round(box.right), bottom: Math.round(box.bottom) } }; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), minHeight: style.minHeight, boxSizing: style.boxSizing, display: style.display, fontSize: style.fontSize, lineHeight: style.lineHeight, margin: style.margin, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); const stageRect = stage ? rect(stage) : null; const shellRect = shell ? rect(shell) : null; const contentRect = content ? rect(content) : null; const navRect = nav ? rect(nav) : null; const profileMenus = [...document.querySelectorAll('.profile-menu')].map((menu) => { const menuRect = menu.getBoundingClientRect(); const clippedButtons = [...menu.querySelectorAll('button')].filter((button) => { const buttonRect = button.getBoundingClientRect(); return buttonRect.top < menuRect.top - 1 || buttonRect.bottom > menuRect.bottom + 1; }).map((button) => button.innerText.trim()); return { clientHeight: menu.clientHeight, scrollHeight: menu.scrollHeight, buttonCount: menu.querySelectorAll('button').length, clippedButtons }; }); const profileHero = document.querySelector('.profile-hero'); const profileHeroRect = profileHero?.getBoundingClientRect(); const profileHeroClipped = profileHero && profileHeroRect ? [...profileHero.children].filter((child) => { const childRect = child.getBoundingClientRect(); return childRect.top < profileHeroRect.top - 1 || childRect.bottom > profileHeroRect.bottom + 1; }).map((child) => child.className || child.tagName) : []; const documentScroll = { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, clientHeight: document.documentElement.clientHeight, scrollHeight: document.documentElement.scrollHeight }; let bottomReachable = null; if (content) { const previousScrollTop = content.scrollTop; const previousScrollBehavior = content.style.scrollBehavior; const maxScrollTop = Math.max(0, content.scrollHeight - content.clientHeight); content.style.scrollBehavior = 'auto'; content.scrollTop = content.scrollHeight; bottomReachable = Math.abs(content.scrollTop - maxScrollTop) <= 1; content.scrollTop = previousScrollTop; content.style.scrollBehavior = previousScrollBehavior; } const layout = { viewport: { width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio }, stageRect, stageBackground: stage ? getComputedStyle(stage).backgroundImage : '', shellRect, contentRect, navRect, profileMenus, profileHeroClipped, documentScroll, contentScroll: content ? { clientHeight: content.clientHeight, scrollHeight: content.scrollHeight, overflowY: getComputedStyle(content).overflowY, canScroll: content.scrollHeight > content.clientHeight + 1, bottomReachable } : null, stageCoversViewport: stageRect ? stageRect.x <= 0 && stageRect.y <= 0 && stageRect.right >= innerWidth && stageRect.bottom >= innerHeight : null, shellInsideViewport: shellRect ? shellRect.x >= -1 && shellRect.y >= -1 && shellRect.right <= innerWidth + 1 && shellRect.bottom <= innerHeight + 1 : null, navInsideShell: shellRect && navRect ? navRect.x >= shellRect.x - 1 && navRect.y >= shellRect.y - 1 && navRect.right <= shellRect.right + 1 && navRect.bottom <= shellRect.bottom + 1 : null, contentInsideShell: shellRect && contentRect ? contentRect.x >= shellRect.x - 1 && contentRect.y >= shellRect.y - 1 && contentRect.right <= shellRect.right + 1 && contentRect.bottom <= shellRect.bottom + 1 : null }; return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, layout, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
     pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics, layout: pageState.result.value.layout })
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     if (name.startsWith('login-')) {
@@ -262,8 +300,10 @@ try {
     }
     if (name === 'feedback-390' && (!pageState.result.value.text.includes('提交 Bug') || !pageState.result.value.text.includes('提交建议') || !pageState.result.value.text.includes('反馈内容'))) diagnostics.push({ type: 'feedback-form-incomplete', text: name })
     if (expectedPageClass[name] && !pageState.result.value.shell?.className.includes(expectedPageClass[name])) diagnostics.push({ type: 'unexpected-page', text: `${name}: expected ${expectedPageClass[name]}, got ${pageState.result.value.shell?.className || 'no shell'}` })
+    if (name === 'detail-guest-390' && !pageState.result.value.text.includes('ISBN 9787040396638')) diagnostics.push({ type: 'missing-guest-listing-detail', text: name })
     const layout = pageState.result.value.layout
     if (layout?.documentScroll?.scrollWidth > width + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: document ${layout.documentScroll.scrollWidth}px > viewport ${width}px` })
+    if (layout?.stageCoversViewport === false || !layout?.stageBackground || layout.stageBackground === 'none') diagnostics.push({ type: 'background-not-covered', text: `${name}: ${JSON.stringify({ stageRect: layout?.stageRect, viewport: layout?.viewport, background: layout?.stageBackground })}` })
     if (width >= 480 && width < 700 && layout?.shellRect?.width < width - 40) diagnostics.push({ type: 'fixed-compact-canvas', text: `${name}: ${layout.shellRect.width}px shell did not expand with ${width}px viewport` })
     if (layout?.shellInsideViewport === false || layout?.navInsideShell === false || layout?.contentInsideShell === false) diagnostics.push({ type: 'layout-overflow', text: `${name}: ${JSON.stringify(layout)}` })
     if (layout?.contentScroll?.bottomReachable === false) diagnostics.push({ type: 'unreachable-content', text: `${name}: ${JSON.stringify(layout.contentScroll)}` })
@@ -279,11 +319,12 @@ try {
       if (value.items.length !== 5 || value.items.some((item, index) => !item || item.height < 36 || item.top < value.nav.top - 1 || item.bottom > value.nav.bottom + 1 || index > 0 && item.top < value.items[index - 1].bottom - 1)) diagnostics.push({ type: 'stacked-navigation', text: `${name}: ${JSON.stringify(value)}` })
     }
     if (name === 'messages-390' && !pageState.result.value.text.includes('新消息 · 你好，这本书还在吗？')) diagnostics.push({ type: 'missing-unread-preview', text: name })
+    if (name === 'not-found-390' && !pageState.result.value.text.includes('好像翻错书页了')) diagnostics.push({ type: 'missing-not-found-state', text: name })
     if (name === 'messages-390' && [...(pageState.result.value.metrics['.thread-list h3 span'] ? [pageState.result.value.metrics['.thread-list h3 span']] : [])].some((metric) => metric.height > 28)) diagnostics.push({ type: 'wrapped-campus-label', text: `${name}: ${JSON.stringify(pageState.result.value.metrics['.thread-list h3 span'])}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
   }
-  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`), pages, diagnostics }))
+  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height, , scale = 1]) => `${width}x${height}@${scale}x`), pages, diagnostics }))
   if (diagnostics.length) process.exitCode = 1
 } finally {
   client?.close()

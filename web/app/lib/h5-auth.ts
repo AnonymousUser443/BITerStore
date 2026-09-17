@@ -95,7 +95,12 @@ export function updateH5Profile(profile: { nickname: string; avatarUrl: string |
 
 export async function restoreH5Session(): Promise<H5Profile | null> {
   try {
-    return await getH5Profile();
+    let result = await rawRequest<H5Profile>('/me');
+    if (result.response.status === 401) {
+      if (!await refreshH5Session()) return null;
+      result = await rawRequest<H5Profile>('/me');
+    }
+    return result.response.ok ? result.body as H5Profile : null;
   } catch {
     return null;
   }

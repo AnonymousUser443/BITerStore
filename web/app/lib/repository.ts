@@ -1,6 +1,7 @@
 import { CURRENT_USER_ID, notifications, seedBooks, seedThreads, users } from './demo-data';
 import { apiRepository } from './api-repository';
 import { clearImages } from './image-store';
+import { mergeMessagesChronologically } from './date-time';
 import type { Book, BookFilters, ChatThread, FeedbackType, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
 declare const __API_URL__: string;
@@ -92,13 +93,7 @@ function enrichThread(value: ChatThread): ChatThread {
   return { ...value, book: peekBook(value.bookId) };
 }
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
-  const merged = new Map(existing.map((item) => [item.id, item]));
-  incoming.forEach((item) => merged.set(item.id, item));
-  const values = [...merged.values()];
-  if (values.every((item) => /^\d+$/.test(item.id))) {
-    values.sort((left, right) => left.id.length - right.id.length || left.id.localeCompare(right.id));
-  }
-  return values;
+  return mergeMessagesChronologically(existing, incoming);
 }
 function writeThread(value: ChatThread, promote = false) {
   const enriched = enrichThread(value);
@@ -194,7 +189,7 @@ const localRepository: DemoRepository = {
   async setBlocked(userId, blocked) { const ids = read<string[]>('biterstore:v1:blocks', []); write('biterstore:v1:blocks', blocked ? [...new Set([...ids, userId])] : ids.filter((id) => id !== userId)); await wait(80); },
   async getThread(id) { const threads = read(KEYS.threads, seedThreads); const thread = threads.find((item) => item.id === id) ?? null; if (thread?.unread) { thread.unread = 0; write(KEYS.threads, threads); } await wait(100); return thread; },
   async loadOlderMessages() { return { items: [], olderCursor: null }; },
-  async sendMessage(threadId, text) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }; const threads = read(KEYS.threads, seedThreads).map((thread) => thread.id === threadId ? { ...thread, updatedAt: message.createdAt, messages: [...thread.messages, message] } : thread); write(KEYS.threads, threads); await wait(110); return message; },
+  async sendMessage(threadId, text) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toISOString() }; const threads = read(KEYS.threads, seedThreads).map((thread) => thread.id === threadId ? { ...thread, updatedAt: message.createdAt, messages: mergeMessages(thread.messages, [message]) } : thread); write(KEYS.threads, threads); await wait(110); return message; },
   async ensureThread(bookId) { const threads = read(KEYS.threads, seedThreads); const existing = threads.find((thread) => thread.bookId === bookId); if (existing) return existing.id; const book = read(KEYS.books, seedBooks).find((item) => item.id === bookId)!; const next: ChatThread = { id: `thread-${bookId}`, participantId: book.sellerId, bookId, unread: 0, updatedAt: '刚刚', messages: [] }; write(KEYS.threads, [next, ...threads]); await wait(90); return next.id; },
   async getProfile() { await wait(80); return users.find((user) => user.id === CURRENT_USER_ID)!; },
   async deleteAccount() { await this.resetDemoData(); this.clearAuthentication(); },
@@ -305,10 +300,10 @@ export const demoRepository: DemoRepository = {
   async loadOlderMessages(threadId, before) {
     const page = await accountRepository().loadOlderMessages(threadId, before);
     const cached = peekThread(threadId);
-    if (cached) writeThread({ ...cached, olderCursor: page.olderCursor, messages: [...page.items, ...cached.messages.filter((message) => !page.items.some((older) => older.id === message.id))] });
+    if (cached) writeThread({ ...cached, olderCursor: page.olderCursor, messages: mergeMessages(cached.messages, page.items) });
     return page;
   },
-  async sendMessage(threadId, text) { const message = await accountRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }, true); return message; },
+  async sendMessage(threadId, text) { const message = await accountRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: mergeMessages(cached.messages, [message]) }, true); return message; },
   async ensureThread(bookId) {
     const id = await accountRepository().ensureThread(bookId);
     if (!peekThread(id)) {

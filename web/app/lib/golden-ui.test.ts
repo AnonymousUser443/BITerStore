@@ -83,12 +83,14 @@ describe('authenticated Golden H5', () => {
     expect(categoryPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
   })
 
-  it('paints message snapshots immediately and anchors every chat to its listing', () => {
+  it('keeps list snapshots but waits for complete chronological chat history', () => {
     const messagesPage = mobileApp.slice(mobileApp.indexOf('function MessagesPage'), mobileApp.indexOf('function NotificationDetailPage'))
     const chatPage = mobileApp.slice(mobileApp.indexOf('function ConversationBookMessage'), mobileApp.indexOf('function ProfilePage'))
     expect(messagesPage).toContain('peekThreads() || []')
     expect(messagesPage).toContain('peekNotifications() || []')
-    expect(chatPage).toContain('peekThread(threadId)')
+    expect(chatPage).not.toContain('peekThread(threadId)')
+    expect(chatPage).toContain('demoRepository.getThread(threadId)')
+    expect(chatPage).toContain('formatMessageTime(message.createdAt)')
     expect(chatPage).toContain('我想咨询这本书')
     expect(chatPage).toContain('会话关联商品')
     expect(chatPage).toContain('navigate(`/books/${book.id}`)')
