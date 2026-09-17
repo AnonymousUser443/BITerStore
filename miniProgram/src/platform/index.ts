@@ -200,13 +200,37 @@ async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
   const resolved = await Promise.all(items.map((item) => new Promise<StoredMedia>((resolve) => { if (!item.uri.startsWith('idb:')) return resolve(item); const request = db.transaction('files').objectStore('files').get(item.id); request.onsuccess = () => resolve(request.result?.blob ? { ...item, uri: globalThis.URL.createObjectURL(request.result.blob) } : item); request.onerror = () => resolve(item) })))
   db.close(); return resolved
 }
+
+export function detectImageMime(value: ArrayBuffer | Uint8Array): StoredMedia['mime'] | undefined {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value)
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png'
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp'
+  return undefined
+}
+
+async function detectPickedImageMime(path: string) {
+  let data: ArrayBuffer
+  if (process.env.TARO_ENV === 'h5') data = await fetch(path).then((response) => response.arrayBuffer())
+  else data = await new Promise<ArrayBuffer>((resolve, reject) => Taro.getFileSystemManager().readFile({
+    filePath: path,
+    position: 0,
+    length: 16,
+    success: (result) => resolve(result.data as ArrayBuffer),
+    fail: reject
+  }))
+  const mime = detectImageMime(data)
+  if (!mime) throw new AppError('VALIDATION', '仅支持 JPEG、PNG 或 WebP 图片')
+  return mime
+}
+
 export interface MediaAdapter { pick(options?: { count?: number; cameraOnly?: boolean }): Promise<StoredMedia[]>; persist(items: StoredMedia[]): Promise<StoredMedia[]>; remove(ids: string[]): Promise<void>; list(): Promise<StoredMedia[]>; clear(): Promise<void> }
 export const mediaAdapter: MediaAdapter = {
   async pick(options = {}) {
     if (__BITERSTORE_E2E__) return [{ id: `fixture-book-${Date.now()}`, uri: bundledAsset('tobby-guide-publish'), mime: process.env.TARO_ENV === 'weapp' ? 'image/png' : 'image/webp', size: 1024 }]
     try {
       const result = await Taro.chooseMedia({ count: options.count || 6, mediaType: ['image'], sourceType: options.cameraOnly ? ['camera'] : ['album', 'camera'] })
-      return result.tempFiles.map((file, index) => ({ id: `media-${Date.now()}-${index}`, uri: file.tempFilePath, mime: 'image/jpeg', size: file.size || 0 }))
+      return Promise.all(result.tempFiles.map(async (file, index) => ({ id: `media-${Date.now()}-${index}`, uri: file.tempFilePath, mime: await detectPickedImageMime(file.tempFilePath), size: file.size || 0 })))
     } catch (cause) { throw new AppError('MEDIA_PICK', '选择图片失败', cause) }
   },
   async persist(items) {

@@ -50,7 +50,7 @@ async function refreshSession(session: ApiSession): Promise<ApiSession> {
   const refreshKey = `${session.user.id}:${session.refreshToken || 'cookie'}`
   if (refreshInFlight?.token === refreshKey) return refreshInFlight.promise
   const cookieSession = process.env.TARO_ENV === 'h5' && !session.refreshToken
-  const promise = sendRequest<ApiSession>('/auth/refresh', { method: 'POST', data: cookieSession ? { sessionTransport: 'cookie' } : { refreshToken: session.refreshToken } }, session)
+  const promise = sendRequest<ApiSession>('/auth/refresh', { method: 'POST', data: cookieSession ? {} : { refreshToken: session.refreshToken } }, session)
     .then(async (response) => {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         const message = response.data && typeof response.data === 'object' && 'message' in response.data ? String(response.data.message) : `请求失败（${response.statusCode}）`

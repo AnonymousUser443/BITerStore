@@ -34,8 +34,9 @@ describe('listing owner actions', () => {
         findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(existing),
         create: vi.fn().mockRejectedValue({ code: 'P2002' })
       },
-      listingImage: { findMany: vi.fn().mockResolvedValue([{ id: 'cover-id', role: 'COVER' }, { id: 'isbn-id', role: 'ISBN' }]) }
-    }
+      listingImage: { findMany: vi.fn().mockResolvedValue([{ id: 'cover-id', role: 'COVER' }, { id: 'isbn-id', role: 'ISBN' }]), updateMany: vi.fn() }
+    } as any
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma))
     await expect(new ListingsService(prisma as never).create('owner-id', body)).resolves.toEqual(existing)
     expect(prisma.listing.create).toHaveBeenCalledTimes(1)
   })

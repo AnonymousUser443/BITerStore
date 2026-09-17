@@ -30,6 +30,7 @@ const allTargets = [
   ['home-landscape-844', 844, 390, '/home'],
   ['home-1024', 1024, 768, '/home'],
   ['home-1440', 1440, 900, '/home'],
+  ['home-1872-831', 1872, 831, '/home'],
   ['home-1920', 1920, 1080, '/home'],
   ['search-320', 320, 700, '/search'],
   ['search-390', 390, 900, '/search'],
@@ -73,6 +74,7 @@ const allTargets = [
   ['detail-1024-768', 1024, 768, '/books?id=math-7'],
   ['detail-1280-600', 1280, 600, '/books?id=math-7'],
   ['home-1280-720', 1280, 720, '/home'],
+  ['home-1280-600', 1280, 600, '/home'],
   ['detail-1366-768', 1366, 768, '/books?id=math-7'],
   ['my-listings-1366-768', 1366, 768, '/my-listings'],
   ['profile-699', 699, 900, '/profile'],
@@ -115,11 +117,11 @@ const authenticatedFixture = `(() => {
     sellerId: seller.id, seller, createdAt: '2026-08-29T08:00:00.000Z', tags: ['教材'], images: [], version: 1
   };
   const ownedListing = { ...listing, id: 'qa-owned', title: '我的巡检商品', sellerId: user.id, seller: user };
+  const message = { id: '12', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
   const conversation = {
     id: 'thread-lin', listingId: listing.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
-    unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }]
+    unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }], messages: [message]
   };
-  const message = { id: 'qa-message', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
   localStorage.setItem('biterstore:v1:authenticated-sid', JSON.stringify(user.id));
   localStorage.setItem('biterstore:v1:snapshot:profile', JSON.stringify({
     id: user.id, studentNumber: user.studentNumber, name: user.nickname, campus: user.campus,
@@ -139,6 +141,7 @@ const authenticatedFixture = `(() => {
     else if (path === '/listings' && method === 'GET') body = { items: [listing] };
     else if (path === '/conversations' && method === 'GET') body = [conversation];
     else if (path === '/conversations/thread-lin/messages' && method === 'GET') body = { items: [message] };
+    else if (path === '/blocks' && method === 'GET') body = [];
     else if (path === '/notifications') body = [{
       id: 'qa-notification', type: 'COMMENT', title: '新的留言', body: '巡检消息',
       readAt: null, createdAt: '2026-08-29T08:30:00.000Z'
@@ -267,6 +270,15 @@ try {
     if (layout?.profileMenus?.some((menu) => menu.clippedButtons.length)) diagnostics.push({ type: 'clipped-profile-action', text: `${name}: ${JSON.stringify(layout.profileMenus)}` })
     if (layout?.profileHeroClipped?.length) diagnostics.push({ type: 'clipped-profile-identity', text: `${name}: ${JSON.stringify(layout.profileHeroClipped)}` })
     if (layout?.documentScroll && (layout.documentScroll.scrollWidth > layout.documentScroll.clientWidth + 1 || layout.documentScroll.scrollHeight > layout.documentScroll.clientHeight + 1)) diagnostics.push({ type: 'document-overflow', text: `${name}: ${JSON.stringify(layout.documentScroll)}` })
+    if (name.startsWith('home-') && width >= 1024) {
+      const responsive = await client.send('Runtime.evaluate', { expression: `(() => { const content = document.querySelector('.home-page .content-scroll'); const hero = document.querySelector('.home-page .hero-card'); const nav = document.querySelector('.bottom-nav'); const box = (element) => { const value = element?.getBoundingClientRect(); return value ? { top: value.top, right: value.right, bottom: value.bottom, left: value.left, width: value.width, height: value.height } : null }; const style = content ? getComputedStyle(content) : null; const items = [...document.querySelectorAll('.bottom-nav .nav-item')].map(box); return { hero: box(hero), content: box(content), paddingLeft: Number.parseFloat(style?.paddingLeft || '0'), paddingRight: Number.parseFloat(style?.paddingRight || '0'), nav: box(nav), items }; })()`, returnByValue: true })
+      const value = responsive.result.value
+      const expectedLeft = value.content.left + value.paddingLeft
+      const expectedRight = value.content.right - value.paddingRight
+      if (!value.hero || Math.abs(value.hero.left - expectedLeft) > 2 || Math.abs(value.hero.right - expectedRight) > 2) diagnostics.push({ type: 'hero-not-full-width', text: `${name}: ${JSON.stringify(value)}` })
+      if (value.items.length !== 5 || value.items.some((item, index) => !item || item.height < 36 || item.top < value.nav.top - 1 || item.bottom > value.nav.bottom + 1 || index > 0 && item.top < value.items[index - 1].bottom - 1)) diagnostics.push({ type: 'stacked-navigation', text: `${name}: ${JSON.stringify(value)}` })
+    }
+    if (name === 'messages-390' && !pageState.result.value.text.includes('新消息 · 你好，这本书还在吗？')) diagnostics.push({ type: 'missing-unread-preview', text: name })
     if (name === 'messages-390' && [...(pageState.result.value.metrics['.thread-list h3 span'] ? [pageState.result.value.metrics['.thread-list h3 span']] : [])].some((metric) => metric.height > 28)) diagnostics.push({ type: 'wrapped-campus-label', text: `${name}: ${JSON.stringify(pageState.result.value.metrics['.thread-list h3 span'])}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))

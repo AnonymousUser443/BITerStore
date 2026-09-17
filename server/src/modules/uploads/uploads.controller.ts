@@ -1,18 +1,23 @@
-import { BadRequestException, Body, Controller, HttpException, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Delete, HttpException, HttpStatus, Optional, Param, Post, Put, ServiceUnavailableException, UseGuards } from '@nestjs/common'
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
+import { Worker } from 'node:worker_threads'
 import { assertNotMuted, AuthGuard, CurrentUser, NotMutedGuard, type AuthUser } from '../../common/auth.js'
 import { ImageValidationError, MAX_IMAGE_BYTES, inspectImage, type ImageMetadata, type SupportedImageMime } from '../../common/image-validation.js'
 import { PrismaService } from '../../infra/prisma.service.js'
+import { RedisService } from '../../infra/redis.service.js'
 const allowed = new Set<SupportedImageMime>(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_PENDING_PER_USER = 20
+const DEFAULT_MAX_UNBOUND_FILES_PER_USER = 30
+const DEFAULT_MAX_UNBOUND_BYTES_PER_USER = 100 * 1024 * 1024
 @Controller('uploads') @UseGuards(AuthGuard, NotMutedGuard)
 export class UploadsController {
+  private activeImageValidations = 0
   private readonly s3 = new S3Client({ region: 'auto', endpoint: process.env.R2_ENDPOINT, credentials: process.env.R2_ACCESS_KEY_ID ? { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '' } : undefined })
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly redis?: RedisService) {}
   private useR2() { return process.env.UPLOAD_STORAGE === 'r2' }
   private normalizeMime(value: unknown): SupportedImageMime | undefined {
     const mime = typeof value === 'string' ? value.split(';', 1)[0]?.trim().toLowerCase() : ''
@@ -26,12 +31,26 @@ export class UploadsController {
   }
   @Post('presign') async presign(@CurrentUser() user: AuthUser, @Body() body: { mime: string; size: number; role?: string }) {
     assertNotMuted(user)
+    await this.enforceRate(user.id, 'presign', Number(process.env.UPLOAD_PRESIGN_PER_MINUTE || 30))
     const mime = this.normalizeMime(body?.mime)
     if (!mime || !Number.isSafeInteger(body?.size) || body.size <= 0 || body.size > MAX_IMAGE_BYTES) throw new BadRequestException('仅支持不超过 5MB 的 JPEG、PNG、WebP')
     const countPending = this.prisma.listingImage.count
     if (typeof countPending === 'function') {
       const pending = await countPending.call(this.prisma.listingImage, { where: { ownerId: user.id, uploadedAt: null, objectKey: { startsWith: 'pending/' } } })
       if (Number(pending) >= MAX_PENDING_PER_USER) throw new HttpException('待上传文件过多，请先完成或取消已有上传', HttpStatus.TOO_MANY_REQUESTS)
+    }
+    const aggregateUploads = this.prisma.listingImage.aggregate
+    if (typeof aggregateUploads === 'function') {
+      const usage = await aggregateUploads.call(this.prisma.listingImage, {
+        where: { ownerId: user.id, listingId: null },
+        _count: { _all: true },
+        _sum: { size: true }
+      }) as { _count?: { _all?: number }; _sum?: { size?: number | null } }
+      const maxFiles = this.positiveLimit(process.env.UPLOAD_MAX_UNBOUND_FILES_PER_USER, DEFAULT_MAX_UNBOUND_FILES_PER_USER)
+      const maxBytes = this.positiveLimit(process.env.UPLOAD_MAX_UNBOUND_BYTES_PER_USER, DEFAULT_MAX_UNBOUND_BYTES_PER_USER)
+      if (Number(usage._count?._all || 0) >= maxFiles || Number(usage._sum?.size || 0) + body.size > maxBytes) {
+        throw new HttpException('未发布图片已达到配额，请先发布或取消已有上传', HttpStatus.TOO_MANY_REQUESTS)
+      }
     }
     const role = ['COVER', 'ISBN', 'GALLERY'].includes(body.role || '') ? body.role as 'COVER' | 'ISBN' | 'GALLERY' : 'GALLERY'
     if (this.useR2() && (!process.env.R2_ENDPOINT || !process.env.R2_BUCKET)) throw new BadRequestException('R2 对象存储尚未配置')
@@ -45,11 +64,12 @@ export class UploadsController {
   }
   @Put(':id/content') async putLocal(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: Buffer) {
     assertNotMuted(user)
+    await this.enforceRate(user.id, 'content', Number(process.env.UPLOAD_CONTENT_PER_MINUTE || 60))
     if (this.useR2()) throw new BadRequestException('当前使用 R2，请通过预签名地址上传')
     const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, uploadedAt: null } })
     if (!row) throw new BadRequestException('上传记录不存在或已完成')
     if (!Buffer.isBuffer(body) || body.length !== row.size || body.length > MAX_IMAGE_BYTES) throw new BadRequestException('上传文件与申请大小不一致')
-    const metadata = this.validateImage(body, row.mime)
+    const metadata = await this.validateImage(body, row.mime)
     const target = this.localPath(row.objectKey)
     await mkdir(dirname(target), { recursive: true })
     try {
@@ -61,6 +81,7 @@ export class UploadsController {
   }
   @Post(':id/complete') async complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     assertNotMuted(user)
+    await this.enforceRate(user.id, 'complete', Number(process.env.UPLOAD_COMPLETE_PER_MINUTE || 60))
     const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, uploadedAt: null } }); if (!row) throw new BadRequestException('上传记录不存在或已完成')
     const extension = row.objectKey.split('.').pop() || 'jpg'
     const finalObjectKey = `media/${user.id}/${row.id}.${extension}`
@@ -71,7 +92,7 @@ export class UploadsController {
         if (head.ContentLength !== row.size || this.normalizeMime(head.ContentType) !== this.normalizeMime(row.mime)) throw new ImageValidationError('上传文件与申请信息不一致')
         const bytes = await this.readR2(row.objectKey)
         if (bytes.length !== row.size) throw new ImageValidationError('上传文件与申请大小不一致')
-        metadata = this.validateImage(bytes, row.mime)
+        metadata = await this.validateImage(bytes, row.mime)
         await this.s3.send(new CopyObjectCommand({ Bucket: process.env.R2_BUCKET, CopySource: `${process.env.R2_BUCKET}/${row.objectKey}`, Key: finalObjectKey, ContentType: metadata.mime, MetadataDirective: 'REPLACE' }))
       } catch (cause) {
         await this.deleteR2(row.objectKey)
@@ -82,7 +103,7 @@ export class UploadsController {
         const file = await stat(this.localPath(row.objectKey)).catch(() => null)
         if (!file || file.size !== row.size) throw new ImageValidationError('上传文件与申请信息不一致')
         const bytes = await readFile(this.localPath(row.objectKey))
-        metadata = this.validateImage(bytes, row.mime)
+        metadata = await this.validateImage(bytes, row.mime)
         await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
         await rename(this.localPath(row.objectKey), this.localPath(finalObjectKey))
       } catch (cause) {
@@ -101,12 +122,57 @@ export class UploadsController {
     }
   }
 
-  private validateImage(bytes: Buffer, declaredMime: string): ImageMetadata {
+  @Delete(':id') async cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    assertNotMuted(user)
+    const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, listingId: null } })
+    if (!row) throw new BadRequestException('上传记录不存在、已绑定商品或已取消')
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.listingImage.deleteMany({ where: { id, ownerId: user.id, listingId: null } })
+      if (!result.count) return 0
+      await this.removeObject(row.objectKey)
+      return result.count
+    })
+    if (!removed) throw new BadRequestException('上传记录已绑定商品或已取消')
+    return { cancelled: true }
+  }
+
+  private async validateImage(bytes: Buffer, declaredMime: string): Promise<ImageMetadata> {
     try {
-      return inspectImage(bytes, declaredMime)
+      if (process.env.NODE_ENV !== 'production') return inspectImage(bytes, declaredMime)
+      const maximum = this.positiveLimit(process.env.UPLOAD_IMAGE_VALIDATION_CONCURRENCY, 2)
+      if (this.activeImageValidations >= Math.min(maximum, 16)) throw new HttpException('图片处理繁忙，请稍后重试', HttpStatus.TOO_MANY_REQUESTS)
+      this.activeImageValidations += 1
+      try { return await this.validateImageInWorker(bytes, declaredMime) }
+      finally { this.activeImageValidations -= 1 }
     } catch (cause) {
+      if (cause instanceof HttpException) throw cause
       throw this.asBadRequest(cause)
     }
+  }
+
+  private validateImageInWorker(bytes: Buffer, declaredMime: string) {
+    const copied = Uint8Array.from(bytes)
+    const timeoutMs = Math.min(this.positiveLimit(process.env.UPLOAD_IMAGE_VALIDATION_TIMEOUT_MS, 5_000), 15_000)
+    return new Promise<ImageMetadata>((resolve, reject) => {
+      const worker = new Worker(new URL('./image-validation.worker.js', import.meta.url), {
+        workerData: { bytes: copied, declaredMime }, transferList: [copied.buffer]
+      })
+      let settled = false
+      const finish = (callback: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        callback()
+      }
+      const timeout = setTimeout(() => finish(() => { void worker.terminate(); reject(new ImageValidationError('图片校验超时')) }), timeoutMs)
+      worker.once('message', (message: { metadata?: ImageMetadata; error?: string }) => finish(() => {
+        void worker.terminate()
+        if (message.error || !message.metadata) reject(new ImageValidationError(message.error || '图片校验失败'))
+        else resolve(message.metadata)
+      }))
+      worker.once('error', (cause) => finish(() => reject(cause)))
+      worker.once('exit', (code) => { if (code !== 0) finish(() => reject(new Error(`image validation worker exited with code ${code}`))) })
+    })
   }
 
   private asBadRequest(cause: unknown): BadRequestException {
@@ -127,5 +193,33 @@ export class UploadsController {
 
   private async deleteR2(objectKey: string) {
     await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey })).catch(() => undefined)
+  }
+
+  private async removeObject(objectKey: string) {
+    if (this.useR2()) {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey }))
+      return
+    }
+    await unlink(this.localPath(objectKey)).catch((cause: NodeJS.ErrnoException) => { if (cause.code !== 'ENOENT') throw cause })
+  }
+
+  private positiveLimit(raw: string | undefined, fallback: number) {
+    const parsed = Number(raw)
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
+  }
+
+  private async enforceRate(userId: string, action: string, rawLimit: number) {
+    if (!this.redis) return
+    const limit = Number.isSafeInteger(rawLimit) && rawLimit > 0 ? rawLimit : 30
+    const key = `ratelimit:upload:${action}:${userId}:${Math.floor(Date.now() / 60_000)}`
+    try {
+      await this.redis.ensureConnected()
+      const count = await this.redis.client.incr(key)
+      if (count === 1) await this.redis.client.expire(key, 120)
+      if (count > limit) throw new HttpException('上传操作过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    } catch (cause) {
+      if (cause instanceof HttpException) throw cause
+      if (process.env.NODE_ENV === 'production') throw new ServiceUnavailableException('上传配额服务暂时不可用，请稍后重试')
+    }
   }
 }

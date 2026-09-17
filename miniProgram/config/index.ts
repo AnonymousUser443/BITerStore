@@ -50,7 +50,10 @@ export default defineConfig<'webpack5'>(async (merge) => {
       __BIT_LOGIN_URL__: JSON.stringify((environment.BIT_LOGIN_URL || productionBitLoginUrl).replace(/\/$/, ''))
     },
     copy: {
-      patterns: [...assetPatterns, ...(!isWeapp ? [{ from: 'src/hosting/_redirects', to: 'dist' }] : [])],
+      patterns: [...assetPatterns, ...(!isWeapp ? [
+        { from: 'src/hosting/_redirects', to: 'dist' },
+        { from: path.resolve(__dirname, '../../web/public/sw.js'), to: 'dist/sw.js' }
+      ] : [])],
       options: {}
     },
     mini: {

@@ -3,6 +3,8 @@ import { apiRepository } from './api-repository';
 import { clearImages } from './image-store';
 import type { Book, BookFilters, ChatThread, FeedbackType, ListingStatus, Message, Notification, PublishDraft, User } from './types';
 
+declare const __API_URL__: string;
+
 const KEYS = {
   books: 'biterstore:v1:books', favorites: 'biterstore:v1:favorites', threads: 'biterstore:v1:threads',
   draft: 'biterstore:v1:draft', onboarding: 'biterstore:v1:onboarding', filters: 'biterstore:v1:filters',
@@ -89,6 +91,15 @@ function enrichThread(value: ChatThread): ChatThread {
   if (value.book) { knownBooks.set(bookCacheKey(value.book.id), value.book); return value; }
   return { ...value, book: peekBook(value.bookId) };
 }
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const merged = new Map(existing.map((item) => [item.id, item]));
+  incoming.forEach((item) => merged.set(item.id, item));
+  const values = [...merged.values()];
+  if (values.every((item) => /^\d+$/.test(item.id))) {
+    values.sort((left, right) => left.id.length - right.id.length || left.id.localeCompare(right.id));
+  }
+  return values;
+}
 function writeThread(value: ChatThread, promote = false) {
   const enriched = enrichThread(value);
   write(threadDetailSnapshotKey(enriched.id), enriched);
@@ -115,6 +126,7 @@ export function peekBook(id: string): Book | undefined {
 
 export interface DemoRepository {
   listBooks(filters?: BookFilters): Promise<Book[]>;
+  listBooksPage(filters?: BookFilters, cursor?: string): Promise<{ items: Book[]; nextCursor: string | null }>;
   getBook(id: string): Promise<Book | null>;
   toggleFavorite(id: string): Promise<boolean>;
   listFavorites(): Promise<Book[]>;
@@ -125,12 +137,20 @@ export interface DemoRepository {
   updateListingStatus(id: string, status: ListingStatus): Promise<void>;
   deleteListing(id: string): Promise<void>;
   listMyListings(): Promise<Book[]>;
+  listMyListingsPage(cursor?: string): Promise<{ items: Book[]; nextCursor: string | null }>;
+  countMyListings(): Promise<number>;
   listThreads(): Promise<ChatThread[]>;
+  listThreadsPage(cursor?: string): Promise<{ items: ChatThread[]; nextCursor: string | null }>;
   listNotifications(): Promise<Notification[]>;
+  markNotificationsRead(ids?: string[]): Promise<void>;
+  listBlockedUsers(): Promise<User[]>;
+  setBlocked(userId: string, blocked: boolean): Promise<void>;
   getThread(id: string): Promise<ChatThread | null>;
+  loadOlderMessages(threadId: string, before: string): Promise<{ items: Message[]; olderCursor: string | null }>;
   sendMessage(threadId: string, text: string): Promise<Message>;
   ensureThread(bookId: string): Promise<string>;
   getProfile(): Promise<User>;
+  deleteAccount(): Promise<void>;
   submitFeedback(type: FeedbackType, content: string): Promise<void>;
   isOnboardingComplete(): boolean;
   completeOnboarding(): void;
@@ -141,7 +161,15 @@ export interface DemoRepository {
 }
 
 const localRepository: DemoRepository = {
-  async listBooks(filters = defaultFilters) { await wait(); return filterBooks(read(KEYS.books, seedBooks), filters); },
+  async listBooks(filters = defaultFilters) { return (await this.listBooksPage(filters)).items; },
+  async listBooksPage(filters = defaultFilters, cursor) {
+    await wait();
+    const filtered = filterBooks(read(KEYS.books, seedBooks), filters);
+    const cursorIndex = cursor ? filtered.findIndex((book) => book.id === cursor) : -1;
+    const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    const items = filtered.slice(start, start + 20);
+    return { items, nextCursor: start + items.length < filtered.length ? items.at(-1)?.id || null : null };
+  },
   async getBook(id) { await wait(120); return read(KEYS.books, seedBooks).find((book) => book.id === id) ?? null; },
   async toggleFavorite(id) { const ids = read<string[]>(KEYS.favorites, []); const next = ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]; write(KEYS.favorites, next); await wait(90); return next.includes(id); },
   async listFavorites() { const ids = read<string[]>(KEYS.favorites, []); await wait(); return read(KEYS.books, seedBooks).filter((book) => ids.includes(book.id)); },
@@ -155,13 +183,21 @@ const localRepository: DemoRepository = {
   },
   async updateListingStatus(id, status) { write(KEYS.books, read(KEYS.books, seedBooks).map((book) => book.id === id ? { ...book, status } : book)); await wait(120); },
   async deleteListing(id) { write(KEYS.books, read(KEYS.books, seedBooks).filter((book) => book.id !== id)); await wait(120); },
-  async listMyListings() { await wait(); return read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); },
-  async listThreads() { await wait(); return read(KEYS.threads, seedThreads); },
+  async listMyListings() { return (await this.listMyListingsPage()).items; },
+  async listMyListingsPage(cursor) { await wait(); const all = read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID); const found = cursor ? all.findIndex((book) => book.id === cursor) + 1 : 0; const start = Math.max(found, 0); const items = all.slice(start, start + 20); return { items, nextCursor: start + items.length < all.length ? items.at(-1)?.id || null : null }; },
+  async countMyListings() { await wait(); return read(KEYS.books, seedBooks).filter((book) => book.sellerId === CURRENT_USER_ID).length; },
+  async listThreads() { return (await this.listThreadsPage()).items; },
+  async listThreadsPage(cursor) { await wait(); const threads = read(KEYS.threads, seedThreads); const index = cursor ? threads.findIndex((thread) => thread.id === cursor) + 1 : 0; const items = threads.slice(Math.max(index, 0), Math.max(index, 0) + 20); return { items, nextCursor: Math.max(index, 0) + items.length < threads.length ? items.at(-1)?.id || null : null }; },
   async listNotifications() { await wait(100); return notifications; },
+  async markNotificationsRead() { await wait(40); },
+  async listBlockedUsers() { const ids = read<string[]>('biterstore:v1:blocks', []); return ids.map(getUser); },
+  async setBlocked(userId, blocked) { const ids = read<string[]>('biterstore:v1:blocks', []); write('biterstore:v1:blocks', blocked ? [...new Set([...ids, userId])] : ids.filter((id) => id !== userId)); await wait(80); },
   async getThread(id) { const threads = read(KEYS.threads, seedThreads); const thread = threads.find((item) => item.id === id) ?? null; if (thread?.unread) { thread.unread = 0; write(KEYS.threads, threads); } await wait(100); return thread; },
+  async loadOlderMessages() { return { items: [], olderCursor: null }; },
   async sendMessage(threadId, text) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }; const threads = read(KEYS.threads, seedThreads).map((thread) => thread.id === threadId ? { ...thread, updatedAt: message.createdAt, messages: [...thread.messages, message] } : thread); write(KEYS.threads, threads); await wait(110); return message; },
   async ensureThread(bookId) { const threads = read(KEYS.threads, seedThreads); const existing = threads.find((thread) => thread.bookId === bookId); if (existing) return existing.id; const book = read(KEYS.books, seedBooks).find((item) => item.id === bookId)!; const next: ChatThread = { id: `thread-${bookId}`, participantId: book.sellerId, bookId, unread: 0, updatedAt: '刚刚', messages: [] }; write(KEYS.threads, [next, ...threads]); await wait(90); return next.id; },
   async getProfile() { await wait(80); return users.find((user) => user.id === CURRENT_USER_ID)!; },
+  async deleteAccount() { await this.resetDemoData(); this.clearAuthentication(); },
   async submitFeedback(type, content) { write('biterstore:v1:feedback', [{ type, content, createdAt: new Date().toISOString() }, ...read<Array<{ type: FeedbackType; content: string; createdAt: string }>>('biterstore:v1:feedback', [])]); await wait(120); },
   isOnboardingComplete() { return read(KEYS.onboarding, false); },
   completeOnboarding() { write(KEYS.onboarding, true); },
@@ -171,58 +207,124 @@ const localRepository: DemoRepository = {
   async resetDemoData() { Object.values(KEYS).forEach((key) => localStorage.removeItem(key)); await clearImages(); await wait(160); },
 };
 
-function usesRealApi() {
+function usesRealAccountApi() {
   const sid = localRepository.getAuthenticatedSid();
   return Boolean(sid && sid !== 'guest');
 }
 
-function activeRepository() {
-  return usesRealApi() ? apiRepository : localRepository;
+function hasConfiguredPublicApi() {
+  return typeof __API_URL__ === 'string' && Boolean(__API_URL__);
+}
+
+function publicRepository() {
+  return hasConfiguredPublicApi() ? apiRepository : localRepository;
+}
+
+function accountRepository() {
+  return usesRealAccountApi() ? apiRepository : localRepository;
+}
+
+function clearPrivateRepositorySnapshots() {
+  if (typeof window === 'undefined') return;
+  const privatePrefixes = [MY_LISTING_SNAPSHOT_PREFIX, FAVORITE_SNAPSHOT_PREFIX, THREAD_LIST_SNAPSHOT_PREFIX, THREAD_DETAIL_SNAPSHOT_PREFIX, NOTIFICATION_SNAPSHOT_PREFIX];
+  Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    .filter((key): key is string => typeof key === 'string' && privatePrefixes.some((prefix) => key.startsWith(prefix)))
+    .forEach((key) => localStorage.removeItem(key));
+  knownBooks.clear();
 }
 
 export const demoRepository: DemoRepository = {
-  async listBooks(filters = defaultFilters) { const items = remember(await activeRepository().listBooks(filters)); write(listSnapshotKey(filters), items); return items; },
-  async getBook(id) { const cached = peekBook(id); const item = await activeRepository().getBook(id); if (item) knownBooks.set(bookCacheKey(item.id), item); return item || cached || null; },
+  async listBooks(filters = defaultFilters) { return (await this.listBooksPage(filters)).items; },
+  async listBooksPage(filters = defaultFilters, cursor) {
+    const page = await publicRepository().listBooksPage(filters, cursor);
+    const fresh = remember(page.items);
+    const current = cursor ? peekBooks(filters) || [] : [];
+    const items = cursor ? [...current, ...fresh.filter((book) => !current.some((existing) => existing.id === book.id))] : fresh;
+    write(listSnapshotKey(filters), items);
+    return { items, nextCursor: page.nextCursor };
+  },
+  async getBook(id) { const cached = peekBook(id); const item = await publicRepository().getBook(id); if (item) knownBooks.set(bookCacheKey(item.id), item); return item || cached || null; },
   async toggleFavorite(id) {
-    const enabled = await activeRepository().toggleFavorite(id);
+    const enabled = await accountRepository().toggleFavorite(id);
     const current = peekFavorites() || [];
     const item = peekBook(id);
     write(favoriteSnapshotKey(), enabled && item ? [item, ...current.filter((book) => book.id !== id)] : current.filter((book) => book.id !== id));
     return enabled;
   },
-  async listFavorites() { const items = remember(await activeRepository().listFavorites()); write(favoriteSnapshotKey(), items); return items; },
-  reportBook: (id, reason) => activeRepository().reportBook(id, reason),
-  saveDraft: (draft) => activeRepository().saveDraft(draft),
-  getDraft: () => activeRepository().getDraft(),
+  async listFavorites() { const items = remember(await accountRepository().listFavorites()); write(favoriteSnapshotKey(), items); return items; },
+  reportBook: (id, reason) => accountRepository().reportBook(id, reason),
+  saveDraft: (draft) => accountRepository().saveDraft(draft),
+  getDraft: () => accountRepository().getDraft(),
   async publishListing(draft, onProgress) {
-    const created = await activeRepository().publishListing(draft, onProgress);
+    const created = await accountRepository().publishListing(draft, onProgress);
     knownBooks.set(bookCacheKey(created.id), created);
     write(myListingSnapshotKey(), [created, ...(peekMyListings() || []).filter((item) => item.id !== created.id)]);
     updateSnapshots((items) => [created, ...items.filter((item) => item.id !== created.id)], [LIST_SNAPSHOT_PREFIX]);
     return created;
   },
-  async updateListingStatus(id, status) { await activeRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },
-  async deleteListing(id) { await activeRepository().deleteListing(id); knownBooks.delete(bookCacheKey(id)); updateSnapshots((items) => items.filter((item) => item.id !== id)); },
-  async listMyListings() { const items = remember(await activeRepository().listMyListings()); write(myListingSnapshotKey(), items); return items; },
-  async listThreads() { const items = (await activeRepository().listThreads()).map(enrichThread); write(threadListSnapshotKey(), items); items.forEach((item) => write(threadDetailSnapshotKey(item.id), item)); return items; },
-  async listNotifications() { const items = await activeRepository().listNotifications(); write(notificationSnapshotKey(), items); return items; },
-  async getThread(id) { const item = await activeRepository().getThread(id); return item ? writeThread(item) : null; },
-  async sendMessage(threadId, text) { const message = await activeRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }, true); return message; },
+  async updateListingStatus(id, status) { await accountRepository().updateListingStatus(id, status); updateSnapshots((items) => items.map((item) => item.id === id ? { ...item, status } : item)); },
+  async deleteListing(id) { await accountRepository().deleteListing(id); knownBooks.delete(bookCacheKey(id)); updateSnapshots((items) => items.filter((item) => item.id !== id)); },
+  async listMyListings() { return (await this.listMyListingsPage()).items; },
+  async listMyListingsPage(cursor) {
+    const page = await accountRepository().listMyListingsPage(cursor);
+    const fresh = remember(page.items);
+    const current = cursor ? peekMyListings() || [] : [];
+    const items = cursor ? [...current, ...fresh.filter((book) => !current.some((existing) => existing.id === book.id))] : fresh;
+    write(myListingSnapshotKey(), items);
+    return { items, nextCursor: page.nextCursor };
+  },
+  countMyListings: () => accountRepository().countMyListings(),
+  async listThreads() { return (await this.listThreadsPage()).items; },
+  async listThreadsPage(cursor) {
+    const page = await accountRepository().listThreadsPage(cursor);
+    const fresh = page.items.map(enrichThread);
+    const current = cursor ? peekThreads() || [] : [];
+    const items = cursor ? [...current, ...fresh.filter((thread) => !current.some((existing) => existing.id === thread.id))] : fresh;
+    write(threadListSnapshotKey(), items);
+    fresh.forEach((item) => {
+      const cached = peekThread(item.id);
+      write(threadDetailSnapshotKey(item.id), cached ? {
+        ...item,
+        olderCursor: cached.olderCursor ?? item.olderCursor,
+        messages: mergeMessages(cached.messages, item.messages),
+      } : item);
+    });
+    return { items, nextCursor: page.nextCursor };
+  },
+  async listNotifications() { const items = await accountRepository().listNotifications(); write(notificationSnapshotKey(), items); return items; },
+  async markNotificationsRead(ids) { await accountRepository().markNotificationsRead(ids); const current = peekNotifications(); if (current) write(notificationSnapshotKey(), current.map((item) => !ids || ids.includes(item.id) ? { ...item, unread: 0 } : item)); },
+  listBlockedUsers: () => accountRepository().listBlockedUsers(),
+  setBlocked: (userId, blocked) => accountRepository().setBlocked(userId, blocked),
+  async getThread(id) {
+    const cached = peekThread(id);
+    const item = await accountRepository().getThread(id);
+    if (!item) return null;
+    const messages = cached ? mergeMessages(cached.messages, item.messages) : item.messages;
+    return writeThread({ ...item, messages, olderCursor: cached?.olderCursor ?? item.olderCursor });
+  },
+  async loadOlderMessages(threadId, before) {
+    const page = await accountRepository().loadOlderMessages(threadId, before);
+    const cached = peekThread(threadId);
+    if (cached) writeThread({ ...cached, olderCursor: page.olderCursor, messages: [...page.items, ...cached.messages.filter((message) => !page.items.some((older) => older.id === message.id))] });
+    return page;
+  },
+  async sendMessage(threadId, text) { const message = await accountRepository().sendMessage(threadId, text); const cached = peekThread(threadId); if (cached) writeThread({ ...cached, updatedAt: message.createdAt, messages: [...cached.messages.filter((item) => item.id !== message.id), message] }, true); return message; },
   async ensureThread(bookId) {
-    const id = await activeRepository().ensureThread(bookId);
+    const id = await accountRepository().ensureThread(bookId);
     if (!peekThread(id)) {
       const book = peekBook(bookId);
       if (book) writeThread({ id, participantId: book.sellerId, participant: book.seller, buyerId: localRepository.getAuthenticatedSid(), bookId, book, unread: 0, updatedAt: '刚刚', messages: [] }, true);
     }
     return id;
   },
-  getProfile: () => activeRepository().getProfile(),
-  submitFeedback: (type, content) => activeRepository().submitFeedback(type, content),
+  getProfile: () => accountRepository().getProfile(),
+  deleteAccount: () => accountRepository().deleteAccount(),
+  submitFeedback: (type, content) => accountRepository().submitFeedback(type, content),
   isOnboardingComplete: () => localRepository.isOnboardingComplete(),
   completeOnboarding: () => localRepository.completeOnboarding(),
   getAuthenticatedSid: () => localRepository.getAuthenticatedSid(),
   markAuthenticated: (sid) => localRepository.markAuthenticated(sid),
-  clearAuthentication: () => localRepository.clearAuthentication(),
+  clearAuthentication: () => { clearPrivateRepositorySnapshots(); localRepository.clearAuthentication(); },
   resetDemoData: () => localRepository.resetDemoData(),
 };
 

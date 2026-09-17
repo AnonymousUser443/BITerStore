@@ -83,6 +83,8 @@ export interface ChatThread {
   updatedAt: string;
   messages: Message[];
   participant?: User;
+  blocked?: boolean;
+  olderCursor?: string | null;
 }
 
 export interface Notification {

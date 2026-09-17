@@ -1,7 +1,9 @@
+import 'reflect-metadata'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PublicCatalogRateLimitGuard } from '../src/modules/listings/public-catalog-rate-limit.guard.js'
 import { MediaController } from '../src/modules/uploads/media.controller.js'
 
 const previousStorage = process.env.UPLOAD_STORAGE
@@ -15,6 +17,10 @@ afterEach(() => {
 })
 
 describe('public listing media', () => {
+  it('rate-limits the public media route before querying image metadata', () => {
+    expect(Reflect.getMetadata('__guards__', MediaController.prototype.get)).toEqual([PublicCatalogRateLimitGuard])
+  })
+
   it('serves a completed non-ISBN image through the controlled route', async () => {
     const root = await mkdtemp(join(tmpdir(), 'biterstore-media-'))
     const objectKey = 'pending/user/image.jpg'
@@ -26,7 +32,7 @@ describe('public listing media', () => {
     try {
       const result = await new MediaController(prisma as never).get('image-id')
       expect(result.getHeaders()).toMatchObject({ type: 'image/jpeg', length: 11 })
-      expect(prisma.listingImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-id', uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } } })
+      expect(prisma.listingImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-id', uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, moderationStatus: 'APPROVED', listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } } })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -35,5 +41,20 @@ describe('public listing media', () => {
   it('does not expose an ISBN page or an unattached upload', async () => {
     const prisma = { listingImage: { findFirst: vi.fn().mockResolvedValue(null) } }
     await expect(new MediaController(prisma as never).get('private-id')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('allows an administrator to inspect any attached pending image, including the private ISBN evidence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'biterstore-review-media-'))
+    const objectKey = 'pending/user/review.jpg'
+    await mkdir(join(root, 'pending/user'), { recursive: true })
+    await writeFile(join(root, objectKey), Buffer.from('review-bytes'))
+    process.env.UPLOAD_STORAGE = 'local'
+    process.env.LOCAL_UPLOAD_DIR = root
+    const prisma = { listingImage: { findFirst: vi.fn().mockResolvedValue({ objectKey, mime: 'image/jpeg', size: 12 }) } }
+    try {
+      const result = await new MediaController(prisma as never).review('pending-id')
+      expect(result.getHeaders()).toMatchObject({ type: 'image/jpeg', length: 12 })
+      expect(prisma.listingImage.findFirst).toHaveBeenCalledWith({ where: { id: 'pending-id', uploadedAt: { not: null }, listingId: { not: null }, listing: { deletedAt: null } } })
+    } finally { await rm(root, { recursive: true, force: true }) }
   })
 })

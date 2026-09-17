@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
-import { AuthGuard, NotMutedGuard } from '../../common/auth.js'
+import { AdminGuard, AuthGuard, NotMutedGuard } from '../../common/auth.js'
 import { UploadsController } from './uploads.controller.js'
 import { MediaController } from './media.controller.js'
-@Module({ controllers: [UploadsController, MediaController], providers: [AuthGuard, NotMutedGuard] })
+import { PublicCatalogRateLimitGuard } from '../listings/public-catalog-rate-limit.guard.js'
+@Module({ controllers: [UploadsController, MediaController], providers: [AuthGuard, AdminGuard, NotMutedGuard, PublicCatalogRateLimitGuard] })
 export class UploadsModule {}

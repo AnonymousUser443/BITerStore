@@ -164,7 +164,8 @@ async function fetchBook(isbn, env) {
 export default {
   async fetch(request, env, context) {
     if (request.method !== 'GET') return json({ message: 'Method not allowed' }, 405, 0)
-    if (env.PROXY_TOKEN && request.headers.get('authorization') !== `Bearer ${env.PROXY_TOKEN}`) return json({ message: 'Unauthorized' }, 401, 0)
+    if (!env.PROXY_TOKEN) return json({ message: 'Proxy token is not configured' }, 503, 0)
+    if (request.headers.get('authorization') !== `Bearer ${env.PROXY_TOKEN}`) return json({ message: 'Unauthorized' }, 401, 0)
     const match = new URL(request.url).pathname.match(/^\/isbn\/([0-9]{9}[0-9X]|[0-9]{13})$/)
     if (!match || !validIsbn(match[1])) return json({ message: 'Invalid ISBN' }, 400, 0)
 

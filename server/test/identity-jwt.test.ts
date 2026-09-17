@@ -18,8 +18,9 @@ describe('BIT-Login registration JWT', () => {
     process.env.BIT_LOGIN_PUBLIC_KEY_PEM = (await exportSPKI(keys.publicKey)).replace(/\n/g, '\\n')
     process.env.BIT_LOGIN_ISSUER = 'bit-login'
     process.env.BIT_LOGIN_AUDIENCE = 'biterstore'
+    process.env.CAMPUS_IDENTITY_HASH_KEY = 'test-campus-identity-hash-secret-long-enough'
     tx = {
-      campusIdentity: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+      campusIdentity: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn(), upsert: vi.fn() },
       user: {
         create: vi.fn().mockResolvedValue({ id: 'student-1', role: 'USER', campusStatus: 'VERIFIED', status: 'ACTIVE' }),
         findUniqueOrThrow: vi.fn(),
@@ -60,6 +61,34 @@ describe('BIT-Login registration JWT', () => {
 
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { campusStatus: 'VERIFIED', studentNumber: '1120230000', nickname: 'BITer1120230000' }
+    }))
+  })
+
+  it('restores a recently deleted account with public fields reset', async () => {
+    tx.campusIdentity.findUnique.mockResolvedValue({ userId: 'student-1' })
+    tx.user.findUniqueOrThrow.mockResolvedValue({ id: 'student-1', nickname: '已注销用户', status: 'DELETED', deletedAt: new Date(Date.now() - 86_400_000) })
+    tx.user.update.mockResolvedValue({ id: 'student-1', role: 'USER', campusStatus: 'VERIFIED', status: 'ACTIVE' })
+
+    await service.loginOrCreate(await token())
+
+    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'ACTIVE', deletedAt: null, studentNumber: '1120230000', nickname: 'BITer1120230000', role: 'USER' })
+    }))
+    expect(tx.campusIdentity.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ userId: 'student-1', revokedAt: null }) }))
+  })
+
+  it('upgrades a legacy unsalted identity hash when the student logs in', async () => {
+    tx.campusIdentity.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'identity-1', userId: 'student-1' })
+    tx.campusIdentity.update.mockResolvedValue({ id: 'identity-1', userId: 'student-1' })
+    tx.user.findUniqueOrThrow.mockResolvedValue({ id: 'student-1', nickname: '自定义昵称', status: 'ACTIVE' })
+    tx.user.update.mockResolvedValue({ id: 'student-1', nickname: '自定义昵称', status: 'ACTIVE' })
+
+    await service.loginOrCreate(await token())
+
+    expect(tx.campusIdentity.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'identity-1' }, data: { externalSubjectHash: expect.stringMatching(/^[a-f0-9]{64}$/) }
     }))
   })
 

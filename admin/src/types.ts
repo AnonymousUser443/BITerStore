@@ -76,11 +76,11 @@ export interface ListingRow {
   priceCents: number
   campus: string
   status: string
-  moderationDecision?: 'IGNORE' | 'BLOCKED' | null
+  moderationDecision?: 'IGNORE' | 'BLOCKED' | 'ACTIVE' | null
   viewCount: number
   createdAt: string
   seller: { id: string; nickname: string; status: string }
-  images: Array<{ id: string; role: string; sortOrder: number }>
+  images: Array<{ id: string; role: string; sortOrder: number; moderationStatus: 'PENDING' | 'APPROVED' | 'REJECTED'; moderationReason?: string | null; moderatedAt?: string | null }>
   _count: { favorites: number; conversations: number }
 }
 

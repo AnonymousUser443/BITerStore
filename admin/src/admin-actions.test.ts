@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accessSummary, listingActions, listingDetailHref, reportActions, userActions } from './App'
+import { accessSummary, listingActions, listingDetailHref, listingReviewImages, reportActions, userActions } from './App'
 import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
@@ -41,6 +41,7 @@ describe('admin action visibility', () => {
   it('only offers state-appropriate listing and report actions', () => {
     expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
     expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
+    expect(listingActions(listing('PENDING_REVIEW')).map((item) => item.action)).toEqual(['ACTIVE', 'BLOCKED'])
     expect(listingActions({ ...listing('SOLD'), moderationDecision: 'IGNORE' })).toEqual([])
     expect(listingActions(listing('BLOCKED'))).toEqual([])
     expect(listingActions(listing('DRAFT'))).toEqual([])
@@ -49,7 +50,19 @@ describe('admin action visibility', () => {
   })
 
   it('builds a safe H5 product detail URL', () => {
-    expect(listingDetailHref('listing/id with spaces')).toBe('/books?id=listing%2Fid%20with%20spaces')
+    expect(listingDetailHref('listing/id with spaces')).toBe('/books/listing%2Fid%20with%20spaces')
+  })
+
+  it('shows both the cover and private ISBN evidence in the moderation queue', () => {
+    const images = listingReviewImages({
+      ...listing('PENDING_REVIEW'),
+      images: [
+        { id: 'cover-1', role: 'COVER', sortOrder: 0, moderationStatus: 'PENDING' },
+        { id: 'isbn-1', role: 'ISBN', sortOrder: 1, moderationStatus: 'PENDING' }
+      ]
+    })
+    expect(images.cover?.id).toBe('cover-1')
+    expect(images.isbnEvidence?.id).toBe('isbn-1')
   })
 
   it('labels access channels and device classes for administrators', () => {

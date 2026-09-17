@@ -238,7 +238,7 @@ describe('Golden Reference style alignment', () => {
     expect(e2e).toContain('eventTime - noise.time <= 20000')
     expect(e2e).toContain('duringRouteObservation')
     expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
-    expect(e2e).toContain("scenario('bit-login-request-domain'")
+    expect(e2e).toContain("scenario('bit-login-private-route-blocked'")
     expect(e2e).toContain("probeRequest('https://store.young581.com/bit-login/openapi.json')")
     expect(e2e).toContain("scenario('production-api-request-domain'")
     expect(e2e).toContain("probeRequest('https://store.young581.com/api/v1/health')")

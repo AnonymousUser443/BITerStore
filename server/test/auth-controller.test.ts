@@ -22,7 +22,7 @@ describe('H5 cookie sessions', () => {
   afterEach(() => { process.env = { ...originalEnv } })
 
   it('sets embedded-browser-compatible HttpOnly cookies without returning tokens to H5', async () => {
-    const result = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'cookie' }, 'Mozilla/5.0 (iPhone; Mobile)', reply)
+    const result = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'body' }, 'Mozilla/5.0 (iPhone; Mobile)', reply)
     expect(result).toEqual({ expiresIn: 900, user: session.user })
     expect(auth.campus).toHaveBeenCalledWith('jwt', 'h5', 'phone')
     expect(reply.clearCookie).toHaveBeenCalledWith('biterstore_refresh', expect.objectContaining({ sameSite: 'strict', path: '/api/v1/auth' }))
@@ -38,7 +38,7 @@ describe('H5 cookie sessions', () => {
   })
 
   it('rotates a refresh cookie and clears both cookies on logout', async () => {
-    await controller.refresh({ sessionTransport: 'cookie' }, { cookies: { biterstore_refresh: 'old-refresh' } } as any, reply)
+    await controller.refresh({ refreshToken: 'attacker-selected-token', sessionTransport: 'body' }, { cookies: { biterstore_refresh: 'old-refresh' } } as any, reply)
     expect(auth.refresh).toHaveBeenCalledWith('old-refresh')
     expect(reply.setCookie).toHaveBeenCalledTimes(2)
 
@@ -51,10 +51,18 @@ describe('H5 cookie sessions', () => {
 
   it('keeps the authenticated marker when web-login polling exchanges for cookies', async () => {
     auth.webStatus.mockResolvedValue({ status: 'AUTHENTICATED', ...session })
-    const result = await controller.status('state-token', 'cookie', reply)
+    const result = await controller.status('state-token', reply)
     expect(result).toEqual({ status: 'AUTHENTICATED', expiresIn: 900, user: session.user })
     expect(auth.webStatus).toHaveBeenCalledWith('state-token')
     expect(reply.setCookie).toHaveBeenCalledTimes(2)
+  })
+
+  it('never lets a browser downgrade an HttpOnly cookie session to response-body tokens', async () => {
+    const campusResult = await controller.campus({ registrationToken: 'jwt', platform: 'h5', sessionTransport: 'body' }, undefined, reply)
+    expect(campusResult).not.toHaveProperty('accessToken')
+    const refreshResult = await controller.refresh({ refreshToken: 'body-token', sessionTransport: 'body' }, { cookies: { biterstore_refresh: 'cookie-token' } } as any, reply)
+    expect(auth.refresh).toHaveBeenLastCalledWith('cookie-token')
+    expect(refreshResult).not.toHaveProperty('refreshToken')
   })
 })
 

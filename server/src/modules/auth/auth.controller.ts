@@ -2,33 +2,37 @@ import { Body, Controller, Get, Headers, Post, Query, Req, Res, UseGuards } from
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { AuthService } from './auth.service.js'
+import { optionalBodyString, requiredBodyString, strictBody } from '../../common/request-validation.js'
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @Post('campus')
   async campus(
-    @Body() body: { registrationToken: string; platform?: string; device?: string; sessionTransport?: 'body' | 'cookie' },
+    @Body() body: unknown,
     @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
-    const result = await this.auth.campus(body.registrationToken, body.platform, inferSessionDevice(body.platform, body.device, userAgent))
-    return this.presentSession(reply, result, body.sessionTransport)
+    const input = strictBody(body, ['registrationToken', 'platform', 'device', 'sessionTransport'])
+    const registrationToken = requiredBodyString(input, 'registrationToken', '校园认证凭证', 16_384)
+    const platform = optionalBodyString(input, 'platform', '平台', 20)
+    const device = optionalBodyString(input, 'device', '设备类型', 20)
+    const result = await this.auth.campus(registrationToken, platform, inferSessionDevice(platform, device, userAgent))
+    return this.presentSession(reply, result, platform?.toLowerCase() === 'h5' ? 'cookie' : 'body')
   }
   @Post('wechat/mini-program') mini(
-    @Body() body: { code: string; device?: string },
+    @Body() body: unknown,
     @Headers('user-agent') userAgent?: string
-  ) { return this.auth.miniProgram(body.code, inferSessionDevice('weapp', body.device, userAgent)) }
-  @Post('wechat/mini-program/bind') @UseGuards(AuthGuard) bindMini(@CurrentUser() user: AuthUser, @Body() body: { code: string }) { return this.auth.bindMiniProgram(user.id, body.code) }
+  ) { const input = strictBody(body, ['code', 'device']); return this.auth.miniProgram(requiredBodyString(input, 'code', '微信登录凭证', 2048), inferSessionDevice('weapp', optionalBodyString(input, 'device', '设备类型', 20), userAgent)) }
+  @Post('wechat/mini-program/bind') @UseGuards(AuthGuard) bindMini(@CurrentUser() user: AuthUser, @Body() body: unknown) { const input = strictBody(body, ['code']); return this.auth.bindMiniProgram(user.id, requiredBodyString(input, 'code', '微信登录凭证', 2048)) }
   @Post('wechat/web/start') startWeb() { return this.auth.startWebLogin() }
   @Get('wechat/web/status')
   async status(
     @Query('state') state: string,
-    @Query('sessionTransport') sessionTransport: 'body' | 'cookie' | undefined,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
     const result = await this.auth.webStatus(state)
-    if (sessionTransport === 'cookie' && result.status === 'AUTHENTICATED') {
+    if (result.status === 'AUTHENTICATED') {
       const session = this.presentSession(reply, result as { accessToken: string; refreshToken: string; expiresIn: number; user: { id: string; role: string; campusStatus: string } }, 'cookie')
       // Keep the state-machine result so H5/Taro polling can stop after the
       // cookie has been issued. `presentSession` intentionally omits tokens,
@@ -45,23 +49,25 @@ export class AuthController {
   ) { await this.auth.webCallback(code, state, inferSessionDevice('h5', undefined, userAgent)); const h5 = (process.env.H5_ORIGIN || '').split(',')[0] || 'http://localhost:10086'; return reply.redirect(`${h5.replace(/\/$/, '')}/login?wechat=complete`) }
   @Post('refresh')
   async refresh(
-    @Body() body: { refreshToken?: string; sessionTransport?: 'body' | 'cookie' },
+    @Body() body: unknown,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
+    const input = body === undefined || body === null ? {} : strictBody(body, ['refreshToken', 'sessionTransport'])
     const cookieToken = request.cookies?.biterstore_refresh
-    const refreshToken = body.refreshToken || cookieToken
+    const refreshToken = cookieToken || optionalBodyString(input, 'refreshToken', '刷新凭证', 4096)
     const result = await this.auth.refresh(refreshToken || '')
-    return this.presentSession(reply, result, body.sessionTransport || (cookieToken ? 'cookie' : 'body'))
+    return this.presentSession(reply, result, cookieToken ? 'cookie' : 'body')
   }
 
   @Post('logout')
   async logout(
-    @Body() body: { refreshToken?: string },
+    @Body() body: unknown,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
-    const refreshToken = body.refreshToken || request.cookies?.biterstore_refresh
+    const input = body === undefined || body === null ? {} : strictBody(body, ['refreshToken'])
+    const refreshToken = request.cookies?.biterstore_refresh || optionalBodyString(input, 'refreshToken', '刷新凭证', 4096)
     const accessToken = String(request?.headers?.authorization || '').replace(/^Bearer\s+/i, '') || undefined
     const result = accessToken
       ? await this.auth.logout(refreshToken, accessToken)

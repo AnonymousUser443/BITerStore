@@ -55,7 +55,7 @@ async function rawRequest<T>(path: string, init: RequestInit = {}): Promise<{ re
 function refreshH5Session(): Promise<boolean> {
   if (!refreshSessionPromise) {
     refreshSessionPromise = rawRequest<H5Session>('/auth/refresh', {
-      method: 'POST', body: JSON.stringify({ sessionTransport: 'cookie' })
+      method: 'POST', body: '{}'
     }).then(({ response }) => response.ok).finally(() => { refreshSessionPromise = undefined; });
   }
   return refreshSessionPromise;
@@ -79,7 +79,7 @@ export async function h5ApiRequest<T>(path: string, init: RequestInit = {}, retr
 export async function loginWithCampusCookie(registrationToken: string): Promise<H5Session> {
   const session = await h5ApiRequest<H5Session>('/auth/campus', {
     method: 'POST',
-    body: JSON.stringify({ registrationToken, platform: 'h5', sessionTransport: 'cookie' }),
+    body: JSON.stringify({ registrationToken, platform: 'h5' }),
   }, false);
   resetH5AuthExpiryNotice();
   return session;

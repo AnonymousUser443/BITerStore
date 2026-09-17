@@ -60,7 +60,7 @@ describe('domain', () => {
     await expect(loginWithCampus('registration-jwt')).resolves.toMatchObject(cookieSession)
     expect(Taro.request).toHaveBeenCalledWith(expect.objectContaining({
       url: 'http://api.test/auth/campus', credentials: 'include',
-      data: { registrationToken: 'registration-jwt', platform: 'h5', sessionTransport: 'cookie' },
+      data: { registrationToken: 'registration-jwt', platform: 'h5' },
       header: { 'Content-Type': 'application/json' }
     }))
     expect(await sessionStore.get()).toMatchObject({ transport: 'cookie', user: { id: 'user-a' } })
@@ -132,11 +132,20 @@ describe('domain', () => {
     expect(refreshRequests).toBe(1)
   })
   it('组合筛选和价格排序保持确定性', () => { const result = filterListings(seedListings, { ...defaultFilters, query: '数据结构', campus: '良乡', sort: '价格从低到高' }); expect(result.map((x) => x.id)).toEqual(['data-c']) })
-  it('真实 API 列表同样执行成色、状态与排序筛选', async () => {
-    const make = (id: string, priceCents: number, condition: string, status = 'ACTIVE') => ({ id, title: id, author: '作者', isbn: '', category: '教材教辅', course: '', priceCents, condition, campus: '良乡', description: '', status, sellerId: 'seller', createdAt: `2026-09-0${id === 'cheap' ? '1' : '2'}T00:00:00.000Z`, tags: [], images: [] })
-    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { items: [make('expensive', 8000, '八成新'), make('cheap', 2000, '八成新'), make('wrong-condition', 1000, '全新')] } } as never)
-    const result = await apiRepository.listListings({ ...defaultFilters, condition: '八成新', sort: '价格从低到高' })
+  it('真实 API 将筛选、排序与分页参数交给服务端', async () => {
+    const make = (id: string, priceCents: number) => ({ id, title: id, author: '作者', isbn: '', category: '教材教辅', course: '', priceCents, condition: '八成新', campus: '良乡', description: '', status: 'ACTIVE', sellerId: 'seller', createdAt: `2026-09-0${id === 'cheap' ? '1' : '2'}T00:00:00.000Z`, tags: [], images: [] })
+    vi.mocked(Taro.request).mockResolvedValueOnce({ statusCode: 200, data: { items: [make('cheap', 2000), make('expensive', 8000)], nextCursor: 'expensive' } } as never)
+    const page = await apiRepository.listListingsPage({ ...defaultFilters, query: ' 数据结构 ', condition: '八成新', minPrice: 10, maxPrice: 90, sort: '价格从低到高' })
+    const result = page.items
     expect(result.map((item) => item.id)).toEqual(['cheap', 'expensive'])
+    expect(page.nextCursor).toBe('expensive')
+    const requestedUrl = decodeURIComponent(String(vi.mocked(Taro.request).mock.calls.at(-1)?.[0]?.url))
+    expect(requestedUrl).toContain('q=数据结构')
+    expect(requestedUrl).toContain('condition=八成新')
+    expect(requestedUrl).toContain('minPriceCents=1000')
+    expect(requestedUrl).toContain('maxPriceCents=9000')
+    expect(requestedUrl).toContain('sort=price_asc')
+    expect(requestedUrl).toContain('limit=20')
   })
   it('真实 API 持久化分类筛选与引导完成状态', async () => {
     const filters = { ...defaultFilters, campus: '珠海' as const, availableOnly: false }
@@ -183,6 +192,36 @@ describe('domain', () => {
     expect(apiRepository.peekNotifications()).toBeUndefined()
   })
   it('列表读取后可同步交给详情页首帧', async () => { await demoRepository.listListings(); expect(demoRepository.peekListing('math-7')?.title).toContain('高等数学') })
+  it('会话摘要显示最新消息，打开后完整已读且刷新不截断历史', async () => {
+    const session = { accessToken: 'access', refreshToken: 'refresh', expiresIn: 3600, user: { id: 'user-a', role: 'USER', campusStatus: 'VERIFIED' } }
+    await sessionStore.set(session)
+    const conversation = {
+      id: 'thread-read', listingId: 'book-a', buyerId: 'user-a', sellerId: 'seller', lastMessageAt: '2026-08-31T01:02:00.000Z', unread: 2,
+      members: [{ userId: 'user-a', user: { id: 'user-a', nickname: '自己', campus: '良乡' } }, { userId: 'seller', user: { id: 'seller', nickname: '卖家', campus: '良乡' } }],
+      listing: { id: 'book-a', title: '消息测试书', author: '作者', isbn: '', category: '教材', course: '', priceCents: 1000, condition: '九成新', campus: '良乡', description: '', status: 'ACTIVE', sellerId: 'seller', createdAt: '2026-08-31T00:00:00.000Z', tags: [], images: [] },
+      messages: [{ id: '12', senderId: 'user-a', content: '我刚补充了一句', createdAt: '2026-08-31T01:02:00.000Z' }]
+    }
+    vi.mocked(Taro.request)
+      .mockResolvedValueOnce({ statusCode: 200, data: { items: [conversation] } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: { items: [
+        { id: '10', senderId: 'seller', content: '第一条未读', createdAt: '2026-08-31T01:00:00.000Z' },
+        { id: '11', senderId: 'seller', content: '第二条未读', createdAt: '2026-08-31T01:01:00.000Z' },
+        conversation.messages[0]
+      ] } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: { items: [conversation] } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: { ok: true } } as never)
+      .mockResolvedValueOnce({ statusCode: 200, data: { items: [{ ...conversation, unread: 0 }] } } as never)
+
+    const summaries = await apiRepository.listThreads()
+    expect(summaries[0]).toMatchObject({ unread: 2, messages: [{ id: '12', text: '我刚补充了一句' }] })
+    const loaded = await apiRepository.getThread('thread-read')
+    expect(loaded.messages.map((item) => item.id)).toEqual(['10', '11', '12'])
+    expect(loaded.unread).toBe(0)
+    expect(vi.mocked(Taro.request).mock.calls.some(([options]) => options.url === 'http://api.test/conversations/thread-read/read' && options.method === 'POST' && options.data?.messageId === '12')).toBe(true)
+
+    await apiRepository.listThreads()
+    expect(apiRepository.peekThread('thread-read')?.messages.map((item) => item.id)).toEqual(['10', '11', '12'])
+  })
   it('草稿恢复、发布校验和删除', async () => { const draft = { title: '测试书', author: '', isbn: '', category: '数学', course: '高数', price: '12', originalPrice: '', condition: '八成新' as const, campus: '良乡' as const, description: '', tags: [], mediaIds: ['cover', 'isbn'], coverMediaId: 'cover', isbnMediaId: 'isbn' }; await demoRepository.saveDraft(draft); expect((await demoRepository.getDraft())?.title).toBe('测试书'); const published = await demoRepository.publishListing(draft); expect(published.status).toBe('available'); await demoRepository.deleteListing(published.id); expect((await demoRepository.listMyListings()).some((item) => item.id === published.id)).toBe(false); await expect(demoRepository.publishListing({ ...draft, price: '0' })).rejects.toMatchObject({ code: 'VALIDATION' }); await expect(demoRepository.publishListing({ ...draft, coverMediaId: undefined })).rejects.toMatchObject({ code: 'VALIDATION' }) })
   it('消息发送后可读取且未读归零', async () => { await demoRepository.sendMessage('thread-lin', '收到'); const thread = await demoRepository.getThread('thread-lin'); expect(thread.messages.at(-1)?.text).toBe('收到'); expect(thread.unread).toBe(0) })
   it('Tobby 规则成文可重放', async () => { const a = await listingAssistant.generate({ course: '线性代数', condition: '九成新' }); const b = await listingAssistant.generate({ course: '线性代数', condition: '九成新' }); expect(a).toEqual(b); expect(a.tags).toContain('线性代数') })

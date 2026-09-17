@@ -9,20 +9,28 @@ const KEYS = { listings: 'listings', favorites: 'favorites', threads: 'threads',
 let filterCache: ListingFilters | undefined
 let listingCache: Listing[] = seedListings
 export interface DemoRepository {
-  listListings(filters?: ListingFilters): Promise<Listing[]>; getListing(id: string, options?: { owner?: boolean }): Promise<Listing>; peekListing(id: string): Listing | undefined;
+  listListings(filters?: ListingFilters): Promise<Listing[]>; listListingsPage(filters?: ListingFilters, cursor?: string): Promise<{ items: Listing[]; nextCursor: string | null }>; getListing(id: string, options?: { owner?: boolean }): Promise<Listing>; peekListing(id: string): Listing | undefined;
   toggleFavorite(id: string): Promise<boolean>; listFavorites(): Promise<Listing[]>; peekFavorites(): Listing[] | undefined;
   reportListing(id: string, reason: string): Promise<void>;
   saveDraft(draft: PublishDraft): Promise<void>; getDraft(): Promise<PublishDraft | null>; publishListing(draft: PublishDraft, onProgress?: (progress: number) => void): Promise<Listing>;
-  updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; peekMyListings(): Listing[] | undefined;
-  listThreads(): Promise<ChatThread[]>; peekThreads(): ChatThread[] | undefined; getThread(id: string): Promise<ChatThread>; peekThread(id: string): ChatThread | undefined; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
-  listNotifications(): Promise<Notification[]>; peekNotifications(): Notification[] | undefined; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  updateListingStatus(id: string, status: ListingStatus): Promise<void>; deleteListing(id: string): Promise<void>; listMyListings(): Promise<Listing[]>; listMyListingsPage(cursor?: string): Promise<{ items: Listing[]; nextCursor: string | null }>; countMyListings(): Promise<number>; peekMyListings(): Listing[] | undefined;
+  listThreads(): Promise<ChatThread[]>; listThreadsPage(cursor?: string): Promise<{ items: ChatThread[]; nextCursor: string | null }>; peekThreads(): ChatThread[] | undefined; getThread(id: string): Promise<ChatThread>; loadOlderMessages(threadId: string, before: string): Promise<{ items: Message[]; olderCursor: string | null }>; peekThread(id: string): ChatThread | undefined; sendMessage(threadId: string, text: string, mediaId?: string): Promise<Message>; ensureThread(listingId: string): Promise<string>;
+  listNotifications(): Promise<Notification[]>; markNotificationsRead(ids?: string[]): Promise<void>; peekNotifications(): Notification[] | undefined; getProfile(): Promise<User>; peekProfile(): User | undefined; updateProfile(profile: ProfileUpdate): Promise<User>; deleteAccount(): Promise<void>; isOnboardingComplete(): Promise<boolean>; completeOnboarding(): Promise<void>;
+  listBlockedUsers(): Promise<User[]>; setBlocked(userId: string, blocked: boolean): Promise<void>;
   submitFeedback(type: FeedbackType, content: string): Promise<void>;
   getAuthenticatedSid(): Promise<string>; markAuthenticated(sid: string): Promise<void>; clearAuthentication(): Promise<void>;
   getFilters(): Promise<ListingFilters>; saveFilters(filters: ListingFilters): Promise<void>;
   shouldShowResetNotice(): Promise<boolean>; acknowledgeResetNotice(): Promise<void>; resetDemoData(): Promise<void>
 }
 const localRepository: DemoRepository = {
-  async listListings(filters = defaultFilters) { listingCache = await storageAdapter.get(KEYS.listings, seedListings); return filterListings(listingCache, filters) },
+  async listListings(filters = defaultFilters) { return (await this.listListingsPage(filters)).items },
+  async listListingsPage(filters = defaultFilters, cursor) {
+    listingCache = await storageAdapter.get(KEYS.listings, seedListings)
+    const filtered = filterListings(listingCache, filters)
+    const start = cursor ? Math.max(filtered.findIndex((item) => item.id === cursor) + 1, 0) : 0
+    const items = filtered.slice(start, start + 20)
+    return { items, nextCursor: start + items.length < filtered.length ? items.at(-1)?.id || null : null }
+  },
   async getListing(id) { listingCache = await storageAdapter.get(KEYS.listings, seedListings); const item = listingCache.find((x) => x.id === id); if (!item) throw new AppError('NOT_FOUND', '商品不存在'); return item },
   peekListing(id) { return listingCache.find((item) => item.id === id) },
   async toggleFavorite(id) { const ids = await storageAdapter.get<string[]>(KEYS.favorites, []); const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]; await storageAdapter.set(KEYS.favorites, next); return next.includes(id) },
@@ -39,19 +47,27 @@ const localRepository: DemoRepository = {
   },
   async updateListingStatus(id, status) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.map((x) => x.id === id ? { ...x, status } : x); await storageAdapter.set(KEYS.listings, listingCache) },
   async deleteListing(id) { const items = await storageAdapter.get(KEYS.listings, seedListings); listingCache = items.filter((item) => item.id !== id); await storageAdapter.set(KEYS.listings, listingCache) },
-  async listMyListings() { return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID) },
+  async listMyListings() { return (await this.listMyListingsPage()).items },
+  async listMyListingsPage(cursor) { const all = (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID); const found = cursor ? all.findIndex((item) => item.id === cursor) + 1 : 0; const start = Math.max(found, 0); const items = all.slice(start, start + 20); return { items, nextCursor: start + items.length < all.length ? items.at(-1)?.id || null : null } },
+  async countMyListings() { return (await storageAdapter.get(KEYS.listings, seedListings)).filter((x) => x.sellerId === CURRENT_USER_ID).length },
   peekMyListings() { return listingCache.filter((item) => item.sellerId === CURRENT_USER_ID) },
-  async listThreads() { return storageAdapter.get(KEYS.threads, seedThreads) },
+  async listThreads() { return (await this.listThreadsPage()).items },
+  async listThreadsPage(cursor) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const found = cursor ? threads.findIndex((thread) => thread.id === cursor) + 1 : 0; const start = Math.max(found, 0); const items = threads.slice(start, start + 20); return { items, nextCursor: start + items.length < threads.length ? items.at(-1)?.id || null : null } },
   peekThreads() { return storageAdapter.peek(KEYS.threads, seedThreads) },
   async getThread(id) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const thread = threads.find((x) => x.id === id); if (!thread) throw new AppError('NOT_FOUND', '会话不存在'); if (thread.unread) { thread.unread = 0; await storageAdapter.set(KEYS.threads, threads) } return thread },
+  async loadOlderMessages() { return { items: [], olderCursor: null } },
   peekThread(id) { return storageAdapter.peek(KEYS.threads, seedThreads).find((thread) => thread.id === id) },
   async sendMessage(threadId, text, mediaId) { const message: Message = { id: `message-${Date.now()}`, senderId: CURRENT_USER_ID, text, createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), kind: mediaId ? 'image' : 'text', mediaId }; const threads = (await storageAdapter.get(KEYS.threads, seedThreads)).map((x) => x.id === threadId ? { ...x, updatedAt: message.createdAt, messages: [...x.messages, message] } : x); await storageAdapter.set(KEYS.threads, threads); return message },
   async ensureThread(listingId) { const threads = await storageAdapter.get(KEYS.threads, seedThreads); const existing = threads.find((x) => x.listingId === listingId); if (existing) return existing.id; const listing = await this.getListing(listingId); const thread: ChatThread = { id: `thread-${listingId}`, participantId: listing.sellerId, listingId, unread: 0, updatedAt: '刚刚', messages: [] }; await storageAdapter.set(KEYS.threads, [thread, ...threads]); return thread.id },
   async listNotifications() { return storageAdapter.get(KEYS.notifications, seedNotifications) },
+  async markNotificationsRead(ids) { const items = await storageAdapter.get(KEYS.notifications, seedNotifications); await storageAdapter.set(KEYS.notifications, items.map((item) => !ids || ids.includes(item.id) ? { ...item, unread: 0 } : item)) },
   peekNotifications() { return storageAdapter.peek(KEYS.notifications, seedNotifications) },
+  async listBlockedUsers() { const ids = await storageAdapter.get<string[]>('blocks', []); return ids.map(getUser) },
+  async setBlocked(userId, blocked) { const ids = await storageAdapter.get<string[]>('blocks', []); await storageAdapter.set('blocks', blocked ? [...new Set([...ids, userId])] : ids.filter((id) => id !== userId)) },
   async getProfile() { return storageAdapter.get<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   peekProfile() { return storageAdapter.peek<User>('profile', users.find((x) => x.id === CURRENT_USER_ID)!) },
   async updateProfile(profile) { const current = await this.getProfile(); const updated = { ...current, ...profile }; await storageAdapter.set('profile', updated); return updated },
+  async deleteAccount() { await this.resetDemoData(); await this.clearAuthentication() },
   async submitFeedback(type, content) { const items = await storageAdapter.get<Array<{ type: FeedbackType; content: string; createdAt: string }>>('feedback', []); await storageAdapter.set('feedback', [{ type, content, createdAt: new Date().toISOString() }, ...items]) },
   async getFilters() {
     if (filterCache) return filterCache

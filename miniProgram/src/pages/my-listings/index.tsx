@@ -13,11 +13,13 @@ import { feedbackAdapter, navigationAdapter } from '@/platform'
 export default function MyListingsPage() {
   const [tab, setTab] = useState<ListingStatus | 'all'>('all')
   const [items, setItems] = useState<Listing[] | undefined>(() => demoRepository.peekMyListings())
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [confirmingSoldId, setConfirmingSoldId] = useState<string>()
   const [updatingId, setUpdatingId] = useState<string>()
   const [deleteTarget, setDeleteTarget] = useState<Listing>()
   const [deletingId, setDeletingId] = useState<string>()
-  const load = useCallback(() => demoRepository.listMyListings().then((next) => setItems((current) => preserveSnapshot(current, next))), [])
+  const load = useCallback(() => demoRepository.listMyListingsPage().then((page) => { setItems((current) => preserveSnapshot(current, page.items)); setNextCursor(page.nextCursor) }), [])
   useDidShow(() => { void requireAccount('请先使用学号登录后管理商品').then((allowed) => { if (allowed) return load() }) })
   const visible = useMemo(() => items === undefined ? undefined : tab === 'all' ? items : items.filter((item) => item.status === tab), [items, tab])
   const updateStatus = async (item: Listing, status: ListingStatus) => {
@@ -38,6 +40,13 @@ export default function MyListingsPage() {
     if (item.status === 'available') setConfirmingSoldId(item.id)
     else void updateStatus(item, 'available')
   }
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try { const page = await demoRepository.listMyListingsPage(nextCursor); setItems(page.items); setNextCursor(page.nextCursor) }
+    catch (cause) { await feedbackAdapter.toast(cause instanceof Error ? cause.message : '加载更多失败，请稍后重试') }
+    finally { setLoadingMore(false) }
+  }
   const confirmRemove = async () => {
     if (!deleteTarget || deletingId) return
     setDeletingId(deleteTarget.id)
@@ -50,5 +59,5 @@ export default function MyListingsPage() {
     const confirmingSold = confirmingSoldId === item.id
     const updating = updatingId === item.id
     return <View id={`e2e-my-listing-${item.id}`} className='manage-listing' key={item.id}><ListingCard listing={item} href={`/pages/listing/detail?id=${item.id}&mine=1`} ownerView /><View className={`manage-listing-actions${['available', 'offline'].includes(item.status) ? '' : ' single-action'}`}>{confirmingSold ? <><Button id={`e2e-cancel-sold-${item.id}`} className='secondary-button' disabled={updating} onClick={() => setConfirmingSoldId(undefined)}>取消</Button><Button id={`e2e-confirm-sold-${item.id}`} className='danger-button' disabled={updating} onClick={() => { void updateStatus(item, 'sold') }}>{updating ? '更新中…' : '确认已售'}</Button></> : <>{['available', 'offline'].includes(item.status) && <Button id={item.status === 'available' ? `e2e-mark-sold-${item.id}` : undefined} className='secondary-button' disabled={Boolean(updatingId)} onClick={() => change(item)}>{item.status === 'available' ? '标记已售' : updating ? '更新中…' : '重新上架'}</Button>}<Button className='danger-button' disabled={Boolean(updatingId)} onClick={() => setDeleteTarget(item)}>删除</Button></>}</View></View>
-  }) : <View id='e2e-my-listings-empty' className='inline-state'><Image src={bundledAsset('tobby-question')} mode='aspectFit' /><Text className='inline-title'>这次没有找到合适的书</Text><Text className='inline-copy'>换个状态，或者发布一本闲置书吧。</Text></View>}<Button className='floating-add' onClick={() => navigationAdapter.switchTab('/pages/publish/index')}>＋ 发布一本书</Button></AppShell>
+  }) : <View id='e2e-my-listings-empty' className='inline-state'><Image src={bundledAsset('tobby-question')} mode='aspectFit' /><Text className='inline-title'>这次没有找到合适的书</Text><Text className='inline-copy'>换个状态，或者发布一本闲置书吧。</Text></View>}{nextCursor && <Button className='secondary-button catalog-load-more' disabled={loadingMore} onClick={loadMore}>{loadingMore ? '正在加载…' : '加载更多发布'}</Button>}<Button className='floating-add' onClick={() => navigationAdapter.switchTab('/pages/publish/index')}>＋ 发布一本书</Button></AppShell>
 }

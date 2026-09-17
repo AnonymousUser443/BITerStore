@@ -29,6 +29,7 @@ weapp-automation.log
 miniProgram/.swc/
 miniProgram/dist-weapp-auth/
 deploy/secrets/
+deploy/backups/
 
 # Superseded local dependency bootstrap (the formal client lives in miniProgram/)
 taro/

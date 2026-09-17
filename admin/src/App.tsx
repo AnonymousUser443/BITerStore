@@ -3,7 +3,7 @@ import {
   AlertTriangle, BookOpen, Check, ChevronLeft, ChevronRight, ClipboardList, Copy,
   ExternalLink, KeyRound, LayoutDashboard, LogOut, MessageSquareText, RefreshCw, Search, ShieldCheck, Users, X
 } from 'lucide-react'
-import { ADMIN_TOKEN_KEY, API_ROOT, ApiError, apiRequest, queryString, refreshBrowserSession, requestId } from './api'
+import { ADMIN_TOKEN_KEY, ApiError, apiBlob, apiRequest, queryString, refreshBrowserSession, requestId } from './api'
 import type {
   AdminIdentity, AuditRow, ElevatedSession, FeedbackRow, ListingRow, Metrics, PageResult,
   PendingAction, ReportRow, SecurityStatus, TotpSetup, UserRow, View
@@ -385,10 +385,10 @@ function UsersTable({ rows, identity, onAction }: { rows: UserRow[]; identity: A
 
 function ListingsTable({ rows, onAction }: { rows: ListingRow[]; onAction: (actions: PendingAction[]) => void }) {
   return <Table headers={['商品', '卖家', '价格 / 校区', '状态', '互动', '发布时间', '操作']}>{rows.map((row) => {
-    const cover = row.images.find((image) => image.role === 'COVER') || row.images.find((image) => image.role !== 'ISBN')
+    const { cover, isbnEvidence } = listingReviewImages(row)
     const actions = listingActions(row)
     return <tr key={row.id}>
-      <td data-label="商品"><div className="listing-cell">{cover ? <img src={`${API_ROOT}/media/${cover.id}`} alt="" /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code><a className="listing-detail-link" href={listingDetailHref(row.id)} target="_blank" rel="noreferrer">查看详情 <ExternalLink size={12} /></a></div></div></td>
+      <td data-label="商品"><div className="listing-cell"><div className="listing-review-images"><span title="商品封面">{cover ? <ModerationImage id={cover.id} alt={`${row.title} 封面审核图`} /> : <span className="cover-placeholder"><BookOpen size={19} /></span>}<em>封面</em></span><span title="ISBN 凭证">{isbnEvidence ? <ModerationImage id={isbnEvidence.id} alt={`${row.title} ISBN 凭证`} /> : <span className="cover-placeholder missing"><BookOpen size={19} /></span>}<em>ISBN</em></span></div><div><strong>{row.title}</strong><small>{row.author || '作者未知'} · {row.isbn || '无 ISBN'}</small><code title={row.id}>{shortId(row.id)}</code><a className="listing-detail-link" href={listingDetailHref(row.id)} target="_blank" rel="noreferrer">查看详情 <ExternalLink size={12} /></a></div></div></td>
       <td data-label="卖家">{row.seller.nickname}<small className="inline-note">{labels[row.seller.status] || row.seller.status}</small></td>
       <td data-label="价格 / 校区"><strong>¥{(row.priceCents / 100).toFixed(2)}</strong><small className="inline-note">{row.campus}</small></td>
       <td data-label="状态"><Status value={row.status} label={listingStatusLabels[row.status]} />{row.moderationDecision === 'IGNORE' && <Status value="IGNORE" subtle />}</td>
@@ -516,13 +516,36 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 
 export function listingActions(row: ListingRow): PendingAction[] {
   const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, targetLabel: row.title, action, actionLabel, tone })
+  if (!row.moderationDecision && row.status === 'PENDING_REVIEW') return [base('ACTIVE', '审核通过'), base('BLOCKED', '审核拒绝', 'danger')]
   return !row.moderationDecision && ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'].includes(row.status)
     ? [base('IGNORE', '忽略'), base('BLOCKED', '违规屏蔽', 'danger')]
     : []
 }
 
+function ModerationImage({ id, alt }: { id: string; alt: string }) {
+  const [url, setUrl] = useState<string>()
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | undefined
+    void apiBlob(`/media/review/${encodeURIComponent(id)}`).then((blob) => {
+      if (!active) return
+      objectUrl = URL.createObjectURL(blob)
+      setUrl(objectUrl)
+    }).catch(() => undefined)
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [id])
+  return url ? <img src={url} alt={alt} /> : <span className="cover-placeholder"><BookOpen size={19} /></span>
+}
+
 export function listingDetailHref(id: string) {
-  return `/books?id=${encodeURIComponent(id)}`
+  return `/books/${encodeURIComponent(id)}`
+}
+
+export function listingReviewImages(row: ListingRow) {
+  return {
+    cover: row.images.find((image) => image.role === 'COVER') || row.images.find((image) => image.role !== 'ISBN'),
+    isbnEvidence: row.images.find((image) => image.role === 'ISBN')
+  }
 }
 
 export function reportActions(row: ReportRow): PendingAction[] {

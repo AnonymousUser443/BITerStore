@@ -1,8 +1,10 @@
-import { Controller, Get, Header, NotFoundException, Param, StreamableFile } from '@nestjs/common'
+import { Controller, Get, Header, NotFoundException, Param, StreamableFile, UseGuards } from '@nestjs/common'
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { readFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
+import { AdminGuard, AuthGuard } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
+import { PublicCatalogRateLimitGuard } from '../listings/public-catalog-rate-limit.guard.js'
 
 @Controller('media')
 export class MediaController {
@@ -14,13 +16,29 @@ export class MediaController {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Get(':id')
-  @Header('Cache-Control', 'public, max-age=300, must-revalidate')
-  async get(@Param('id') id: string) {
+  @Get('review/:id')
+  @UseGuards(AuthGuard, AdminGuard)
+  @Header('Cache-Control', 'private, no-store')
+  async review(@Param('id') id: string) {
     const image = await this.prisma.listingImage.findFirst({
-      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } }
+      where: { id, uploadedAt: { not: null }, listingId: { not: null }, listing: { deletedAt: null } }
     })
     if (!image) throw new NotFoundException('图片不存在')
+    return this.stream(image)
+  }
+
+  @Get(':id')
+  @UseGuards(PublicCatalogRateLimitGuard)
+  @Header('Cache-Control', 'public, max-age=30, must-revalidate')
+  async get(@Param('id') id: string) {
+    const image = await this.prisma.listingImage.findFirst({
+      where: { id, uploadedAt: { not: null }, listingId: { not: null }, role: { not: 'ISBN' }, moderationStatus: 'APPROVED', listing: { deletedAt: null, status: 'ACTIVE', seller: { status: 'ACTIVE' } } }
+    })
+    if (!image) throw new NotFoundException('图片不存在')
+    return this.stream(image)
+  }
+
+  private async stream(image: { objectKey: string; mime: string; size: number }) {
     try {
       const bytes = process.env.UPLOAD_STORAGE === 'r2'
         ? await this.readR2(image.objectKey)

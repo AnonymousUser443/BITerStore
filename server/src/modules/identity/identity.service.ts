@@ -1,11 +1,13 @@
-import { BadRequestException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
-import { createHash } from 'node:crypto'
+import { BadRequestException, ForbiddenException, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common'
+import { createHash, createHmac } from 'node:crypto'
 import { importSPKI, jwtVerify } from 'jose'
+import { campusIdentityHashSecret } from '../../common/security-config.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 
 type CampusClaims = {
   provider: string
   subjectHash: string
+  legacySubjectHash: string
   studentNumber: string
   defaultNickname: string
   jti: string
@@ -58,7 +60,8 @@ export class IdentityService {
     if (expiresAt && expiresAt <= new Date()) throw new UnauthorizedException('校园认证身份已过期')
     return {
       provider: process.env.BIT_LOGIN_ISSUER || 'bit-login',
-      subjectHash: createHash('sha256').update(subject).digest('hex'),
+      subjectHash: createHmac('sha256', campusIdentityHashSecret()).update(subject).digest('hex'),
+      legacySubjectHash: createHash('sha256').update(subject).digest('hex'),
       studentNumber,
       defaultNickname: `BITer${studentNumber}`.slice(0, 24),
       jti: String(payload.jti),
@@ -69,17 +72,29 @@ export class IdentityService {
   async loginOrCreate(token: string) {
     const claims = await this.verify(token)
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
+      let existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
+      if (!existing && claims.legacySubjectHash !== claims.subjectHash) {
+        const legacy = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.legacySubjectHash } } })
+        if (legacy) existing = await tx.campusIdentity.update({ where: { id: legacy.id }, data: { externalSubjectHash: claims.subjectHash } })
+      }
       const currentUser = existing
         ? await tx.user.findUniqueOrThrow({ where: { id: existing.userId } })
         : null
-      const user = currentUser
+      if (currentUser?.status === 'BANNED') throw new ForbiddenException('账号当前不可用')
+      const recoveryDays = Math.max(1, Math.min(Number(process.env.ACCOUNT_RECOVERY_DAYS || 30) || 30, 365))
+      const recoverableDeletedUser = currentUser?.status === 'DELETED'
+        && currentUser.deletedAt instanceof Date
+        && currentUser.deletedAt.getTime() >= Date.now() - recoveryDays * 86_400_000
+      const reusableUser = currentUser?.status !== 'DELETED' || recoverableDeletedUser
+      const user = currentUser && reusableUser
         ? await tx.user.update({
             where: { id: currentUser.id },
             data: {
               campusStatus: 'VERIFIED',
               studentNumber: claims.studentNumber,
-              ...(legacyDefaultNicknames.has(currentUser.nickname) ? { nickname: claims.defaultNickname } : {})
+              ...(recoverableDeletedUser
+                ? { status: 'ACTIVE', deletedAt: null, nickname: claims.defaultNickname, campus: null, bio: '', role: 'USER', adminTotpSecret: null, adminTotpEnabled: false }
+                : legacyDefaultNicknames.has(currentUser.nickname) ? { nickname: claims.defaultNickname } : {})
             }
           })
         : await tx.user.create({ data: { studentNumber: claims.studentNumber, nickname: claims.defaultNickname, campusStatus: 'VERIFIED' } })
@@ -88,7 +103,7 @@ export class IdentityService {
       await tx.campusIdentity.upsert({
         where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } },
         create: { userId: user.id, provider: claims.provider, externalSubjectHash: claims.subjectHash, verifiedAt: new Date(), expiresAt: claims.expiresAt },
-        update: { verifiedAt: new Date(), expiresAt: claims.expiresAt, revokedAt: null }
+        update: { userId: user.id, verifiedAt: new Date(), expiresAt: claims.expiresAt, revokedAt: null }
       })
       return user
     })
@@ -98,7 +113,11 @@ export class IdentityService {
     const claims = await this.verify(token, userId)
     await this.prisma.$transaction(async (tx) => {
       await tx.usedAuthToken.create({ data: { jti: claims.jti, userId } })
-      const existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
+      let existing = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } } })
+      if (!existing && claims.legacySubjectHash !== claims.subjectHash) {
+        const legacy = await tx.campusIdentity.findUnique({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.legacySubjectHash } } })
+        if (legacy) existing = await tx.campusIdentity.update({ where: { id: legacy.id }, data: { externalSubjectHash: claims.subjectHash } })
+      }
       if (existing && existing.userId !== userId) throw new BadRequestException('该校园身份已绑定其他账号')
       await tx.campusIdentity.upsert({ where: { provider_externalSubjectHash: { provider: claims.provider, externalSubjectHash: claims.subjectHash } }, create: { userId, provider: claims.provider, externalSubjectHash: claims.subjectHash, verifiedAt: new Date(), expiresAt: claims.expiresAt }, update: { verifiedAt: new Date(), expiresAt: claims.expiresAt, revokedAt: null } })
       await tx.user.update({ where: { id: userId }, data: { campusStatus: 'VERIFIED', studentNumber: claims.studentNumber } })

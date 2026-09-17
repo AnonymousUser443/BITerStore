@@ -5,10 +5,10 @@ import { AppShell, Avatar } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { requireAccount } from '@/domain/access'
 import { demoRepository } from '@/domain/repository'
-import type { Campus, ProfileUpdate, User } from '@/domain/types'
+import type { CampusLabel, ProfileUpdate, User } from '@/domain/types'
 import { avatarAdapter, feedbackAdapter, navigationAdapter } from '@/platform'
 
-const campuses: Campus[] = ['中关村', '良乡', '西山', '珠海']
+const campuses: CampusLabel[] = ['未设置', '中关村', '良乡', '西山', '珠海']
 
 export default function ProfileEditPage() {
   const [user, setUser] = useState<User | undefined>(() => demoRepository.peekProfile())
@@ -50,7 +50,7 @@ export default function ProfileEditPage() {
   if (!user || !draft) return <AppShell title='编辑个人资料' back backTo='/pages/profile/index' noNav className='profile-edit-page'><View className='inline-loading'>托比正在准备个人资料…</View></AppShell>
   return <AppShell title='编辑个人资料' back backTo='/pages/profile/index' noNav className='profile-edit-page'>
     <View className='profile-edit-intro'><View className='profile-avatar-editor'><Avatar user={{ ...user, avatar: draft.avatar }} size={92} /><View><Button className='secondary-button' onClick={chooseAvatar}><Glyph name='camera' /> 更换头像</Button>{draft.avatar && <Button className='profile-avatar-clear' onClick={() => setDraft({ ...draft, avatar: undefined })}>移除头像</Button>}</View></View><Text>完善资料，让校友更放心地和你交易。</Text></View>
-    <View className='profile-edit-card'><View className='profile-edit-field'><Text>昵称</Text><Input id='e2e-profile-name' maxlength={24} value={draft.name} onInput={(event) => setDraft({ ...draft, name: event.detail.value })} /><Text className='profile-char-count'>{draft.name.length}/24</Text></View><View className='profile-edit-field'><Text>校区</Text><Picker mode='selector' range={campuses} value={Math.max(0, campuses.indexOf(draft.campus))} onChange={(event) => setDraft({ ...draft, campus: campuses[Number(event.detail.value)] })}><View className='select-control'>{draft.campus}校区</View></Picker></View><View className='profile-edit-field'><Text>个人简介</Text><Textarea maxlength={160} value={draft.bio} onInput={(event) => setDraft({ ...draft, bio: event.detail.value })} placeholder='介绍一下自己、常交易的校区或偏好的书籍' /><Text className='profile-char-count'>{draft.bio.length}/160</Text></View></View>
+    <View className='profile-edit-card'><View className='profile-edit-field'><Text>昵称</Text><Input id='e2e-profile-name' maxlength={24} value={draft.name} onInput={(event) => setDraft({ ...draft, name: event.detail.value })} /><Text className='profile-char-count'>{draft.name.length}/24</Text></View><View className='profile-edit-field'><Text>校区</Text><Picker mode='selector' range={campuses} value={Math.max(0, campuses.indexOf(draft.campus))} onChange={(event) => setDraft({ ...draft, campus: campuses[Number(event.detail.value)] })}><View className='select-control'>{draft.campus === '未设置' ? '校区未设置' : `${draft.campus}校区`}</View></Picker></View><View className='profile-edit-field'><Text>个人简介</Text><Textarea maxlength={160} value={draft.bio} onInput={(event) => setDraft({ ...draft, bio: event.detail.value })} placeholder='介绍一下自己、常交易的校区或偏好的书籍' /><Text className='profile-char-count'>{draft.bio.length}/160</Text></View></View>
     <View className='profile-edit-notice'><Glyph name='shield' /><View><Text>校园身份已认证</Text><Text>学号与认证信息不会公开展示。</Text></View></View>
     <Button id='e2e-profile-save' className='primary-button profile-save' disabled={saving} onClick={save}>{saving ? '保存中…' : '保存个人资料'}</Button>
   </AppShell>

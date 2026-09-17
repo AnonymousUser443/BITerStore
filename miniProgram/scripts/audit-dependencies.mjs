@@ -33,7 +33,14 @@ try {
 }
 
 if (report.error) {
-  throw new Error(`npm audit 执行失败：${report.error.summary || report.error.code || '未知错误'}`)
+  const detail =
+    report.error.summary ||
+    report.error.detail ||
+    report.error.code ||
+    report.message ||
+    audit.stderr?.trim() ||
+    '未知错误'
+  throw new Error(`npm audit 执行失败：${detail}`)
 }
 
 const acceptedSources = new Set(policy.acceptedAdvisories.map(({ source }) => source))

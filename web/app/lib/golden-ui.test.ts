@@ -56,6 +56,9 @@ describe('authenticated Golden H5', () => {
     expect(detailPage).toContain("navigate('/login')")
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+    expect(detailPage).toContain("className={`block-user-action ${blocked ? 'is-active' : ''}`}")
+    expect(styles).toContain('.detail-cta .block-user-action,')
+    expect(styles).toContain('.detail-cta .block-user-action.is-active,')
   })
 
   it('shows a retryable error instead of loading a failed chat forever', () => {
@@ -70,6 +73,14 @@ describe('authenticated Golden H5', () => {
     const myListingsPage = mobileApp.slice(mobileApp.indexOf('function MyListingsPage'), mobileApp.indexOf('const stateContent'))
     expect(myListingsPage).toContain('setBooks((current) => current.filter((item) => item.id !== book.id))')
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
+  })
+
+  it('does not create a local-only favorite for catalog guests', () => {
+    const categoryPage = mobileApp.slice(mobileApp.indexOf('function CategoryPage'), mobileApp.indexOf('function InlineLoading'))
+    expect(categoryPage).toContain('const currentUser = useContext(CurrentUserContext)')
+    expect(categoryPage).toContain("if (!currentUser) { notify('请先使用学号登录后收藏商品'); navigate('/login'); return; }")
+    expect(categoryPage).toContain('demoRepository.listFavorites()')
+    expect(categoryPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
   })
 
   it('paints message snapshots immediately and anchors every chat to its listing', () => {

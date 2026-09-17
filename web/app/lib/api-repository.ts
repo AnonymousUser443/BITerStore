@@ -52,7 +52,9 @@ interface ApiConversation {
   unread?: number;
   members?: ApiMember[];
   messages?: ApiMessage[];
+  blocked?: boolean;
 }
+interface ApiMessagePage { items: ApiMessage[]; nextCursor?: string | null; olderCursor?: string | null; blocked?: boolean }
 interface ApiNotification { id: string; type: string; title: string; body: string; readAt?: string | null; createdAt: string }
 
 const apiDefaults: BookFilters = {
@@ -102,13 +104,15 @@ function compactThreadTime(value: string) {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-function thread(value: ApiConversation): ChatThread {
+function thread(value: ApiConversation & { olderCursor?: string | null }): ChatThread {
   const other = (value.members || []).find((member) => member.userId !== currentUserId()) || (value.members || [])[0];
   const conversationBook = value.listing ? book(value.listing) : undefined;
   return {
     id: value.id, participantId: other?.userId || value.sellerId, participant: other?.user ? user(other.user) : undefined, buyerId: value.buyerId,
     bookId: value.listingId, unread: Number(value.unread || 0), updatedAt: compactThreadTime(value.lastMessageAt),
     book: conversationBook, messages: (value.messages || []).map(message),
+    blocked: Boolean(value.blocked),
+    olderCursor: value.olderCursor || null,
   };
 }
 
@@ -117,6 +121,23 @@ function queryString(values: Record<string, string | number | undefined>) {
   Object.entries(values).forEach(([key, value]) => { if (value !== undefined && value !== '') query.set(key, String(value)); });
   const encoded = query.toString();
   return encoded ? `?${encoded}` : '';
+}
+
+function apiSort(sort: BookFilters['sort']) {
+  return sort === '价格从低到高' ? 'price_asc' : sort === '价格从高到低' ? 'price_desc' : 'newest';
+}
+
+async function loadBookPage(filters: BookFilters, cursor?: string) {
+  const result = await h5ApiRequest<{ items: ApiListing[]; nextCursor?: string | null }>('/listings' + queryString({
+    q: filters.query.trim() || undefined,
+    category: filters.category === '全部' ? undefined : filters.category,
+    campus: filters.campus === '全部' ? undefined : filters.campus,
+    condition: filters.condition === '全部' ? undefined : filters.condition,
+    minPriceCents: filters.minPrice > 0 ? Math.round(filters.minPrice * 100) : undefined,
+    maxPriceCents: filters.maxPrice < 200 ? Math.round(filters.maxPrice * 100) : undefined,
+    sort: apiSort(filters.sort), cursor, limit: 20,
+  }));
+  return { items: result.items.map(book), nextCursor: result.nextCursor || null };
 }
 
 function draftPayload(draft: PublishDraft, imageIds: string[]) {
@@ -164,18 +185,8 @@ async function uploadDraftImages(draft: PublishDraft, onProgress?: (progress: nu
 }
 
 export const apiRepository: DemoRepository = {
-  async listBooks(filters = apiDefaults) {
-    const result = await h5ApiRequest<{ items: ApiListing[] }>('/listings' + queryString({
-      q: filters.query, category: filters.category === '全部' ? undefined : filters.category,
-      campus: filters.campus === '全部' ? undefined : filters.campus, limit: 50,
-    }));
-    const items = result.items.map(book).filter((item) => item.price >= filters.minPrice && item.price <= filters.maxPrice)
-      .filter((item) => filters.condition === '全部' || item.condition === filters.condition)
-      .filter((item) => !filters.availableOnly || item.status === 'available');
-    if (filters.sort === '价格从低到高') items.sort((a, b) => a.price - b.price);
-    else if (filters.sort === '价格从高到低') items.sort((a, b) => b.price - a.price);
-    return items;
-  },
+  async listBooks(filters = apiDefaults) { return (await loadBookPage(filters)).items; },
+  async listBooksPage(filters = apiDefaults, cursor) { return loadBookPage(filters, cursor); },
   async getBook(id) {
     try { return book(await h5ApiRequest<ApiListing>(`/listings/${id}`)); }
     catch {
@@ -224,19 +235,35 @@ export const apiRepository: DemoRepository = {
     const next = status === 'sold' ? 'SOLD' : status === 'offline' ? 'OFF_SHELF' : 'ACTIVE';
     await h5ApiRequest(`/listings/${id}/status`, { method: 'POST', body: JSON.stringify({ status: next, version: Number(current.version) }) });
   },
-  async listMyListings() {
-    const result = await h5ApiRequest<{ items: ApiListing[] }>('/listings/mine/all?limit=50');
-    return result.items.map(book);
+  async listMyListings() { return (await this.listMyListingsPage()).items; },
+  async listMyListingsPage(cursor) {
+    const result = await h5ApiRequest<{ items: ApiListing[]; nextCursor?: string | null }>('/listings/mine/all' + queryString({ cursor, limit: 20 }));
+    return { items: result.items.map(book), nextCursor: result.nextCursor || null };
   },
+  async countMyListings() { return (await h5ApiRequest<{ count: number }>('/listings/mine/count')).count; },
   async deleteListing(id) { await h5ApiRequest(`/listings/${id}`, { method: 'DELETE' }); },
-  async listThreads() { return (await h5ApiRequest<ApiConversation[]>('/conversations')).map(thread); },
+  async listThreads() { return (await this.listThreadsPage()).items; },
+  async listThreadsPage(cursor) {
+    const response = await h5ApiRequest<{ items: ApiConversation[]; nextCursor?: string | null } | ApiConversation[]>('/conversations' + queryString({ cursor, limit: 20 }));
+    const page = Array.isArray(response) ? { items: response, nextCursor: null } : response;
+    return { items: page.items.map(thread), nextCursor: page.nextCursor || null };
+  },
   async getThread(id) {
     const [messages, conversations] = await Promise.all([
-      h5ApiRequest<{ items: ApiMessage[] }>(`/conversations/${id}/messages`), h5ApiRequest<ApiConversation[]>('/conversations'),
+      h5ApiRequest<ApiMessagePage>(`/conversations/${id}/messages?limit=30`), h5ApiRequest<{ items: ApiConversation[] } | ApiConversation[]>('/conversations?limit=50'),
     ]);
-    const found = conversations.find((item) => item.id === id);
-    return found ? thread({ ...found, messages: messages.items }) : null;
+    const found = (Array.isArray(conversations) ? conversations : conversations.items).find((item) => item.id === id);
+    if (!found) return null;
+    const value = thread({ ...found, messages: messages.items, blocked: messages.blocked ?? found.blocked, olderCursor: messages.olderCursor });
+    const latest = messages.items.at(-1);
+    // Reading a conversation advances the cursor through every visible
+    // message. The newest message may be ours while older incoming messages
+    // are still unread, so the sender must not gate this update.
+    if (latest?.id) await h5ApiRequest(`/conversations/${id}/read`, { method: 'POST', body: JSON.stringify({ messageId: String(latest.id) }) }).catch(() => undefined);
+    value.unread = 0;
+    return value;
   },
+  async loadOlderMessages(threadId, before) { const page = await h5ApiRequest<ApiMessagePage>(`/conversations/${threadId}/messages` + queryString({ before, limit: 30 })); return { items: page.items.map(message), olderCursor: page.olderCursor || null }; },
   async sendMessage(threadId, text) { return message(await h5ApiRequest<ApiMessage>(`/conversations/${threadId}/messages`, { method: 'POST', body: JSON.stringify({ content: text }) })); },
   async ensureThread(listingId) { return (await h5ApiRequest<{ id: string }>('/conversations', { method: 'POST', body: JSON.stringify({ listingId }) })).id; },
   async listNotifications() {
@@ -245,7 +272,11 @@ export const apiRepository: DemoRepository = {
       title: value.title, subtitle: value.body, unread: value.readAt ? 0 : 1, createdAt: value.createdAt,
     }));
   },
+  async markNotificationsRead(ids) { if (!ids) await h5ApiRequest('/notifications/read-all', { method: 'POST', body: '{}' }); else await Promise.all(ids.map((id) => h5ApiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', body: '{}' }))); },
+  async listBlockedUsers() { return (await h5ApiRequest<ApiUser[]>('/blocks')).map(user); },
+  async setBlocked(userId, blocked) { await h5ApiRequest(`/blocks/${encodeURIComponent(userId)}`, { method: blocked ? 'PUT' : 'DELETE', ...(blocked ? { body: '{}' } : {}) }); },
   async getProfile() { return user(await h5ApiRequest<ApiUser>('/me')); },
+  async deleteAccount() { await h5ApiRequest('/me', { method: 'DELETE' }); },
   async submitFeedback(type, content) { await h5ApiRequest('/me/feedback', { method: 'POST', body: JSON.stringify({ type, content, platform: 'H5' }) }); },
   isOnboardingComplete() { return localStorage.getItem('biterstore:v1:onboarding') === 'true'; },
   completeOnboarding() { localStorage.setItem('biterstore:v1:onboarding', 'true'); },

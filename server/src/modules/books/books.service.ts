@@ -1,7 +1,5 @@
-import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader'
+import { BadGatewayException, BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { Worker } from 'node:worker_threads'
 import { RedisService } from '../../infra/redis.service.js'
 
 export type BookMetadata = {
@@ -25,7 +23,6 @@ type OpenLibraryBook = {
 
 const CACHE_SECONDS = 30 * 24 * 60 * 60
 const NOT_FOUND_CACHE_SECONDS = 24 * 60 * 60
-let zxingReady: Promise<unknown> | undefined
 
 const CHINESE_METADATA_OVERRIDES: Record<string, Omit<BookMetadata, 'isbn'>> = {
   '9787513915670': {
@@ -91,17 +88,6 @@ export function isValidIsbn(isbn: string) {
   return false
 }
 
-async function ensureZxing() {
-  if (!zxingReady) {
-    zxingReady = readFile(fileURLToPath(import.meta.resolve('zxing-wasm/reader/zxing_reader.wasm')))
-      .then((bytes) => {
-        const wasmBinary = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-        return prepareZXingModule({ overrides: { wasmBinary }, fireImmediately: true })
-      })
-  }
-  return zxingReady
-}
-
 function metadataFromOpenLibrary(isbn: string, value: OpenLibraryBook): BookMetadata | null {
   if (!value.title) return null
   return {
@@ -132,19 +118,68 @@ function normalizedProxyMetadata(isbn: string, value: Partial<BookMetadata>): Bo
 @Injectable()
 export class BooksService {
   private readonly inflight = new Map<string, Promise<BookMetadata>>()
+  private activeRecognitions = 0
   constructor(private readonly redis: RedisService) {}
 
-  async recognize(body: Buffer) {
+  async recognize(body: Buffer, userId = 'anonymous', declaredMime = 'image/jpeg') {
     if (!Buffer.isBuffer(body) || body.length === 0 || body.length > 5 * 1024 * 1024) throw new BadRequestException('图片为空或超过 5MB')
+    await this.enforceRecognitionRate(userId)
+    const maximum = this.positiveLimit(process.env.BOOK_RECOGNITION_CONCURRENCY, 2, 8)
+    if (this.activeRecognitions >= maximum) throw new HttpException('条码识别任务较多，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    this.activeRecognitions += 1
     try {
-      await ensureZxing()
-      const results = await readBarcodes(new Uint8Array(body), { formats: ['EAN13'], tryHarder: true, tryRotate: true, maxNumberOfSymbols: 4 })
-      const isbn = results.map((result) => normalizeIsbn(result.text)).find(isValidIsbn)
+      const texts = await this.runRecognitionWorker(body, declaredMime)
+      const isbn = texts.map(normalizeIsbn).find(isValidIsbn)
       if (!isbn) throw new NotFoundException('没有识别到清晰的 ISBN 条码，请重新拍摄或手动填写')
       return { isbn }
     } catch (cause) {
-      if (cause instanceof NotFoundException) throw cause
+      if (cause instanceof NotFoundException || cause instanceof BadRequestException) throw cause
       throw new BadGatewayException('条码识别暂时不可用，请手动填写 ISBN')
+    } finally {
+      this.activeRecognitions -= 1
+    }
+  }
+
+  private runRecognitionWorker(body: Buffer, declaredMime: string) {
+    const timeoutMs = this.positiveLimit(process.env.BOOK_RECOGNITION_TIMEOUT_MS, 8_000, 30_000)
+    const bytes = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer
+    return new Promise<string[]>((resolve, reject) => {
+      const worker = new Worker(new URL('./barcode.worker.js', import.meta.url), { workerData: { bytes, declaredMime }, transferList: [bytes] })
+      let settled = false
+      const finish = (callback: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        callback()
+      }
+      const timeout = setTimeout(() => finish(() => { void worker.terminate(); reject(new Error('barcode recognition timed out')) }), timeoutMs)
+      worker.once('message', (message: { texts?: string[]; error?: string; validationError?: string }) => finish(() => {
+        void worker.terminate()
+        if (message.validationError) reject(new BadRequestException(`图片校验失败：${message.validationError}`))
+        else if (message.error) reject(new Error(message.error))
+        else resolve(Array.isArray(message.texts) ? message.texts : [])
+      }))
+      worker.once('error', (cause) => finish(() => reject(cause)))
+      worker.once('exit', (code) => { if (code !== 0) finish(() => reject(new Error(`barcode worker exited with code ${code}`))) })
+    })
+  }
+
+  private positiveLimit(raw: string | undefined, fallback: number, maximum: number) {
+    const value = Number(raw)
+    return Number.isSafeInteger(value) && value > 0 ? Math.min(value, maximum) : fallback
+  }
+
+  private async enforceRecognitionRate(userId: string) {
+    const limit = this.positiveLimit(process.env.BOOK_RECOGNITION_PER_MINUTE, 10, 120)
+    const key = `ratelimit:book-recognition:${userId}:${Math.floor(Date.now() / 60_000)}`
+    try {
+      await this.redis.ensureConnected()
+      const count = await this.redis.client.incr(key)
+      if (count === 1) await this.redis.client.expire(key, 120)
+      if (count > limit) throw new HttpException('条码识别过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    } catch (cause) {
+      if (cause instanceof HttpException) throw cause
+      if (process.env.NODE_ENV === 'production') throw new ServiceUnavailableException('识别配额服务暂时不可用，请稍后重试')
     }
   }
 
