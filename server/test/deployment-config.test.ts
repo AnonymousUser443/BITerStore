@@ -89,6 +89,8 @@ describe('production service isolation and recovery', () => {
     expect(compose).toContain('REDIS_USERNAME: biterstore')
     expect(compose).toContain('networks: [data]')
     expect(compose).toMatch(/data:\r?\n\s+internal: true/)
+    expect(compose).toContain('READINESS_TIMEOUT_MS: "5000"')
+    expect(compose).toContain('timeout: 8s')
     expect(compose).toContain("health/ready")
     expect(compose).toContain('api: { condition: service_healthy }')
   })

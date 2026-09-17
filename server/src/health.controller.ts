@@ -102,7 +102,7 @@ export class HealthController {
 
   private timeoutMilliseconds() {
     const value = Number(process.env.READINESS_TIMEOUT_MS)
-    return Number.isSafeInteger(value) && value >= 250 && value <= 10_000 ? value : 2_000
+    return Number.isSafeInteger(value) && value >= 250 && value <= 10_000 ? value : 5_000
   }
 
   private cacheMilliseconds() {
