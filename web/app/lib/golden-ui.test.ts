@@ -178,4 +178,29 @@ describe('authenticated Golden H5', () => {
     expect(styles).toContain('width: min(calc(100vw - 48px), 1600px)')
     expect(styles).toContain('.profile-page .content-scroll { grid-template-columns: repeat(3, minmax(0, 1fr)); }')
   })
+
+  it('keeps the publish dock label readable and eases responsive chrome changes', () => {
+    expect(styles).toContain('--motion-fluid: 380ms cubic-bezier(.22, 1, .36, 1)')
+    expect(styles).toContain('transition-duration: var(--motion-fluid-duration)')
+    expect(styles).toContain('.nav-item.publish > span { font-size: 15px; line-height: 1.15; transform: none; }')
+    expect(styles).toContain('.nav-item.publish > span { font-size: clamp(18px, 1.15vw, 28px); }')
+    expect(styles).toContain('top: calc(100% - 98px); width: calc(100% - 52px)')
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it('gives every dock action its own interpolated slot and never tweens grid tracks', () => {
+    expect(styles).toContain('transition-property: left, top, width, height, padding, border-radius, border-color, background-color, box-shadow;')
+    expect(styles).toContain('.nav-item { transition: left var(--motion-fluid), top var(--motion-fluid), width var(--motion-fluid), height var(--motion-fluid),')
+    expect(styles).toContain('left: calc(var(--dock-slot) * 20%);')
+    expect(styles).toContain('height: 54px;')
+    expect(styles).toContain('.bottom-nav .nav-item:nth-child(5) { --dock-slot: 4; }')
+    expect(styles).toContain('.bottom-nav .nav-item:nth-child(5) { top: calc(80% - 6px); }')
+    expect(styles).toContain('width: calc(var(--dock-rail-width) - 20px);')
+    expect(styles).toContain('--dock-rail-width: clamp(118px, 8.4vw, 210px); width: var(--dock-rail-width);')
+    expect(styles).toContain('.bottom-nav .nav-item.publish { top: -1px; }')
+    expect(styles).toContain('.nav-item.publish:active { transform: scale(.96); }')
+    expect(styles).not.toContain('transition-behavior: allow-discrete')
+    expect(styles).not.toContain('.nav-item.publish { transform: translateY(-9px); }')
+    expect(styles).not.toMatch(/transition-property:[^;]*grid-template/)
+  })
 });
