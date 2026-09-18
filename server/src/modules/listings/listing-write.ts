@@ -5,7 +5,7 @@ const CAMPUSES = new Set(['中关村', '良乡', '西山', '珠海'])
 const CONDITIONS = new Set(['全新', '九成新', '八成新', '七成新及以下'])
 const CREATE_FIELDS = new Set(['title', 'author', 'isbn', 'category', 'course', 'priceCents', 'originalPriceCents', 'condition', 'campus', 'description', 'tags', 'imageIds', 'draft', 'clientRequestId'])
 const UPDATE_FIELDS = new Set(['title', 'author', 'isbn', 'category', 'course', 'priceCents', 'originalPriceCents', 'condition', 'campus', 'description', 'tags', 'version'])
-const OWNER_STATUSES = new Set<ListingStatus>(['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'])
+const OWNER_STATUSES = new Set<ListingStatus>(['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW', 'CHANGES_REQUESTED'])
 
 type Input = Record<string, unknown>
 

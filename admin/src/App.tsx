@@ -25,7 +25,7 @@ const labels: Record<string, string> = {
   ACTIVE: '正常', MUTED: '已禁言', BANNED: '已封禁', DELETED: '已注销',
   USER: '普通用户', MODERATOR: '协管员', ADMIN: '管理员', SUPER_ADMIN: '超级管理员',
   VERIFIED: '已认证', UNVERIFIED: '未认证', PENDING: '认证中', EXPIRED: '认证过期', REVOKED: '认证撤销',
-  DRAFT: '草稿', PENDING_REVIEW: '待审核', RESERVED: '已预订', SOLD: '已售', OFF_SHELF: '已下架', BLOCKED: '违规屏蔽',
+  DRAFT: '草稿', PENDING_REVIEW: '待审核', CHANGES_REQUESTED: '待修改', RESERVED: '已预订', SOLD: '已售', OFF_SHELF: '已下架', BLOCKED: '违规屏蔽',
   IGNORE: '已忽略', REVIEWED: '已处置', ALL: '全部',
   OPEN: '待处理', PROCESSING: '处理中', RESOLVED: '已解决', REJECTED: '已驳回',
   BUG: 'Bug', SUGGESTION: '建议', H5: '网页端', WEAPP: '微信小程序',
@@ -33,7 +33,7 @@ const labels: Record<string, string> = {
 }
 
 const listingStatusLabels: Record<string, string> = {
-  DRAFT: '草稿', PENDING_REVIEW: '待审核', ACTIVE: '在售', RESERVED: '已预订', SOLD: '已售',
+  DRAFT: '草稿', PENDING_REVIEW: '待审核', CHANGES_REQUESTED: '待修改', ACTIVE: '在售', RESERVED: '已预订', SOLD: '已售',
   OFF_SHELF: '已下架', BLOCKED: '违规屏蔽'
 }
 
@@ -342,8 +342,8 @@ function FilterBar({ view, section, q, setQ, filters, setFilters, active, onSubm
       <Select value={filters.role} label="角色" options={['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN']} onChange={(value) => setFilters({ ...filters, role: value })} />
       <Select value={filters.campusStatus} label="认证状态" options={['VERIFIED', 'UNVERIFIED', 'PENDING', 'EXPIRED', 'REVOKED']} onChange={(value) => setFilters({ ...filters, campusStatus: value })} />
     </>}
-    {view === 'listings' && section === 'all' && <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'DRAFT']} optionLabels={listingStatusLabels} onChange={(value) => setFilters({ ...filters, status: value })} />}
-    {view === 'listings' && section === 'history' && <Select value={filters.action} label="处理动作" options={['ACTIVE', 'BLOCKED', 'OFF_SHELF', 'IGNORE']} onChange={(value) => setFilters({ ...filters, action: value })} />}
+    {view === 'listings' && section === 'all' && <Select value={filters.status} label="商品状态" options={['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'PENDING_REVIEW', 'CHANGES_REQUESTED', 'DRAFT']} optionLabels={listingStatusLabels} onChange={(value) => setFilters({ ...filters, status: value })} />}
+    {view === 'listings' && section === 'history' && <Select value={filters.action} label="处理动作" options={['ACTIVE', 'CHANGES_REQUESTED', 'BLOCKED', 'OFF_SHELF', 'IGNORE']} optionLabels={labels} onChange={(value) => setFilters({ ...filters, action: value })} />}
     {view === 'reports' && <Select value={filters.status} label="工单状态" options={['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED']} onChange={(value) => setFilters({ ...filters, status: value })} />}
     {view === 'feedback' && <Select value={filters.type} label="反馈类型" options={['BUG', 'SUGGESTION']} onChange={(value) => setFilters({ ...filters, type: value })} />}
     <button className="primary compact">筛选</button>
@@ -512,7 +512,7 @@ function ActionDialog({ actions, onClose, onConfirm }: { actions: PendingAction[
   const [error, setError] = useState('')
   const target = actions[0]
   const acceptsReason = selected?.action !== 'IGNORE'
-  const requiresReason = selected?.targetType === 'LISTING' && ['BLOCKED', 'OFF_SHELF'].includes(selected.action)
+  const requiresReason = selected?.targetType === 'LISTING' && ['BLOCKED', 'CHANGES_REQUESTED', 'OFF_SHELF'].includes(selected.action)
   const targetName = target?.targetType === 'USER' ? '用户' : target?.targetType === 'LISTING' ? '商品' : '举报'
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -578,8 +578,8 @@ export function userActions(row: UserRow, identity: AdminIdentity): PendingActio
 
 export function listingActions(row: ListingRow): PendingAction[] {
   const base = (action: string, actionLabel: string, tone?: 'danger'): PendingAction => ({ targetType: 'LISTING', targetId: row.id, version: row.version, targetLabel: row.title, action, actionLabel, tone })
-  if (!row.moderationDecision && row.status === 'PENDING_REVIEW') return [base('ACTIVE', '审核通过'), base('BLOCKED', '审核拒绝', 'danger')]
-  if (row.status === 'SOLD' || row.status === 'BLOCKED' || row.status === 'DRAFT') return []
+  if (!row.moderationDecision && row.status === 'PENDING_REVIEW') return [base('ACTIVE', '审核通过'), base('CHANGES_REQUESTED', '退回修改'), base('BLOCKED', '违规屏蔽', 'danger')]
+  if (row.status === 'SOLD' || row.status === 'BLOCKED' || row.status === 'DRAFT' || row.status === 'CHANGES_REQUESTED') return []
   if (row.status === 'OFF_SHELF') return [base('ACTIVE', '复核后恢复在售')]
   if (row.status === 'ACTIVE' || row.status === 'RESERVED') return [base('OFF_SHELF', '下架'), base('BLOCKED', '违规屏蔽', 'danger')]
   return []

@@ -8,13 +8,13 @@ import { PrismaService } from '../../infra/prisma.service.js'
 const userStatuses = ['ACTIVE', 'MUTED', 'BANNED', 'DELETED'] as const
 const roles = ['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN'] as const
 const campusStatuses = ['UNVERIFIED', 'PENDING', 'VERIFIED', 'EXPIRED', 'REVOKED'] as const
-const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
+const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'CHANGES_REQUESTED', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
 const listingReviewStates = ['PENDING', 'REVIEWED', 'ALL'] as const
 const reportStatuses = ['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED'] as const
 const feedbackTypes = ['BUG', 'SUGGESTION'] as const
 const actionsByTarget = {
   USER: ['ACTIVE', 'MUTED', 'BANNED', 'REVOKE_SESSIONS', 'ROLE_USER', 'ROLE_MODERATOR', 'ROLE_ADMIN'],
-  LISTING: ['ACTIVE', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
+  LISTING: ['ACTIVE', 'CHANGES_REQUESTED', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
   REPORT: ['PROCESSING', 'RESOLVED', 'REJECTED']
 } as const
 const roleRank: Record<string, number> = { USER: 0, MODERATOR: 1, ADMIN: 2, SUPER_ADMIN: 3 }
@@ -23,6 +23,7 @@ const userStatusTransitions: Record<string, readonly string[]> = {
 }
 const listingActionSources: Record<string, readonly string[]> = {
   ACTIVE: ['BLOCKED', 'OFF_SHELF', 'PENDING_REVIEW'],
+  CHANGES_REQUESTED: ['PENDING_REVIEW'],
   OFF_SHELF: ['ACTIVE', 'RESERVED', 'PENDING_REVIEW'],
   BLOCKED: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'],
   IGNORE: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF']
@@ -195,7 +196,7 @@ export class AdminController {
         { seller: { nickname: { contains: q, mode: 'insensitive' as const } } }
       ] } : {})
     }
-    const statuses = ['PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'DRAFT'] as const
+    const statuses = ['PENDING_REVIEW', 'CHANGES_REQUESTED', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'DRAFT'] as const
     const counts = await Promise.all(statuses.map(async (status) => [status, await this.prisma.listing.count({ where: { AND: [base, { status }] } })] as const))
     return { total: await this.prisma.listing.count({ where: base }), counts: Object.fromEntries(counts) }
   }
@@ -208,7 +209,7 @@ export class AdminController {
         id: true, version: true, title: true, author: true, isbn: true,
         category: true, course: true, condition: true, description: true,
         priceCents: true, originalPriceCents: true, campus: true, tags: true,
-        status: true, deletedAt: true, createdAt: true, updatedAt: true,
+        status: true, moderationDecision: true, moderationReason: true, moderatedAt: true, deletedAt: true, createdAt: true, updatedAt: true,
         seller: { select: { id: true, nickname: true, status: true } },
         images: { where: { uploadedAt: { not: null } }, orderBy: { sortOrder: 'asc' }, select: { id: true, role: true, moderationStatus: true, moderationReason: true } }
       }
@@ -331,8 +332,8 @@ export class AdminController {
     if (!(actionsByTarget[body.targetType] as readonly string[]).includes(body.action)) throw new BadRequestException('该对象不支持此处置动作')
     const providedReason = body.reason?.trim() || ''
     if (providedReason.length > 300) throw new BadRequestException('处置原因不能超过 300 个字符')
-    if (body.targetType === 'LISTING' && ['BLOCKED', 'OFF_SHELF'].includes(body.action) && !providedReason) {
-      throw new BadRequestException('下架或违规屏蔽必须填写原因')
+    if (body.targetType === 'LISTING' && ['BLOCKED', 'OFF_SHELF', 'CHANGES_REQUESTED'].includes(body.action) && !providedReason) {
+      throw new BadRequestException('退回修改、下架或违规屏蔽必须填写原因')
     }
     const reason = providedReason || '管理员未填写原因'
     const requestId = body.requestId?.trim() || randomRequestId()
@@ -396,7 +397,12 @@ export class AdminController {
           if (body.action === 'ACTIVE' && (!target.images.some((image) => image.role === 'COVER') || !target.images.some((image) => image.role === 'ISBN'))) {
             throw new BadRequestException('商品缺少已上传的封面或 ISBN 页，不能审核上架')
           }
-          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: { status: body.action as 'ACTIVE' | 'OFF_SHELF' | 'BLOCKED', moderationDecision: body.action, moderatedAt: new Date(), version: { increment: 1 } } })
+          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: {
+            status: body.action as 'ACTIVE' | 'CHANGES_REQUESTED' | 'OFF_SHELF' | 'BLOCKED',
+            moderationDecision: body.action,
+            moderationReason: body.action === 'CHANGES_REQUESTED' || body.action === 'BLOCKED' ? reason : null,
+            moderatedAt: new Date(), version: { increment: 1 }
+          } })
           if (!changed.count) throw new ConflictException('商品已更新，请刷新后重新审核')
           if (body.action === 'ACTIVE') {
             await tx.listingImage.updateMany({ where: { listingId: target.id, uploadedAt: { not: null } }, data: { moderationStatus: 'APPROVED', moderationReason: null, moderatedAt: new Date() } })
@@ -407,8 +413,8 @@ export class AdminController {
             data: {
               userId: target.sellerId,
               type: 'system',
-              title: body.action === 'ACTIVE' ? '商品审核通过' : body.action === 'BLOCKED' ? '商品审核未通过' : '商品状态已更新',
-              body: `${target.title}：${reason}`.slice(0, 300)
+              title: body.action === 'ACTIVE' ? '商品审核通过' : body.action === 'CHANGES_REQUESTED' ? '商品需要修改后重新提交' : body.action === 'BLOCKED' ? '商品审核未通过' : '商品状态已更新',
+              body: `${target.title}：${body.action === 'CHANGES_REQUESTED' ? `请修改后重新提交。原因：${reason}` : reason}`.slice(0, 300)
             }
           })
         }

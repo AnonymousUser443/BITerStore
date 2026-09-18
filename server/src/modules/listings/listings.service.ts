@@ -6,7 +6,7 @@ import { type ListingQueryInput, type NormalizedListingQuery, normalizeListingQu
 import { type CreateListingInput, normalizeCreateListing, normalizeListingStatus, normalizeUpdateListing } from './listing-write.js'
 
 export const allowedTransitions: Record<ListingStatus, ListingStatus[]> = {
-  DRAFT: ['PENDING_REVIEW'], PENDING_REVIEW: ['OFF_SHELF'], ACTIVE: ['RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'], RESERVED: ['ACTIVE', 'SOLD', 'OFF_SHELF', 'BLOCKED'], SOLD: [], OFF_SHELF: ['ACTIVE', 'PENDING_REVIEW'], BLOCKED: []
+  DRAFT: ['PENDING_REVIEW'], PENDING_REVIEW: ['OFF_SHELF'], CHANGES_REQUESTED: ['PENDING_REVIEW'], ACTIVE: ['RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'], RESERVED: ['ACTIVE', 'SOLD', 'OFF_SHELF', 'BLOCKED'], SOLD: [], OFF_SHELF: ['ACTIVE', 'PENDING_REVIEW'], BLOCKED: []
 }
 @Injectable()
 export class ListingsService {
@@ -16,13 +16,15 @@ export class ListingsService {
     const {
       clientRequestId: _clientRequestId,
       deletedAt: _deletedAt,
-      moderationDecision: _moderationDecision,
-      moderatedAt: _moderatedAt,
+      moderationDecision: internalDecision,
+      moderatedAt: internalModeratedAt,
+      moderationReason: internalReason,
       images,
       ...safe
-    } = item as T & { clientRequestId?: string | null; deletedAt?: Date | null; moderationDecision?: string | null; moderatedAt?: Date | null }
+    } = item as T & { clientRequestId?: string | null; deletedAt?: Date | null; moderationDecision?: string | null; moderatedAt?: Date | null; moderationReason?: string | null }
     return {
       ...safe,
+      ...(ownerView ? { moderationDecision: internalDecision, moderatedAt: internalModeratedAt, moderationReason: internalReason } : {}),
       images: images?.map((image) => ({
         id: image.id,
         ...(image.mime ? { mime: image.mime } : {}),
@@ -139,11 +141,12 @@ export class ListingsService {
     if (item.status === 'SOLD' || item.status === 'BLOCKED') throw new BadRequestException('当前商品状态不允许修改')
     const { version, ...data } = input
     const requiresReview = item.status !== 'DRAFT'
+    const remainsChangesRequested = item.status === 'CHANGES_REQUESTED'
     const result = await this.prisma.listing.updateMany({
       where: { id, version, deletedAt: null },
       data: {
         ...data,
-        ...(requiresReview ? { status: 'PENDING_REVIEW' as const, moderationDecision: null, moderatedAt: null } : {}),
+        ...(requiresReview && !remainsChangesRequested ? { status: 'PENDING_REVIEW' as const, moderationDecision: null, moderationReason: null, moderatedAt: null } : {}),
         version: { increment: 1 }
       }
     })
@@ -186,7 +189,7 @@ export class ListingsService {
       where: { id, sellerId: userId, version: normalized.version, deletedAt: null, ...(nextStatus === 'ACTIVE' ? { moderationDecision: 'ACTIVE' } : {}) },
       data: {
         status: nextStatus,
-        ...(nextStatus === 'PENDING_REVIEW' ? { moderationDecision: null, moderatedAt: null } : {}),
+        ...(nextStatus === 'PENDING_REVIEW' ? { moderationDecision: null, moderationReason: null, moderatedAt: null } : {}),
         version: { increment: 1 }
       }
     })

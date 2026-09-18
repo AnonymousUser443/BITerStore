@@ -63,7 +63,7 @@ describe('listing review invariants', () => {
     await new ListingsService(prisma).state('owner-1', 'listing-1', { status: 'PENDING_REVIEW', version: 3 })
     expect(prisma.listing.updateMany).toHaveBeenCalledWith({
       where: { id: 'listing-1', sellerId: 'owner-1', version: 3, deletedAt: null },
-      data: { status: 'PENDING_REVIEW', moderationDecision: null, moderatedAt: null, version: { increment: 1 } }
+      data: { status: 'PENDING_REVIEW', moderationDecision: null, moderationReason: null, moderatedAt: null, version: { increment: 1 } }
     })
   })
 
@@ -93,12 +93,30 @@ describe('listing review invariants', () => {
     expect(prisma.listing.updateMany).toHaveBeenCalledWith({
       where: { id: 'listing-1', version: 3, deletedAt: null },
       data: {
-        title: '更新后的书名', status: 'PENDING_REVIEW', moderationDecision: null, moderatedAt: null,
+        title: '更新后的书名', status: 'PENDING_REVIEW', moderationDecision: null, moderationReason: null, moderatedAt: null,
         version: { increment: 1 }
       }
     })
   })
 
+  it('keeps a returned listing editable and lets the owner resubmit it', async () => {
+    let item = { ...ownerListing('CHANGES_REQUESTED'), moderationDecision: 'CHANGES_REQUESTED', moderationReason: 'missing isbn page' }
+    const prisma: any = {
+      listing: {
+        findFirst: vi.fn(async () => ({ ...item })),
+        updateMany: vi.fn(async ({ data }) => { item = { ...item, ...data, version: item.version + 1 }; return { count: 1 } })
+      },
+      listingImage: { findMany: vi.fn().mockResolvedValue([{ role: 'COVER', moderationStatus: 'PENDING' }, { role: 'ISBN', moderationStatus: 'PENDING' }]) }
+    }
+    const service = new ListingsService(prisma)
+    await service.update('owner-1', 'listing-1', { version: 3, description: 'updated isbn page' })
+    expect(item.status).toBe('CHANGES_REQUESTED')
+    expect(item.moderationReason).toBe('missing isbn page')
+    const result = await service.state('owner-1', 'listing-1', { status: 'PENDING_REVIEW', version: 4 })
+    expect(result.status).toBe('PENDING_REVIEW')
+    expect(item.moderationDecision).toBeNull()
+    expect(item.moderationReason).toBeNull()
+  })
   it('rejects edits to sold listings', async () => {
     const prisma: any = {
       listing: { findFirst: vi.fn().mockResolvedValue(ownerListing('SOLD')), updateMany: vi.fn() }

@@ -77,7 +77,7 @@ export interface ListingRow {
   priceCents: number
   campus: string
   status: string
-  moderationDecision?: 'IGNORE' | 'BLOCKED' | 'ACTIVE' | null
+  moderationDecision?: 'IGNORE' | 'CHANGES_REQUESTED' | 'BLOCKED' | 'ACTIVE' | null
   moderatedAt?: string | null
   viewCount: number
   createdAt: string
@@ -94,6 +94,8 @@ export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'titl
   tags: string[]
   deletedAt?: string | null
   updatedAt: string
+  moderationDecision?: string | null
+  moderationReason?: string | null
   images: Array<{ id: string; role: string; moderationStatus: string; moderationReason?: string | null }>
 }
 

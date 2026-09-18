@@ -289,7 +289,7 @@ describe('Golden Reference style alignment', () => {
     const listings = read('src/pages/my-listings/index.tsx')
     expect(golden).not.toContain(':only-child')
     expect(golden).toContain('.manage-listing-actions.single-action > button')
-    expect(listings).toContain("['available', 'offline'].includes(item.status) ? '' : ' single-action'")
+    expect(listings).toContain("['available', 'offline', 'changes_requested'].includes(item.status) ? '' : ' single-action'")
   })
 
   it('requires a stable explicit confirmation before marking an owned listing as sold', () => {

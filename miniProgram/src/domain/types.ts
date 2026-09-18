@@ -1,6 +1,6 @@
 export type Campus = '中关村' | '良乡' | '西山' | '珠海'
 export type CampusLabel = Campus | '未设置'
-export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing'
+export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing' | 'changes_requested'
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下'
 export type FeedbackType = 'BUG' | 'SUGGESTION'
 
@@ -11,7 +11,7 @@ export interface StoredMedia { id: string; uri: string; mime: string; size: numb
 export interface Listing {
   id: string; title: string; author: string; isbn: string; category: string; course: string;
   price: number; originalPrice: number; condition: Condition; campus: CampusLabel; description: string;
-  status: ListingStatus; sellerId: string; seller?: Seller; createdAt: string; version?: number; tags: string[]; tone: string; mediaIds: string[]; imageUrls?: string[]
+  status: ListingStatus; moderationReason?: string; sellerId: string; seller?: Seller; createdAt: string; version?: number; tags: string[]; tone: string; mediaIds: string[]; imageUrls?: string[]
 }
 export interface ListingFilters {
   query: string; category: string; campus: Campus | '全部'; condition: Condition | '全部';

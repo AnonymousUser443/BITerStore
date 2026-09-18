@@ -95,6 +95,19 @@ describe('administrator moderation actions', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
+  it('requires a reason and stores a fixable moderation decision', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: 'test listing', sellerId: 'seller-1', status: 'PENDING_REVIEW', deletedAt: null, images: [] })
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, { targetType: 'LISTING', targetId: 'listing-1', action: 'CHANGES_REQUESTED', version: 3 }))
+      .rejects.toMatchObject({ status: 400 })
+    await expect(controller.action(authUser, { targetType: 'LISTING', targetId: 'listing-1', action: 'CHANGES_REQUESTED', version: 3, reason: 'missing isbn page' }))
+      .resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.listing.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'CHANGES_REQUESTED', moderationDecision: 'CHANGES_REQUESTED', moderationReason: 'missing isbn page' })
+    }))
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: '商品需要修改后重新提交' }) }))
+  })
   it('returns repeated success without applying the same request twice', async () => {
     const prisma = actionPrisma()
     prisma.auditLog.findFirst.mockResolvedValue({ actorId: 'admin-1', action: 'BANNED', resourceType: 'USER', resourceId: 'user-1' })

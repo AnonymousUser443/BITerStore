@@ -32,6 +32,7 @@ interface ApiListing {
   campus: Book['campus'];
   description?: string | null;
   status: string;
+  moderationReason?: string | null;
   sellerId: string;
   seller?: ApiUser;
   createdAt: string;
@@ -64,7 +65,7 @@ const apiDefaults: BookFilters = {
 };
 
 function statusFromApi(value: string): ListingStatus {
-  return ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'reviewing' }[value] || 'offline') as ListingStatus;
+  return ({ ACTIVE: 'available', RESERVED: 'available', SOLD: 'sold', OFF_SHELF: 'offline', BLOCKED: 'offline', DRAFT: 'draft', PENDING_REVIEW: 'reviewing', CHANGES_REQUESTED: 'changes_requested' }[value] || 'offline') as ListingStatus;
 }
 
 function user(value: ApiUser): User {
@@ -82,7 +83,7 @@ function book(value: ApiListing): Book {
     course: value.course || '', price: Number(value.priceCents || 0) / 100,
     originalPrice: Number(value.originalPriceCents ?? value.priceCents ?? 0) / 100,
     condition: value.condition, campus: value.campus, description: value.description || '', status: statusFromApi(value.status),
-    sellerId: value.sellerId, seller: value.seller ? user(value.seller) : undefined,
+    sellerId: value.sellerId, seller: value.seller ? user(value.seller) : undefined, moderationReason: value.moderationReason || undefined,
     createdAt: value.createdAt, tags: value.tags || [], tone: 'sage',
     images: (value.images || []).map((image) => image.url).filter((url): url is string => Boolean(url)),
   };

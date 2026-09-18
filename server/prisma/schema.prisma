@@ -37,6 +37,7 @@ enum WechatAppType {
 enum ListingStatus {
   DRAFT
   PENDING_REVIEW
+  CHANGES_REQUESTED
   ACTIVE
   RESERVED
   SOLD
@@ -164,6 +165,7 @@ model Listing {
   updatedAt          DateTime       @updatedAt
   deletedAt          DateTime?
   moderationDecision String?
+  moderationReason   String?
   moderatedAt        DateTime?
   seller             User           @relation(fields: [sellerId], references: [id])
   images             ListingImage[]
