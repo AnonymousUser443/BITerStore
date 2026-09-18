@@ -13,6 +13,15 @@ import { navigationAdapter } from '@/platform'
 
 const noticeGlyphs: Record<Notification['type'], GlyphName> = { like: 'heart', comment: 'message', system: 'bell', follow: 'user' }
 
+function summarizeNotifications(items: Notification[]): Notification[] {
+  const labels: Record<Notification['type'], [string, string]> = { like: ['赞与收藏', '暂无新的赞与收藏'], comment: ['评论与回复', '暂无新的评论与回复'], system: ['系统通知', '暂无新的系统通知'], follow: ['新的关注', '暂无新的关注'] }
+  return (['like', 'comment', 'system', 'follow'] as const).map((type) => {
+    const group = items.filter((item) => item.type === type)
+    const latest = group[0]
+    return { id: `summary-${type}`, type, title: labels[type][0], subtitle: latest?.subtitle || labels[type][1], unread: group.reduce((total, item) => total + item.unread, 0), createdAt: latest?.createdAt }
+  })
+}
+
 export default function MessagesPage() {
   const [threads, setThreads] = useState<ChatThread[]>(() => demoRepository.peekThreads() || [])
   const [notices, setNotices] = useState<Notification[]>(() => demoRepository.peekNotifications() || [])
@@ -20,8 +29,9 @@ export default function MessagesPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const load = useCallback(() => { void demoRepository.listThreadsPage().then((page) => { setThreads((current) => preserveSnapshot(current, page.items)); setNextCursor(page.nextCursor) }); void demoRepository.listNotifications().then((next) => setNotices((current) => preserveSnapshot(current, next))) }, [])
   useDidShow(() => { void requireAccount('登录后才能查看消息').then((allowed) => { if (allowed) return load() }) })
+  const summaries = summarizeNotifications(notices)
   return <AppShell title='消息' active='messages' className='messages-page'>
-    <View className='notification-grid'>{notices.map((notice) => <Button id={`e2e-notification-${notice.type}`} key={notice.id} onClick={() => navigationAdapter.go(`/pages/notification/detail?type=${notice.type}`)}><View className={`notice-icon ${notice.type}`}><Glyph name={noticeGlyphs[notice.type]} /></View><View className='notice-copy'><Text className='notice-title'>{notice.title}</Text><Text className='notice-subtitle'>{notice.subtitle}</Text><Text className='notice-link'>点击查看详情</Text></View><Glyph name='chevron' className='notice-chevron' />{notice.unread > 0 && <Text className='notice-count'>{notice.unread}</Text>}</Button>)}</View>
+    <View className='notification-grid'>{summaries.map((notice) => <Button id={`e2e-notification-${notice.type}`} key={notice.id} onClick={() => navigationAdapter.go(`/pages/notification/detail?type=${notice.type}`)}><View className={`notice-icon ${notice.type}`}><Glyph name={noticeGlyphs[notice.type]} /></View><View className='notice-copy'><Text className='notice-title'>{notice.title}</Text><Text className='notice-subtitle'>{notice.subtitle}</Text><Text className='notice-link'>点击查看详情</Text></View><Glyph name='chevron' className='notice-chevron' />{notice.unread > 0 && <Text className='notice-count'>{notice.unread}</Text>}</Button>)}</View>
     <View className='section-title message-title'><Text className='section-heading-text'>私聊消息</Text><Text className='all-read'>✓ 站内消息</Text></View>
     <View className='thread-list'>{threads.map((thread) => { const user = thread.participant || getUser(thread.participantId); const last = thread.messages.at(-1); const campus = user.campus === '未设置' ? '校区未设置' : `${user.campus}校区`; return <Button id={`e2e-thread-${thread.id}`} key={thread.id} onClick={() => navigationAdapter.go(`/pages/chat/index?id=${thread.id}`)}><Avatar user={user} size={54} /><View className='thread-copy'><Text className='thread-name'>{user.name}<Text className='thread-campus'>{campus}</Text></Text><Text className={`thread-message ${thread.unread > 0 ? 'unread-preview' : ''}`}>{thread.unread > 0 ? '新消息 · ' : ''}{thread.blocked ? '[已拉黑] ' : ''}{last?.text || (thread.listing ? `我想咨询《${thread.listing.title}》` : '从一本书开始聊聊吧')}</Text></View><Text className='thread-time'>{formatThreadTime(thread.updatedAt)}</Text>{thread.unread > 0 && <Text className='thread-unread'>{thread.unread}</Text>}</Button> })}</View>
     {nextCursor && <Button className='secondary-button catalog-load-more' disabled={loadingMore} onClick={async () => { if (loadingMore) return; setLoadingMore(true); try { const page = await demoRepository.listThreadsPage(nextCursor); setThreads(page.items); setNextCursor(page.nextCursor) } finally { setLoadingMore(false) } }}>{loadingMore ? '正在加载…' : '加载更多会话'}</Button>}
