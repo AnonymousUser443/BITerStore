@@ -1,7 +1,7 @@
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["https://store.young581.com"],
+      "AllowedOrigins": ["https://store.young581.com", "https://www.biterstore.top"],
       "AllowedMethods": ["PUT"],
       "AllowedHeaders": ["content-type"],
       "ExposeHeaders": ["etag"],

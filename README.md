@@ -150,7 +150,7 @@ npm run dev:h5
 npm run build:weapp
 ```
 
-校园登录使用 [BIT-Login](https://github.com/BIT101-dev/BIT-Login) 的异步 challenge 接口，支持统一身份认证和短信二次验证。H5 默认使用同源的 `/bit-login` 代理；微信小程序默认使用已加入 request 合法域名的 `https://store.young581.com/bit-login`。服务地址可在 `web/.env.local` 中通过 `NEXT_PUBLIC_BIT_LOGIN_URL` 配置，也可在忽略提交的 `miniProgram/.env.weapp.local` 中通过 `BIT_LOGIN_URL` 配置；若改为其他 HTTPS 域名，必须同时将该域名加入微信小程序后台的 request 合法域名。
+校园登录使用 [BIT-Login](https://github.com/BIT101-dev/BIT-Login) 的异步 challenge 接口，支持统一身份认证和短信二次验证。H5 默认使用同源的 `/bit-login` 代理；微信小程序生产默认使用 `https://www.biterstore.top/bit-login`。服务地址可在 `web/.env.local` 中通过 `NEXT_PUBLIC_BIT_LOGIN_URL` 配置，也可在忽略提交的 `miniProgram/.env.weapp.local` 中通过 `BIT_LOGIN_URL` 配置。当前阶段以校园内测试为主，微信平台合法域名配置和上线发布另行处理。
 
 微信开发者工具和自动化环境配置见 [`WEAPP_CODEX_AUTOMATION_SETUP.md`](./WEAPP_CODEX_AUTOMATION_SETUP.md)。旧 `web/` 在迁移期间继续作为视觉、交互和回滚基线。
 
