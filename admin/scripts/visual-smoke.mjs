@@ -26,7 +26,9 @@ const fixtures = {
   '/api/v1/admin/security/status': { user: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN', campusStatus: 'VERIFIED' }, totpEnabled: true },
   '/api/v1/admin/metrics': { users: 128, activeUsers: 121, newUsers: 14, listings: 356, activeListings: 219, newListings: 31, sold: 87, openReports: 3, generatedAt: '2026-09-02T03:30:00.000Z' },
   '/api/v1/admin/users': { items: [fixtureUser], total: 1, page: 1, pageSize: 20, pages: 1 },
-  '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', priceCents: 1800, campus: '良乡', status: 'ACTIVE', moderationDecision: null, viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
+  '/api/v1/admin/listing-summary': { total: 356, counts: { PENDING_REVIEW: 12, ACTIVE: 219, RESERVED: 18, SOLD: 87, OFF_SHELF: 14, BLOCKED: 4, DRAFT: 2 } },
+  '/api/v1/admin/listings': { items: [{ id: 'visual-listing-1', title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', course: '高等数学', condition: '九成新', description: '用于审核工作台的完整商品描述。', priceCents: 1800, campus: '良乡', status: 'PENDING_REVIEW', moderationDecision: null, viewCount: 42, createdAt: '2026-09-01T09:30:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [], _count: { favorites: 7, conversations: 2 } }], total: 1, page: 1, pageSize: 20, pages: 1 },
+  '/api/v1/admin/listings/visual-listing-1': { id: 'visual-listing-1', version: 7, title: '高等数学（第七版）上册', author: '同济大学数学系', isbn: '9787040396638', category: '教材教辅', course: '高等数学', condition: '九成新', description: '用于审核工作台的完整商品描述。', priceCents: 1800, originalPriceCents: 3200, campus: '良乡', status: 'PENDING_REVIEW', tags: ['教材'], createdAt: '2026-09-01T09:30:00.000Z', updatedAt: '2026-09-02T03:00:00.000Z', seller: { id: 'seller-1', nickname: '北湖书友', status: 'ACTIVE' }, images: [] },
   '/api/v1/admin/reports': { items: [{ id: 'visual-report-1', targetType: 'LISTING', targetId: 'visual-listing-1', reason: '商品描述与实物不符', evidence: '已提供聊天记录', status: 'OPEN', createdAt: '2026-09-02T01:20:00.000Z', updatedAt: '2026-09-02T01:20:00.000Z', reporter: { id: 'reporter-1', nickname: '认真同学' }, target: { label: '高等数学（第七版）上册', status: 'ACTIVE' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/feedback': { items: [{ id: 'visual-feedback-1', type: 'BUG', content: '登录后偶尔无法返回商品详情页，希望保留当前位置。', platform: 'H5', createdAt: '2026-09-02T02:10:00.000Z', user: { id: 'visual-user-1', studentNumber: '1120241261', nickname: '测试书友', campus: '良乡' } }], total: 1, page: 1, pageSize: 20, pages: 1 },
   '/api/v1/admin/audit-logs': { items: [{ id: '42', action: 'BLOCKED', resourceType: 'LISTING', resourceId: 'visual-listing-1', requestId: 'admin-visual-request', metadata: { reason: '示例违规处置' }, createdAt: '2026-09-02T02:00:00.000Z', actor: { id: 'visual-admin', nickname: '平台管理员', role: 'SUPER_ADMIN' } }], total: 1, page: 1, pageSize: 20, pages: 1 }
@@ -123,7 +125,7 @@ await fs.mkdir(profileDir, { recursive: true })
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const address = server.address()
 const preview = `http://127.0.0.1:${address.port}`
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', '--remote-allow-origins=*', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--remote-allow-origins=*', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 const diagnostics = []
 const pages = []
 let client
@@ -157,19 +159,14 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelectorAll('.sidebar nav button')[${navIndex}]?.click()` })
       await delay(400)
     }
-    if (dialogTrigger === 'listing') {
-      await client.send('Runtime.evaluate', { expression: `(() => { const select = document.querySelector('select[aria-label="商品范围"]'); if (!select) return; select.value = 'ACTIVE'; select.dispatchEvent(new Event('change', { bubbles: true })); })()` })
-      await delay(100)
-      await client.send('Runtime.evaluate', { expression: `document.querySelector('.filter-bar')?.requestSubmit()` })
-      await delay(400)
-    }
+    if (dialogTrigger === 'listing') await waitFor(client, `Boolean(document.querySelector('.review-workbench'))`)
     const beforeTableScroll = dialogTrigger
       ? await client.send('Runtime.evaluate', { expression: `document.querySelector('.table-card')?.scrollHeight || 0`, returnByValue: true }).then((result) => result.result.value)
       : null
     if (dialogTrigger) {
       const expression = dialogTrigger === 'user-detail'
         ? `document.querySelector('.table-detail-button')?.click()`
-        : `document.querySelector('.action-trigger')?.click()`
+        : dialogTrigger === 'listing' ? `document.querySelector('.review-action-bar button')?.click()` : `document.querySelector('.action-trigger')?.click()`
       await client.send('Runtime.evaluate', { expression })
       await waitFor(client, dialogTrigger === 'user-detail' ? `Boolean(document.querySelector('.user-detail-dialog'))` : `Boolean(document.querySelector('.action-dialog'))`)
     }
@@ -189,25 +186,16 @@ try {
     if (dialogTrigger === 'user-action' && (!value.text.includes('3 本在售') || !value.text.includes('浏览器 · 电脑'))) diagnostics.push({ type: 'missing-user-activity', text: name })
     if (dialogTrigger === 'user-action' && (value.actionConfirmDisabled || !value.text.includes('处置原因（选填）'))) diagnostics.push({ type: 'reason-still-required', text: name })
     if (dialogTrigger === 'user-detail' && (!value.userDetail || !value.text.includes('1120241261') || !value.text.includes('注册时间') || !value.text.includes('微信小程序 · 手机'))) diagnostics.push({ type: 'wrong-user-detail', text: name })
-    if (dialogTrigger === 'listing' && value.actionChoices.join('|') !== '忽略|违规屏蔽') diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.actionChoices.join('|')}` })
-    if (dialogTrigger === 'listing' && (value.detailHref !== '/books/visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-listing-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
-    if (dialogTrigger === 'listing' && (!value.listingScopes.includes('在售商品') || value.activeListingLabel !== '在售')) diagnostics.push({ type: 'missing-active-listing-scope', text: `${name}: ${value.listingScopes.join('|')} ${value.activeListingLabel}` })
+    if (dialogTrigger === 'listing' && !value.text.includes('确认审核通过')) diagnostics.push({ type: 'wrong-listing-actions', text: `${name}: ${value.actionChoices.join('|')}` })
+    if (dialogTrigger === 'listing' && (!value.text.includes('审核工作台') || !value.text.includes('全部商品') || !value.text.includes('完整商品描述'))) diagnostics.push({ type: 'missing-review-workbench', text: name })
     if (dialogTrigger === 'report' && value.actionChoices.join('|') !== '标记处理中|处理并结案|驳回举报') diagnostics.push({ type: 'wrong-report-actions', text: `${name}: ${value.actionChoices.join('|')}` })
-    if (dialogTrigger === 'report' && (value.detailHref !== '/books/visual-listing-1' || value.detailTarget !== '_blank')) diagnostics.push({ type: 'wrong-report-detail-link', text: `${name}: ${value.detailHref} ${value.detailTarget}` })
     if (name === 'feedback-tablet' && (!value.text.includes('用户反馈') || !value.text.includes('提交 Bug') && !value.text.includes('Bug') || !value.text.includes('1120241261') || !value.text.includes('网页端'))) diagnostics.push({ type: 'wrong-feedback-view', text: name })
     pages.push({ name, width, height, textLength: value.text.length, scrollWidth: value.scrollWidth, clientWidth: value.clientWidth, dialog: value.dialog })
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(screenshot.data, 'base64'))
-    if (dialogTrigger === 'listing') {
-      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-choice-grid button')?.click()` })
-      await waitFor(client, `Boolean(document.querySelector('.selected-action-note'))`)
-      await client.send('Runtime.evaluate', { expression: `document.querySelector('.action-dialog .dialog-actions button:last-child')?.click()` })
-      await waitFor(client, `!document.querySelector('.action-dialog') && Boolean(document.querySelector('.empty-state'))`)
-      const ignored = await client.send('Runtime.evaluate', { expression: `document.body.innerText.includes('没有符合条件的记录')`, returnByValue: true })
-      if (!ignored.result.value) diagnostics.push({ type: 'ignored-listing-remains', text: name })
-    }
+    if (dialogTrigger === 'listing') await client.send('Runtime.evaluate', { expression: `document.querySelector('.dialog-close')?.click()` })
   }
-  if (!adminRequests.some((url) => url.includes('/admin/listings?') && url.includes('reviewState=ALL') && url.includes('status=ACTIVE'))) diagnostics.push({ type: 'active-listing-filter-not-applied', text: adminRequests.filter((url) => url.includes('/admin/listings')).join('|') })
+  if (!adminRequests.some((url) => url.includes('/admin/listing-summary'))) diagnostics.push({ type: 'listing-summary-not-loaded', text: adminRequests.filter((url) => url.includes('/admin/listing')).join('|') })
   console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, pages, diagnostics }, null, 2))
   if (diagnostics.length) process.exitCode = 1
 } finally {
