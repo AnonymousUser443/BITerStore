@@ -59,6 +59,13 @@ interface ApiConversation {
 interface ApiMessagePage { items: ApiMessage[]; nextCursor?: string | null; olderCursor?: string | null; blocked?: boolean }
 interface ApiNotification { id: string; type: string; title: string; body: string; readAt?: string | null; createdAt: string }
 
+function normalizeMediaUrl(value: string | undefined) {
+  if (!value) return ''
+  // Keep legacy media URLs on the current H5 origin so private media uses
+  // the current host's cookies and authorization.
+  return value.replace(/^https?:\/\/store\.young581\.com(?=\/api\/v1(?:\/|$))/, '')
+}
+
 const apiDefaults: BookFilters = {
   query: '', category: '全部', campus: '全部', condition: '全部', minPrice: 0, maxPrice: 200,
   sort: '最新发布', availableOnly: true,
@@ -85,7 +92,7 @@ function book(value: ApiListing): Book {
     condition: value.condition, campus: value.campus, description: value.description || '', status: statusFromApi(value.status),
     sellerId: value.sellerId, seller: value.seller ? user(value.seller) : undefined, moderationReason: value.moderationReason || undefined,
     createdAt: value.createdAt, tags: value.tags || [], tone: 'sage',
-    images: (value.images || []).map((image) => image.url).filter((url): url is string => Boolean(url)),
+    images: (value.images || []).map((image) => normalizeMediaUrl(image.url)).filter(Boolean),
   };
 }
 
