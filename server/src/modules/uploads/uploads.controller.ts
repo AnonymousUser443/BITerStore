@@ -55,19 +55,19 @@ export class UploadsController {
       }
     }
     const role = ['COVER', 'ISBN', 'GALLERY'].includes(body.role || '') ? body.role as 'COVER' | 'ISBN' | 'GALLERY' : 'GALLERY'
-    if (this.useR2() && (!process.env.R2_ENDPOINT || !process.env.R2_BUCKET)) throw new BadRequestException('R2 对象存储尚未配置')
+    if (this.storageMode() === 'r2' && (!process.env.R2_ENDPOINT || !process.env.R2_BUCKET)) throw new BadRequestException('R2 对象存储尚未配置')
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime]
     const objectKey = `pending/${user.id}/${randomUUID()}.${extension}`
     const row = await this.prisma.listingImage.create({ data: { ownerId: user.id, objectKey, mime, size: body.size, role, sortOrder: role === 'COVER' ? 0 : role === 'ISBN' ? 1 : 2 } })
-    const uploadUrl = this.useR2()
+    const uploadUrl = this.storageMode() === 'r2'
       ? await getSignedUrl(this.s3, new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey, ContentType: mime, ContentLength: body.size }), { expiresIn: 600 })
       : `${(process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 3100}`).replace(/\/$/, '')}/api/v1/uploads/${row.id}/content`
-    return { id: row.id, objectKey, uploadUrl, expiresIn: 600, authRequired: !this.useR2() }
+    return { id: row.id, objectKey, uploadUrl, expiresIn: 600, authRequired: this.storageMode() !== 'r2' }
   }
   @Put(':id/content') async putLocal(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: Buffer) {
     assertNotMuted(user)
     await this.enforceRate(user.id, 'content', Number(process.env.UPLOAD_CONTENT_PER_MINUTE || 60))
-    if (this.useR2()) throw new BadRequestException('当前使用 R2，请通过预签名地址上传')
+    if (this.storageMode() === 'r2') throw new BadRequestException('当前使用 R2，请通过预签名地址上传')
     const row = await this.prisma.listingImage.findFirst({ where: { id, ownerId: user.id, uploadedAt: null } })
     if (!row) throw new BadRequestException('上传记录不存在或已完成')
     if (!Buffer.isBuffer(body) || body.length !== row.size || body.length > MAX_IMAGE_BYTES) throw new BadRequestException('上传文件与申请大小不一致')
@@ -110,9 +110,19 @@ export class UploadsController {
         await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
         await writeFile(this.localPath(finalObjectKey), bytes, { flag: 'wx' })
       }
+      let remoteStoredAt: Date | null = null
+      let backupError: string | null = null
+      let backupAttempts = 0
       if (this.useR2()) {
-        // Persist the exact inspected bytes, not a mutable presigned PUT key.
-        await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
+        backupAttempts = 1
+        try {
+          // Persist the exact inspected bytes, not a mutable presigned PUT key.
+          await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
+          remoteStoredAt = new Date()
+        } catch (cause) {
+          if (this.storageMode() === 'r2') throw cause
+          backupError = cause instanceof Error ? cause.message.slice(0, 500) : 'R2 backup failed'
+        }
       }
       const result = await this.prisma.listingImage.updateMany({
         where: { id, ownerId: user.id, uploadedAt: null, objectKey: row.objectKey },
@@ -120,9 +130,9 @@ export class UploadsController {
           objectKey: finalObjectKey,
           uploadedAt: new Date(),
           localStoredAt: this.useLocal() ? new Date() : null,
-          remoteStoredAt: this.useR2() ? new Date() : null,
-          backupAttempts: this.useR2() ? 1 : 0,
-          backupError: null,
+          remoteStoredAt,
+          backupAttempts,
+          backupError,
           width: metadata.width,
           height: metadata.height,
           mime: metadata.mime,
