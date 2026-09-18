@@ -111,18 +111,13 @@ export class UploadsController {
         await writeFile(this.localPath(finalObjectKey), bytes, { flag: 'wx' })
       }
       let remoteStoredAt: Date | null = null
-      let backupError: string | null = null
       let backupAttempts = 0
-      if (this.useR2()) {
+      // Dual backups are durable work represented by remoteStoredAt=null.
+      // The maintenance worker must finish them outside the HTTP request.
+      if (this.storageMode() === 'r2') {
         backupAttempts = 1
-        try {
-          // Persist the exact inspected bytes, not a mutable presigned PUT key.
-          await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
-          remoteStoredAt = new Date()
-        } catch (cause) {
-          if (this.storageMode() === 'r2') throw cause
-          backupError = cause instanceof Error ? cause.message.slice(0, 500) : 'R2 backup failed'
-        }
+        await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
+        remoteStoredAt = new Date()
       }
       const result = await this.prisma.listingImage.updateMany({
         where: { id, ownerId: user.id, uploadedAt: null, objectKey: row.objectKey },
@@ -132,7 +127,7 @@ export class UploadsController {
           localStoredAt: this.useLocal() ? new Date() : null,
           remoteStoredAt,
           backupAttempts,
-          backupError,
+          backupError: null,
           width: metadata.width,
           height: metadata.height,
           mime: metadata.mime,

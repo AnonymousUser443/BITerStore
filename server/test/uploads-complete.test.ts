@@ -52,8 +52,8 @@ describe('upload completion', () => {
       const send = vi.spyOn((controller as any).s3, 'send').mockRejectedValue(new Error('R2 offline'))
       const result = await controller.complete({ id: 'owner-id' } as never, row.id)
       if (storage === 'dual') {
-        expect(send).toHaveBeenCalledTimes(1)
-        expect(result).toMatchObject({ remoteStoredAt: null, backupAttempts: 1, backupError: 'R2 offline', localStoredAt: expect.any(Date) })
+        expect(send).not.toHaveBeenCalled()
+        expect(result).toMatchObject({ remoteStoredAt: null, backupAttempts: 0, backupError: null, localStoredAt: expect.any(Date) })
       } else expect(send).not.toHaveBeenCalled()
       expect(result.objectKey).toMatch(/^media\/owner-id\/image-id-[\w-]+\.png$/)
       expect(prisma.listingImage.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ width: 1, height: 1, mime: 'image/png' }) }))
