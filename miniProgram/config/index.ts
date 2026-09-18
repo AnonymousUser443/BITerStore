@@ -9,8 +9,8 @@ import prodConfig from './prod'
 const assetPerformanceBudget = 384 * 1024
 const h5EntrypointPerformanceBudget = 400 * 1024
 const miniEntrypointPerformanceBudget = 640 * 1024
-const productionApiUrl = 'https://store.young581.com/api/v1'
-const productionBitLoginUrl = 'https://store.young581.com/bit-login'
+const productionApiUrl = 'https://www.biterstore.top/api/v1'
+const productionBitLoginUrl = 'https://www.biterstore.top/bit-login'
 
 function readEnvironmentFile(file: string): Record<string, string> {
   return fs.existsSync(file) ? parseDotenv(fs.readFileSync(file)) : {}

@@ -45,8 +45,8 @@ describe('Golden Reference style alignment', () => {
   it('H5 在应用加载前把生产 HTTP 入口切换到 HTTPS', () => {
     const html = read('src/index.html')
     expect(html).toContain("location.protocol === 'http:'")
-    expect(html).toContain("location.hostname === 'store.young581.com'")
-    expect(html).toContain("location.replace('https://store.young581.com' + location.pathname + location.search + location.hash)")
+    expect(html).toContain("location.hostname === 'www.biterstore.top'")
+    expect(html).toContain("location.replace('https://www.biterstore.top' + location.pathname + location.search + location.hash)")
     expect(html.indexOf("location.protocol === 'http:'")).toBeLessThan(html.indexOf("var path = location.pathname"))
   })
 
@@ -216,15 +216,15 @@ describe('Golden Reference style alignment', () => {
     expect(e2e).toContain('actionableConsoleErrors: consoleErrors.actionable')
   })
 
-  it('builds WeApp API requests through domains already allowed by the WeChat project', () => {
+  it('builds WeApp API requests through the current campus test domain', () => {
     const config = read('config/index.ts')
     const example = read('.env.example')
-    expect(config).toContain("const productionApiUrl = 'https://store.young581.com/api/v1'")
-    expect(config).toContain("const productionBitLoginUrl = 'https://store.young581.com/bit-login'")
+    expect(config).toContain("const productionApiUrl = 'https://www.biterstore.top/api/v1'")
+    expect(config).toContain("const productionBitLoginUrl = 'https://www.biterstore.top/bit-login'")
     expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, '../.env.weapp.local'))")
     expect(config).toContain("readEnvironmentFile(path.resolve(__dirname, `../.env.${mode}`))")
     expect(config).toContain("environment.BITERSTORE_API_URL || (isWeapp ? productionApiUrl : '')")
-    expect(example).toContain('BIT_LOGIN_URL=https://store.young581.com/bit-login')
+    expect(example).toContain('BIT_LOGIN_URL=https://www.biterstore.top/bit-login')
     expect(config).not.toContain('login.bit101.flwfdd.xyz')
   })
 
@@ -243,9 +243,9 @@ describe('Golden Reference style alignment', () => {
     expect(e2e).toContain('duringRouteObservation')
     expect(e2e).toContain("event.args[0]?.description === '[object Object]'")
     expect(e2e).toContain("scenario('bit-login-private-route-blocked'")
-    expect(e2e).toContain("probeRequest('https://store.young581.com/bit-login/openapi.json')")
+    expect(e2e).toContain("probeRequest('https://www.biterstore.top/bit-login/openapi.json')")
     expect(e2e).toContain("scenario('production-api-request-domain'")
-    expect(e2e).toContain("probeRequest('https://store.young581.com/api/v1/health')")
+    expect(e2e).toContain("probeRequest('https://www.biterstore.top/api/v1/health')")
     expect(e2e).toContain('globalThis.wx.request')
     expect(e2e).toContain("response.statusCode !== 200")
     expect(e2e).toContain('appLaunch with non-empty page stack')
