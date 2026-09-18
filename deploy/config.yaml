@@ -40,7 +40,7 @@ services:
       AUTH_CHALLENGE_TTL: "300"
       AUTH_SESSION_TTL: "1800"
       BASE_URL: https://store.young581.com/bit-login
-      ALLOWED_CORS_ORIGINS: https://store.young581.com
+      ALLOWED_CORS_ORIGINS: https://store.young581.com,https://www.biterstore.top
       REGISTRATION_JWT_PRIVATE_KEY_FILE: /run/secrets/registration-private.pem
       REGISTRATION_JWT_ALLOWED_AUDIENCES: biterstore
       REGISTRATION_JWT_ISSUER: bit-login
