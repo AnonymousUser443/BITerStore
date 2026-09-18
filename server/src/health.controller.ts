@@ -70,12 +70,14 @@ export class HealthController {
   }
 
   private async checkStorage(timeout: number): Promise<CheckStatus> {
-    if (process.env.UPLOAD_STORAGE !== 'r2') {
+    const storage = process.env.UPLOAD_STORAGE || 'local'
+    if (storage === 'local' || storage === 'dual') {
       await this.withTimeout(access(resolve(process.env.LOCAL_UPLOAD_DIR || 'uploads'), constants.R_OK | constants.W_OK), timeout)
-      return 'ok'
     }
-    if (!process.env.R2_ENDPOINT || !process.env.R2_BUCKET || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) throw new Error('R2 configuration incomplete')
-    await this.s3.send(new HeadBucketCommand({ Bucket: process.env.R2_BUCKET }), { abortSignal: AbortSignal.timeout(timeout) })
+    if (storage === 'r2' || storage === 'dual') {
+      if (!process.env.R2_ENDPOINT || !process.env.R2_BUCKET || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) throw new Error('R2 configuration incomplete')
+      await this.s3.send(new HeadBucketCommand({ Bucket: process.env.R2_BUCKET }), { abortSignal: AbortSignal.timeout(timeout) })
+    }
     return 'ok'
   }
 
