@@ -156,15 +156,19 @@ export class AdminController {
         { title: { contains: q, mode: 'insensitive' as const } },
         { author: { contains: q, mode: 'insensitive' as const } },
         { isbn: { contains: q, mode: 'insensitive' as const } },
+        { id: { contains: q, mode: 'insensitive' as const } },
         { seller: { nickname: { contains: q, mode: 'insensitive' as const } } }
     ] })
-    if (reviewState === 'PENDING') filters.push({ status: { not: 'BLOCKED' }, moderationDecision: null })
+    // The workbench is a review queue, not a list of every record that has never
+    // received a moderation marker. Sold/off-shelf legacy records may not have a
+    // marker, but they must never reappear as new work.
+    if (reviewState === 'PENDING') filters.push({ status: 'PENDING_REVIEW' })
     if (reviewState === 'REVIEWED') filters.push({ OR: [{ status: 'BLOCKED' }, { moderationDecision: { not: null } }] })
     const where: Prisma.ListingWhereInput = { AND: filters }
     const [items, total] = await Promise.all([
       this.prisma.listing.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: reviewState === 'PENDING' ? [{ createdAt: 'asc' as const }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'desc' as const }],
         skip,
         take: pageSize,
         include: {
@@ -176,6 +180,24 @@ export class AdminController {
       this.prisma.listing.count({ where })
     ])
     return pageResult(items, total, page, pageSize)
+  }
+
+  @Get('listing-summary')
+  async listingSummary(@Query('q') qRaw?: string) {
+    const q = qRaw?.trim().slice(0, 80)
+    const base: Prisma.ListingWhereInput = {
+      deletedAt: null,
+      ...(q ? { OR: [
+        { title: { contains: q, mode: 'insensitive' as const } },
+        { author: { contains: q, mode: 'insensitive' as const } },
+        { isbn: { contains: q, mode: 'insensitive' as const } },
+        { id: { contains: q, mode: 'insensitive' as const } },
+        { seller: { nickname: { contains: q, mode: 'insensitive' as const } } }
+      ] } : {})
+    }
+    const statuses = ['PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'DRAFT'] as const
+    const counts = await Promise.all(statuses.map(async (status) => [status, await this.prisma.listing.count({ where: { AND: [base, { status }] } })] as const))
+    return { total: await this.prisma.listing.count({ where: base }), counts: Object.fromEntries(counts) }
   }
 
   @Get('listings/:id')
@@ -240,17 +262,25 @@ export class AdminController {
   @Get('audit-logs')
   async audit(
     @Query('q') qRaw?: string,
+    @Query('resourceType') resourceTypeRaw?: string,
+    @Query('action') actionRaw?: string,
     @Query('page') pageRaw?: string,
     @Query('pageSize') pageSizeRaw?: string
   ) {
     const q = qRaw?.trim().slice(0, 80)
     const { page, pageSize, skip } = pageOptions(pageRaw, pageSizeRaw)
-    const where = q ? { OR: [
+    const resourceType = resourceTypeRaw?.trim().toUpperCase()
+    const action = actionRaw?.trim().toUpperCase()
+    const where = {
+      ...(resourceType ? { resourceType } : {}),
+      ...(action ? { action } : {}),
+      ...(q ? { OR: [
       { action: { contains: q, mode: 'insensitive' as const } },
       { resourceType: { contains: q, mode: 'insensitive' as const } },
       { resourceId: { contains: q, mode: 'insensitive' as const } },
       { actor: { nickname: { contains: q, mode: 'insensitive' as const } } }
-    ] } : {}
+    ] } : {})
+    }
     const [records, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where, orderBy: { createdAt: 'desc' }, skip, take: pageSize,
@@ -258,7 +288,11 @@ export class AdminController {
       }),
       this.prisma.auditLog.count({ where })
     ])
-    const items = records.map((item) => ({ ...item, id: item.id.toString() }))
+    const listingIds = records.filter((item) => item.resourceType === 'LISTING' && item.resourceId).map((item) => item.resourceId as string)
+    const listingTargets = listingIds.length
+      ? new Map((await this.prisma.listing.findMany({ where: { id: { in: listingIds } }, select: { id: true, title: true, status: true } })).map((item) => [item.id, { label: item.title, status: item.status }]))
+      : new Map<string, { label: string; status: string }>()
+    const items = records.map((item) => ({ ...item, id: item.id.toString(), target: item.resourceType === 'LISTING' && item.resourceId ? listingTargets.get(item.resourceId) || null : null }))
     return pageResult(items, total, page, pageSize)
   }
 
@@ -297,6 +331,9 @@ export class AdminController {
     if (!(actionsByTarget[body.targetType] as readonly string[]).includes(body.action)) throw new BadRequestException('该对象不支持此处置动作')
     const providedReason = body.reason?.trim() || ''
     if (providedReason.length > 300) throw new BadRequestException('处置原因不能超过 300 个字符')
+    if (body.targetType === 'LISTING' && ['BLOCKED', 'OFF_SHELF'].includes(body.action) && !providedReason) {
+      throw new BadRequestException('下架或违规屏蔽必须填写原因')
+    }
     const reason = providedReason || '管理员未填写原因'
     const requestId = body.requestId?.trim() || randomRequestId()
     if (requestId.length > 100) throw new BadRequestException('请求标识过长')

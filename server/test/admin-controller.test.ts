@@ -86,6 +86,15 @@ describe('administrator moderation actions', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
+  it('requires an explanation when a listing is removed or blocked', async () => {
+    const prisma = actionPrisma()
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', action: 'BLOCKED', version: 3
+    })).rejects.toMatchObject({ status: 400 })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it('returns repeated success without applying the same request twice', async () => {
     const prisma = actionPrisma()
     prisma.auditLog.findFirst.mockResolvedValue({ actorId: 'admin-1', action: 'BANNED', resourceType: 'USER', resourceId: 'user-1' })
@@ -194,14 +203,25 @@ describe('administrator moderation actions', () => {
 })
 
 describe('administrator listing review queue', () => {
-  it('excludes persisted decisions from the default pending queue', async () => {
+  it('only returns real pending-review records from the default queue', async () => {
     const prisma: any = {
       listing: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) }
     }
     await new AdminController(prisma).listings()
     expect(prisma.listing.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: expect.arrayContaining([{ status: { not: 'BLOCKED' }, moderationDecision: null }]) }
+      where: { AND: expect.arrayContaining([{ status: 'PENDING_REVIEW' }]) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     }))
+  })
+
+  it('provides status counts for the all-products view', async () => {
+    const prisma: any = {
+      listing: { count: vi.fn().mockResolvedValue(2) }
+    }
+    const result = await new AdminController(prisma).listingSummary('physics')
+    expect(result.total).toBe(2)
+    expect(result.counts.PENDING_REVIEW).toBe(2)
+    expect(prisma.listing.count).toHaveBeenCalled()
   })
 })
 

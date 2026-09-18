@@ -78,6 +78,7 @@ export interface ListingRow {
   campus: string
   status: string
   moderationDecision?: 'IGNORE' | 'BLOCKED' | 'ACTIVE' | null
+  moderatedAt?: string | null
   viewCount: number
   createdAt: string
   seller: { id: string; nickname: string; status: string }
@@ -92,6 +93,7 @@ export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'titl
   originalPriceCents?: number | null
   tags: string[]
   deletedAt?: string | null
+  updatedAt: string
   images: Array<{ id: string; role: string; moderationStatus: string; moderationReason?: string | null }>
 }
 
@@ -129,6 +131,12 @@ export interface AuditRow {
   ip?: string | null
   createdAt: string
   actor?: { id: string; nickname: string; role: string } | null
+  target?: { label: string; status: string } | null
+}
+
+export interface ListingSummary {
+  total: number
+  counts: Record<string, number>
 }
 
 export interface PendingAction {
