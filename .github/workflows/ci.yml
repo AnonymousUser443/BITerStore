@@ -34,6 +34,11 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
       - run: npm ci
+      # miniProgram imports shared components from web/app. TypeScript resolves
+      # their dependencies from web, not from miniProgram/node_modules.
+      - name: Install shared web component dependencies
+        if: matrix.package == 'miniProgram'
+        run: npm ci --prefix ../web
       - if: matrix.package == 'server'
         run: npm run prisma:generate
       - run: npm run lint --if-present

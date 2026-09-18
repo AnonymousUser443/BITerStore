@@ -102,7 +102,7 @@ export type PendingCleanupOptions = {
     }
     $transaction<T>(callback: (tx: { listingImage: { deleteMany(args: unknown): Promise<{ count: number }> } }) => Promise<T>): Promise<T>
   }
-  storage?: 'local' | 'r2'
+  storage?: 'local' | 'r2' | 'dual'
   localRoot?: string
   s3?: S3Client
   bucket?: string
@@ -130,10 +130,11 @@ export async function cleanupPendingUploads(options: PendingCleanupOptions) {
   const storage = options.storage || (process.env.UPLOAD_STORAGE === 'r2' ? 'r2' : 'local')
 
   const removeTrackedObject = async (objectKey: string) => {
-    if (storage === 'r2') {
+    if (storage === 'r2' || storage === 'dual') {
       if (!options.s3 || !options.bucket) throw new Error('R2 storage is not configured')
       await options.s3.send(new DeleteObjectCommand({ Bucket: options.bucket, Key: objectKey }))
-    } else {
+    }
+    if (storage === 'local' || storage === 'dual') {
       const target = safeLocalPath(options.localRoot || resolve(process.env.LOCAL_UPLOAD_DIR || 'uploads'), objectKey)
       await unlink(target).catch((cause: NodeJS.ErrnoException) => { if (cause.code !== 'ENOENT') throw cause })
     }
@@ -153,14 +154,15 @@ export async function cleanupPendingUploads(options: PendingCleanupOptions) {
     removedObjects += deleted
   }
 
-  if (storage === 'r2') {
+  if (storage === 'r2' || storage === 'dual') {
     if (!options.s3 || !options.bucket) throw new Error('R2 storage is not configured')
     const listed = await listPendingObjects(options.s3, options.bucket)
     // Missing LastModified is treated as stale because an untracked pending
     // object must not live forever.
     const keysToDelete = listed.filter((item) => !item.lastModified || item.lastModified <= cutoff).map((item) => item.key)
     removedObjects += await deleteR2Objects(options.s3, options.bucket, keysToDelete)
-  } else {
+  }
+  if (storage === 'local' || storage === 'dual') {
     removedObjects += await cleanupLocalPending(options.localRoot || resolve(process.env.LOCAL_UPLOAD_DIR || 'uploads'), cutoff)
   }
 
@@ -176,8 +178,8 @@ export async function cleanupPendingUploads(options: PendingCleanupOptions) {
 
 async function main() {
   const prisma = new PrismaClient()
-  const storage = process.env.UPLOAD_STORAGE === 'r2' ? 'r2' : 'local'
-  const s3 = storage === 'r2' ? new S3Client({
+  const storage = process.env.UPLOAD_STORAGE === 'r2' ? 'r2' : process.env.UPLOAD_STORAGE === 'dual' ? 'dual' : 'local'
+  const s3 = storage === 'r2' || storage === 'dual' ? new S3Client({
     region: 'auto',
     endpoint: process.env.R2_ENDPOINT,
     credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID || '', secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '' }

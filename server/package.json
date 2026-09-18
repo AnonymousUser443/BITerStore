@@ -14,6 +14,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
     "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
+    "storage:migrate-r2-to-local": "node dist/src/maintenance/migrate-r2-to-local.js",
+    "storage:retry-r2-backups": "node dist/src/maintenance/retry-r2-backups.js",
     "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
     "uploads:cleanup-pending": "node dist/src/maintenance/cleanup-pending-uploads.js",
     "accounts:cleanup-recovery": "node dist/src/maintenance/cleanup-account-recovery-links.js",

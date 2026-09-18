@@ -32,13 +32,13 @@ describe('upload completion', () => {
     await expect(new UploadsController({} as never, redis as never).presign({ id: 'owner-id' } as never, { mime: 'image/png', size: 100 })).rejects.toMatchObject({ status: 429 })
   })
 
-  it('moves a verified upload out of pending before marking it complete', async () => {
+  it.each(['local', 'dual'])('completes a %s upload without contacting R2', async (storage) => {
     const root = await mkdtemp(join(tmpdir(), 'biterstore-upload-'))
     const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
     const row = { id: 'image-id', ownerId: 'owner-id', objectKey: 'pending/owner-id/source.png', mime: 'image/png', size: bytes.length }
     await mkdir(join(root, 'pending/owner-id'), { recursive: true })
     await writeFile(join(root, row.objectKey), bytes)
-    process.env.UPLOAD_STORAGE = 'local'
+    process.env.UPLOAD_STORAGE = storage
     process.env.LOCAL_UPLOAD_DIR = root
     let stored = { ...row, uploadedAt: null as Date | null }
     const prisma = {
@@ -48,7 +48,13 @@ describe('upload completion', () => {
       }
     }
     try {
-      const result = await new UploadsController(prisma as never).complete({ id: 'owner-id' } as never, row.id)
+      const controller = new UploadsController(prisma as never)
+      const send = vi.spyOn((controller as any).s3, 'send').mockRejectedValue(new Error('R2 offline'))
+      const result = await controller.complete({ id: 'owner-id' } as never, row.id)
+      if (storage === 'dual') {
+        expect(send).not.toHaveBeenCalled()
+        expect(result).toMatchObject({ remoteStoredAt: null, backupAttempts: 0, backupError: null, localStoredAt: expect.any(Date) })
+      } else expect(send).not.toHaveBeenCalled()
       expect(result.objectKey).toMatch(/^media\/owner-id\/image-id-[\w-]+\.png$/)
       expect(prisma.listingImage.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ width: 1, height: 1, mime: 'image/png' }) }))
       expect(await readFile(join(root, result.objectKey))).toEqual(bytes)
