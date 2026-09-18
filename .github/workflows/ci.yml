@@ -33,7 +33,7 @@ jobs:
           node-version: 22.13.1
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
-      - run: npm ci
+      - run: npm ci --include=dev
       - if: matrix.package == 'server'
         run: npm run prisma:generate
       - run: npm run lint --if-present
