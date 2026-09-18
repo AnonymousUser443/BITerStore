@@ -163,6 +163,35 @@ describe('Golden Reference style alignment', () => {
     expect(visual).toContain("file = path.join(distDir, 'index.html')")
     expect(visual).toContain("type: 'horizontal-overflow'")
     expect(visual).toContain("type: 'fixed-compact-canvas'")
+    expect(visual).toContain("type: 'responsive-dock-motion'")
+  })
+
+  it('H5 Dock 放大发布标签并沿用较宽桌面轨道', () => {
+    const goldenCss = read('../web/app/globals.css')
+    const h5Css = read('src/h5.css')
+    expect(goldenCss).toContain('--motion-fluid: 380ms cubic-bezier(.22, 1, .36, 1)')
+    expect(goldenCss).toContain('transition-duration: var(--motion-fluid-duration)')
+    expect(goldenCss).toContain('.nav-item.publish > span { font-size: 15px; line-height: 1.15; transform: none; }')
+    expect(goldenCss).toContain('.nav-item.publish > span { font-size: clamp(18px, 1.15vw, 28px); }')
+    expect(h5Css).toContain('.bottom-nav { --dock-rail-width: clamp(118px, 8.4vw, 210px); width: var(--dock-rail-width); }')
+    expect(h5Css).toContain('height: calc(100% - 104px)')
+  })
+
+  it('H5 Dock 的五个动作各自补间到独立槽位，且不补间网格轨道', () => {
+    const goldenCss = read('../web/app/globals.css')
+    expect(goldenCss).toContain('transition-property: left, top, width, height, padding, border-radius, border-color, background-color, box-shadow;')
+    expect(goldenCss).toContain('.nav-item { transition: left var(--motion-fluid), top var(--motion-fluid), width var(--motion-fluid), height var(--motion-fluid),')
+    expect(goldenCss).toContain('left: calc(var(--dock-slot) * 20%);')
+    expect(goldenCss).toContain('height: 54px;')
+    expect(goldenCss).toContain('.bottom-nav .nav-item:nth-child(5) { --dock-slot: 4; }')
+    expect(goldenCss).toContain('.bottom-nav .nav-item:nth-child(5) { top: calc(80% - 6px); }')
+    expect(goldenCss).toContain('width: calc(var(--dock-rail-width) - 20px);')
+    expect(goldenCss).toContain('--dock-rail-width: clamp(118px, 8.4vw, 210px); width: var(--dock-rail-width);')
+    expect(goldenCss).toContain('.bottom-nav .nav-item.publish { top: -1px; }')
+    expect(goldenCss).toContain('.nav-item.publish:active { transform: scale(.96); }')
+    expect(goldenCss).not.toContain('transition-behavior: allow-discrete')
+    expect(goldenCss).not.toContain('.nav-item.publish { transform: translateY(-9px); }')
+    expect(goldenCss).not.toMatch(/transition-property:[^;]*grid-template/)
   })
 
   it('injects the ignored local AppID and stable base-library version into every WeApp build', () => {

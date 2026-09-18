@@ -14,6 +14,7 @@ const browserCandidates = [
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
 ]
 const chrome = process.env.CHROME_PATH || browserCandidates.find(existsSync)
+const cdpPort = Number(process.env.BITERSTORE_CDP_PORT || 9347)
 const artifactDir = process.env.BITERSTORE_H5_ARTIFACT_DIR || path.join(root, 'qa-artifacts', 'h5-actual')
 const distDir = path.join(root, 'dist')
 const profileDir = path.join(root, 'qa-artifacts', `chrome-cdp-profile-${process.pid}`)
@@ -46,6 +47,7 @@ const allTargets = [
   ['publish-600', 600, 900, '/publish'],
   ['publish-768', 768, 1024, '/publish'],
   ['publish-1440', 1440, 900, '/publish'],
+  ['publish-2048', 2048, 1100, '/publish'],
   ['messages-320', 320, 700, '/messages'],
   ['messages-390', 390, 900, '/messages'],
   ['messages-600', 600, 900, '/messages'],
@@ -179,6 +181,8 @@ const authenticatedFixture = `(() => {
 })();`
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const waitForLoad = (event, timeout = 5000) => Promise.race([event, delay(timeout)])
+const trace = (label) => { if (process.env.BITERSTORE_H5_TRACE === '1') console.error(`[h5-visual] ${label}`) }
 async function waitForEndpoint(url) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try { const response = await fetch(url); if (response.ok) return response } catch { /* Chrome is starting */ }
@@ -269,13 +273,14 @@ if (!process.env.BITERSTORE_H5_URL) {
     previewServer.listen(Number(previewUrl.port || 80), previewUrl.hostname, resolve)
   })
 }
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync', '--disable-component-update', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--remote-allow-origins=*', `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
 const pages = []
+let dockMotion
 try {
-  await waitForEndpoint('http://127.0.0.1:9333/json/version')
-  const tabResponse = await fetch(`http://127.0.0.1:9333/json/new?${encodeURIComponent(`${preview}/`)}`, { method: 'PUT' })
+  await waitForEndpoint(`http://127.0.0.1:${cdpPort}/json/version`)
+  const tabResponse = await fetch(`http://127.0.0.1:${cdpPort}/json/new?${encodeURIComponent(`${preview}/`)}`, { method: 'PUT' })
   const tab = await tabResponse.json()
   client = new CdpClient(tab.webSocketDebuggerUrl, (message) => {
     if (message.method === 'Runtime.exceptionThrown') diagnostics.push({ type: 'exception', text: message.params.exceptionDetails?.text || 'Runtime exception' })
@@ -286,10 +291,11 @@ try {
   await client.send('Storage.clearDataForOrigin', { origin: preview, storageTypes: 'all' })
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authenticatedFixture })
   for (const [name, width, height, route, requestedScale = 1] of targets) {
+    trace(`target:${name}:start`)
     await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: requestedScale, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
     await client.send('Page.navigate', { url: `${preview}${route}` })
-    await loaded
+    await waitForLoad(loaded)
     await delay(750)
     await client.send('Runtime.evaluate', { expression: `window.scrollTo(0, 0); document.querySelectorAll('.taro_router, .taro_page, .content-scroll').forEach((element) => { element.scrollTop = 0 })` })
     await delay(100)
@@ -310,7 +316,16 @@ try {
     }
     if (name === 'feedback-390' && (!pageState.result.value.text.includes('提交 Bug') || !pageState.result.value.text.includes('提交建议') || !pageState.result.value.text.includes('反馈内容'))) diagnostics.push({ type: 'feedback-form-incomplete', text: name })
     if (expectedPageClass[name] && !pageState.result.value.shell?.className.includes(expectedPageClass[name])) diagnostics.push({ type: 'unexpected-page', text: `${name}: expected ${expectedPageClass[name]}, got ${pageState.result.value.shell?.className || 'no shell'}` })
-    if (name === 'detail-guest-390' && !pageState.result.value.text.includes('ISBN 9787040396638')) diagnostics.push({ type: 'missing-guest-listing-detail', text: name })
+    // The catalogue is local-first: a locally seeded id is served from the seed
+    // with no listing request, so the guest detail page renders the seeded
+    // record rather than any API fixture. Assert the record really rendered and
+    // that no login gate was shown instead.
+    if (name === 'detail-guest-390') {
+      const guestText = pageState.result.value.text
+      const showsRecord = guestText.includes('ISBN 978-7-5608-9493-7') && guestText.includes('高等数学（第七版）上册')
+      const showsGate = guestText.includes('登录梨苑儿') || guestText.includes('统一身份认证密码')
+      if (!showsRecord || showsGate) diagnostics.push({ type: 'missing-guest-listing-detail', text: name + ':' + showsRecord + ':' + showsGate })
+    }
     const layout = pageState.result.value.layout
     if (layout?.documentScroll?.scrollWidth > width + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: document ${layout.documentScroll.scrollWidth}px > viewport ${width}px` })
     if (layout?.stageCoversViewport === false || !layout?.stageBackground || layout.stageBackground === 'none') diagnostics.push({ type: 'background-not-covered', text: `${name}: ${JSON.stringify({ stageRect: layout?.stageRect, viewport: layout?.viewport, background: layout?.stageBackground })}` })
@@ -331,12 +346,88 @@ try {
     if (name === 'messages-390' && !pageState.result.value.text.includes('新消息 · 你好，这本书还在吗？')) diagnostics.push({ type: 'missing-unread-preview', text: name })
     if (name === 'not-found-390' && !pageState.result.value.text.includes('好像翻错书页了')) diagnostics.push({ type: 'missing-not-found-state', text: name })
     if (name === 'messages-390' && [...(pageState.result.value.metrics['.thread-list h3 span'] ? [pageState.result.value.metrics['.thread-list h3 span']] : [])].some((metric) => metric.height > 28)) diagnostics.push({ type: 'wrapped-campus-label', text: `${name}: ${JSON.stringify(pageState.result.value.metrics['.thread-list h3 span'])}` })
+    if (name.startsWith('publish-')) {
+      const publishLabel = await client.send('Runtime.evaluate', { expression: `(() => { const label = document.querySelector('.bottom-nav .nav-item.publish > span'); if (!label) return null; const style = getComputedStyle(label); return { fontSize: Number.parseFloat(style.fontSize), fontWeight: style.fontWeight }; })()`, returnByValue: true })
+      const minimumSize = width >= 1024 ? 17.5 : 11
+      if (!publishLabel.result.value || publishLabel.result.value.fontSize < minimumSize) diagnostics.push({ type: 'publish-label-too-small', text: `${name}: ${JSON.stringify(publishLabel.result.value)}` })
+    }
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
+    trace(`target:${name}:done`)
   }
+  const dockStateExpression = "(() => { const nav = document.querySelector('.bottom-nav'); const label = document.querySelector('.bottom-nav .nav-item.publish > span'); const items = nav ? [...nav.querySelectorAll('.nav-item')] : []; const rect = (node) => { const box = node.getBoundingClientRect(); return { left: box.left, top: box.top, width: box.width, height: box.height, bottom: box.bottom } }; return { ok: Boolean(nav && label && items.length === 5), nav: nav ? rect(nav) : null, items: items.map(rect), labelSize: label ? Number.parseFloat(getComputedStyle(label).fontSize) : 0, transitionProperty: nav ? getComputedStyle(nav).transitionProperty : '', transitionDuration: nav ? getComputedStyle(nav).transitionDuration : '', itemTransitionProperty: items.length ? getComputedStyle(items[0]).transitionProperty : '', itemTransitionDuration: items.length ? getComputedStyle(items[0]).transitionDuration : '' } })()"
+  const evaluateInPage = async (expression) => (await client.send('Runtime.evaluate', { expression, returnByValue: true })).result.value
+  const readDockState = async () => evaluateInPage(dockStateExpression)
+  // Freeze the responsive morph instead of racing the compositor: pausing every
+  // running transition lets the same 380ms animation be sampled at exact,
+  // repeatable offsets. rAF sampling cannot promise that a mid-frame survives.
+  const freezeDockExpression = "(() => { const animations = [...document.getAnimations()]; for (const animation of animations) { animation.pause(); animation.currentTime = 0 } window.__dockAnimations = animations; const transitions = animations.filter((animation) => animation.transitionProperty); return { total: animations.length, transitions: transitions.length, properties: [...new Set(transitions.map((animation) => animation.transitionProperty))] } })()"
+  const seekDockExpression = (time) => "(() => { for (const animation of (window.__dockAnimations || [])) animation.currentTime = " + time + "; return true })()"
+  const resumeDockExpression = "(() => { for (const animation of (window.__dockAnimations || [])) animation.play(); window.__dockAnimations = []; return true })()"
+  await client.send('Emulation.setDeviceMetricsOverride', { width: 1023, height: 900, deviceScaleFactor: 1, mobile: false })
+  trace('dock:navigate')
+  const dockLoaded = client.once('Page.loadEventFired')
+  await client.send('Page.navigate', { url: `${preview}/profile` })
+  await waitForLoad(dockLoaded)
+  await delay(750)
+  trace('dock:from')
+  const from = await readDockState()
+  await client.send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 900, deviceScaleFactor: 1, mobile: false })
+  const frozen = await evaluateInPage(freezeDockExpression)
+  const moments = []
+  for (const time of [40, 80, 120, 160, 200, 240, 280, 320]) {
+    await evaluateInPage(seekDockExpression(time))
+    moments.push({ time, state: await readDockState() })
+  }
+  await evaluateInPage(resumeDockExpression)
+  await delay(500)
+  const to = await readDockState()
+  trace('dock:to')
+  const axes = ['left', 'top', 'width', 'height']
+  const spread = (values) => Math.max(...values) - Math.min(...values)
+  const sampled = moments.filter((moment) => moment.state?.ok)
+  const barIsOneRow = from?.ok && spread(from.items.map((item) => item.top)) <= 12
+  const barColumnsEven = from?.ok && from.items.every((item, index) => index === 0 || Math.abs((item.left - from.items[index - 1].left) - from.items[0].width) <= 2)
+  const railIsOneColumn = to?.ok && spread(to.items.map((item) => item.left)) <= 2
+  const railRowsEven = to?.ok && to.items.every((item, index) => index === 0 || Math.abs((item.top - to.items[index - 1].top) - to.items[0].height) <= 2)
+  const railSlotsAreNarrow = to?.ok && to.items.every((item) => item.width <= to.nav.width - 12)
+  const frozenGeometry = Boolean(frozen && axes.every((axis) => frozen.properties.includes(axis)))
+  const tweenFaults = from?.ok && to?.ok && sampled.length === moments.length ? from.items.flatMap((item, index) => axes.flatMap((axis) => {
+    if (Math.abs(to.items[index][axis] - item[axis]) < 24) return []
+    const moves = sampled.some((moment) => Math.abs(moment.state.items[index][axis] - item[axis]) > 4 && Math.abs(moment.state.items[index][axis] - to.items[index][axis]) > 4)
+    return moves ? [] : [{ item: index, axis, from: +item[axis].toFixed(1), to: +to.items[index][axis].toFixed(1), samples: sampled.map((moment) => +moment.state.items[index][axis].toFixed(1)) }]
+  })) : [{ item: -1, axis: 'missing-moment', from: 0, to: 0, samples: [] }]
+  // No action may grow past the two settled layouts mid-flight: a bar box sized
+  // in percentages would double in size halfway and overlap its neighbours.
+  const boxStaysWithinLayout = from?.ok && to?.ok && sampled.every((moment) => moment.state.items.every((entry, index) => entry.width <= Math.max(from.items[index].width, to.items[index].width) + 2 && entry.height <= Math.max(from.items[index].height, to.items[index].height) + 2))
+  // Somewhere in the morph the five actions must sit on five distinct slots at
+  // once - ordered vertically and no longer sharing one row position.
+  const independentTrajectories = sampled.some((moment) => moment.state.items.every((item, index) => index === 0 || item.top - moment.state.items[index - 1].top >= 8) && spread(moment.state.items.map((item) => item.left)) > 8)
+  const midpoint = sampled[Math.floor(sampled.length / 2)]?.state
+  dockMotion = {
+    from: from && { nav: from.nav, items: from.items },
+    midpoint: midpoint && { nav: midpoint.nav, items: midpoint.items },
+    to: to && { nav: to.nav, items: to.items },
+    frozen: frozen && { transitions: frozen.transitions, properties: frozen.properties }
+  }
+  const dockChecks = {
+    frozenTransitions: frozen?.transitions, frozenProperties: frozen?.properties, frozenGeometry,
+    barIsOneRow, barColumnsEven, railIsOneColumn, railRowsEven, railSlotsAreNarrow, boxStaysWithinLayout, independentTrajectories,
+    sampledMoments: sampled.length, tweenFaults, labelSize: to?.labelSize
+  }
+  if (!from?.ok || !to?.ok || !frozen || !frozenGeometry || frozen.transitions < 20
+    || !barIsOneRow || !barColumnsEven || !railIsOneColumn || !railRowsEven || !railSlotsAreNarrow
+    || !boxStaysWithinLayout || !independentTrajectories || sampled.length !== moments.length || tweenFaults.length
+    || to.labelSize < 17.5
+    || !String(from.transitionDuration).includes('0.38s') || !String(from.itemTransitionDuration).includes('0.38s')
+    || !String(from.transitionProperty).includes('width') || !String(from.itemTransitionProperty).includes('left') || !String(from.itemTransitionProperty).includes('top')) {
+    diagnostics.push({ type: 'responsive-dock-motion', text: JSON.stringify(dockChecks) })
+  }
+  trace('back:start')
   await checkBackNavigation(client, preview, artifactDir)
+  trace('back:done')
   if (process.env.BITERSTORE_CHECK_ADMIN === '1') await checkAdminReview(client, artifactDir)
-  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height, , scale = 1]) => `${width}x${height}@${scale}x`), pages, diagnostics }))
+  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height, , scale = 1]) => `${width}x${height}@${scale}x`), pages, dockMotion, diagnostics }))
   if (diagnostics.length) process.exitCode = 1
 } finally {
   client?.close()
