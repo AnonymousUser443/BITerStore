@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { Button, Text, View } from '@tarojs/components'
 import { AppShell } from '@/components/ui'
+import { ReportProgressList } from '@/components/ReportProgress'
 import { Glyph, type GlyphName } from '@/components/Glyph'
+import { formatMessageTime } from '@/domain/date-time'
 import type { Notification } from '@/domain/types'
 import { seedNotifications } from '@/domain/seed'
 import { demoRepository } from '@/domain/repository'
@@ -23,8 +25,8 @@ export default function NotificationDetailPage() {
   const fallback = seedNotifications.find((item) => item.type === type) || seedNotifications[2]
   const demoMode = !__API_URL__ || __BITERSTORE_E2E__
   const [notices, setNotices] = useState<Notification[]>([])
-  useEffect(() => { void requireAccount('登录后才能查看通知').then((allowed) => { if (allowed) return demoRepository.listNotifications().then((values) => setNotices(values.filter((value) => value.type === type))) }) }, [type])
-  const summary = notices[0] || fallback
-  const rows: Array<[string, string, string, string]> = demoMode ? demoDetails[type] : notices.map((notice) => [notice.title, notice.subtitle, notice.unread ? '未读' : '已读', '/pages/messages/index'])
-  return <AppShell title={summary.title} back backTo='/pages/messages/index' active='messages' className='notification-detail-page'><View id={`e2e-notification-detail-${type}`} className={`notification-detail-hero ${type}`}><View className={`notice-icon ${type}`}><Glyph name={glyphs[type]} /></View><View><Text className='notification-kicker'>消息分类</Text><Text className='notification-title'>{summary.title}</Text><Text className='notification-subtitle'>{summary.subtitle}</Text></View><Text className='notification-unread'>{notices.reduce((total, notice) => total + notice.unread, 0)} 条未读</Text></View>{rows.length ? <View className='notification-feed'>{rows.map(([source, text, time, route], index) => <Button key={`${source}-${time}-${index}`} onClick={() => navigationAdapter.go(route)}><Text className='feed-index'>{String(index + 1).padStart(2, '0')}</Text><View><Text className='feed-source'>{source}</Text><Text className='feed-copy'>{text}</Text><Text className='feed-time'>{time}</Text></View><Glyph name='chevron' /></Button>)}</View> : <View className='empty inline-empty'>当前分类暂无通知</View>}<View className='notification-safe'>◈ 通知仅用于校内交易与账号安全提醒。</View></AppShell>
+  useEffect(() => { void requireAccount('登录后才能查看通知').then((allowed) => { if (allowed) return demoRepository.listNotifications().then(async (values) => { const selected = values.filter((value) => value.type === type); const unreadIds = selected.filter((value) => value.unread > 0).map((value) => value.id); if (unreadIds.length) await demoRepository.markNotificationsRead(unreadIds); setNotices(selected.map((value) => ({ ...value, unread: 0 }))) }) }) }, [type])
+  const summary = { ...fallback, title: { like: '赞与收藏', comment: '评论与回复', system: '系统通知', follow: '新的关注' }[type], subtitle: type === 'system' ? '审核结果、举报进度与账号提醒。' : '查看此分类的最新消息。' }
+  const rows: Array<[string, string, string, string]> = demoMode ? demoDetails[type] : notices.map((notice) => [notice.title, notice.subtitle, notice.createdAt ? formatMessageTime(notice.createdAt) : '', '/pages/messages/index'])
+  return <AppShell title={summary.title} back backTo='/pages/messages/index' active='messages' className='notification-detail-page'><View id={`e2e-notification-detail-${type}`} className={`notification-detail-hero ${type}`}><View className={`notice-icon ${type}`}><Glyph name={glyphs[type]} /></View><View><Text className='notification-kicker'>消息分类</Text><Text className='notification-title'>{summary.title}</Text><Text className='notification-subtitle'>{summary.subtitle}</Text></View><Text className='notification-unread'>{notices.reduce((total, notice) => total + notice.unread, 0)} 条未读</Text></View>{type === 'system' && <ReportProgressList />}{rows.length ? <View className='notification-feed'>{rows.map(([source, text, time, route], index) => <Button key={`${source}-${time}-${index}`} onClick={() => navigationAdapter.go(route)}><Text className='feed-index'>{String(index + 1).padStart(2, '0')}</Text><View><Text className='feed-source'>{source}</Text><Text className='feed-copy'>{text}</Text><Text className='feed-time'>{time}</Text></View><Glyph name='chevron' /></Button>)}</View> : <View className='empty inline-empty'>当前分类暂无通知</View>}<View className='notification-safe'>◈ 通知仅用于校内交易与账号安全提醒。</View></AppShell>
 }

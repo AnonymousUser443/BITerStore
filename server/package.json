@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
@@ -16,6 +16,7 @@
     "r2:migrate-completed": "node dist/src/maintenance/migrate-completed-uploads.js",
     "r2:configure-lifecycle": "node dist/src/maintenance/configure-r2-lifecycle.js",
     "uploads:cleanup-pending": "node dist/src/maintenance/cleanup-pending-uploads.js",
+    "accounts:cleanup-recovery": "node dist/src/maintenance/cleanup-account-recovery-links.js",
     "admin:promote": "tsx scripts/promote-admin.ts",
     "admin:reset-totp": "tsx scripts/reset-admin-totp.ts"
   },
@@ -29,6 +30,7 @@
     "@nestjs/platform-fastify": "^11.1.6",
     "@nestjs/swagger": "^11.2.0",
     "@prisma/client": "6.12.0",
+    "fastify": "5.12.2",
     "ioredis": "^5.7.0",
     "jose": "^6.1.0",
     "reflect-metadata": "^0.2.2",
@@ -43,5 +45,8 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "fastify": "5.12.2"
   }
 }

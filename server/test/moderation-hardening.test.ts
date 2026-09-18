@@ -9,6 +9,7 @@ function prismaMock(overrides: Record<string, unknown> = {}) {
     report: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'report-1' }), count: vi.fn().mockResolvedValue(0) },
     listing: { findFirst: vi.fn().mockResolvedValue({ id: 'listing-1', sellerId: 'seller-1', status: 'ACTIVE' }) },
     user: { findUnique: vi.fn().mockResolvedValue({ id: 'user-2', status: 'ACTIVE' }) },
+    message: { findFirst: vi.fn().mockResolvedValue(null) },
     block: { upsert: vi.fn(), deleteMany: vi.fn() },
     ...overrides
   } as any
@@ -40,5 +41,16 @@ describe('report target and quota hardening', () => {
     expect(error).toBeInstanceOf(HttpException)
     expect((error as HttpException).getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS)
     expect(prisma.report.create).not.toHaveBeenCalled()
+  })
+
+  it('only lets conversation members report a message', async () => {
+    const prisma = prismaMock()
+    prisma.message.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 42n, senderId: 'sender-1' })
+    await expect(new ModerationController(prisma).report(reporter, { targetType: 'MESSAGE', targetId: '42', reason: '骚扰消息' })).rejects.toMatchObject({ status: 404 })
+    await expect(new ModerationController(prisma).report(reporter, { targetType: 'MESSAGE', targetId: '42', reason: '骚扰消息' })).resolves.toMatchObject({ id: 'report-1' })
+    expect(prisma.message.findFirst).toHaveBeenLastCalledWith({
+      where: { id: 42n, conversation: { members: { some: { userId: reporter.id } } } },
+      select: { id: true, senderId: true }
+    })
   })
 })

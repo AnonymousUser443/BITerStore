@@ -56,6 +56,9 @@ describe('authenticated Golden H5', () => {
     expect(detailPage).toContain("navigate('/login')")
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
     expect(detailPage).toContain("cause instanceof Error ? cause.message : '联系卖家失败，请稍后重试'")
+    expect(detailPage).toContain("className={`block-user-action ${blocked ? 'is-active' : ''}`}")
+    expect(styles).toContain('.detail-cta .block-user-action,')
+    expect(styles).toContain('.detail-cta .block-user-action.is-active,')
   })
 
   it('shows a retryable error instead of loading a failed chat forever', () => {
@@ -72,12 +75,22 @@ describe('authenticated Golden H5', () => {
     expect(myListingsPage).toContain("cause instanceof Error ? cause.message : '删除失败，请稍后重试'")
   })
 
-  it('paints message snapshots immediately and anchors every chat to its listing', () => {
+  it('does not create a local-only favorite for catalog guests', () => {
+    const categoryPage = mobileApp.slice(mobileApp.indexOf('function CategoryPage'), mobileApp.indexOf('function InlineLoading'))
+    expect(categoryPage).toContain('const currentUser = useContext(CurrentUserContext)')
+    expect(categoryPage).toContain("if (!currentUser) { notify('请先使用学号登录后收藏商品'); navigate('/login'); return; }")
+    expect(categoryPage).toContain('demoRepository.listFavorites()')
+    expect(categoryPage).toContain("cause instanceof Error ? cause.message : '收藏操作失败，请稍后重试'")
+  })
+
+  it('keeps list snapshots but waits for complete chronological chat history', () => {
     const messagesPage = mobileApp.slice(mobileApp.indexOf('function MessagesPage'), mobileApp.indexOf('function NotificationDetailPage'))
     const chatPage = mobileApp.slice(mobileApp.indexOf('function ConversationBookMessage'), mobileApp.indexOf('function ProfilePage'))
     expect(messagesPage).toContain('peekThreads() || []')
     expect(messagesPage).toContain('peekNotifications() || []')
-    expect(chatPage).toContain('peekThread(threadId)')
+    expect(chatPage).not.toContain('peekThread(threadId)')
+    expect(chatPage).toContain('demoRepository.getThread(threadId)')
+    expect(chatPage).toContain('formatMessageTime(message.createdAt)')
     expect(chatPage).toContain('我想咨询这本书')
     expect(chatPage).toContain('会话关联商品')
     expect(chatPage).toContain('navigate(`/books/${book.id}`)')

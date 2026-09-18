@@ -9,7 +9,7 @@ async function persistSession(session: ApiSession) {
 export async function loginWithCampus(registrationToken: string): Promise<ApiSession> {
   const session = await apiRequest<ApiSession>('/auth/campus', {
     method: 'POST',
-    data: { registrationToken, platform: process.env.TARO_ENV === 'weapp' ? 'weapp' : 'h5', ...(process.env.TARO_ENV === 'h5' ? { sessionTransport: 'cookie' } : {}) }
+    data: { registrationToken, platform: process.env.TARO_ENV === 'weapp' ? 'weapp' : 'h5' }
   })
   return persistSession(session)
 }
@@ -40,8 +40,7 @@ export async function pollWebLogin(state: string): Promise<ApiSession> {
   const deadline = Date.now() + 300_000
   try {
     while (Date.now() < deadline) {
-      const transport = process.env.TARO_ENV === 'h5' ? '&sessionTransport=cookie' : ''
-      const result = await apiRequest<{ status: string } & Partial<ApiSession>>(`/auth/wechat/web/status?state=${encodeURIComponent(state)}${transport}`)
+      const result = await apiRequest<{ status: string } & Partial<ApiSession>>(`/auth/wechat/web/status?state=${encodeURIComponent(state)}`)
       if (result.status === 'AUTHENTICATED' && result.user && (process.env.TARO_ENV === 'h5' || (result.accessToken && result.refreshToken))) {
         const session = result as ApiSession
         const persisted = await persistSession(session)
@@ -57,12 +56,12 @@ export async function pollWebLogin(state: string): Promise<ApiSession> {
   }
 }
 
-export async function logout() { const session = await sessionStore.get(); await apiRequest('/auth/logout', { method: 'POST', data: { ...(session?.refreshToken ? { refreshToken: session.refreshToken } : {}), ...(process.env.TARO_ENV === 'h5' ? { sessionTransport: 'cookie' } : {}) } }).catch(() => undefined); await Taro.removeStorage({ key: 'biterstore:web-login-state' }).catch(() => undefined); await sessionStore.clear() }
+export async function logout() { const session = await sessionStore.get(); await apiRequest('/auth/logout', { method: 'POST', data: { ...(session?.refreshToken ? { refreshToken: session.refreshToken } : {}) } }); await Taro.removeStorage({ key: 'biterstore:web-login-state' }).catch(() => undefined); await sessionStore.clear() }
 export async function exchangeCampusToken(registrationToken: string) {
   const result = await apiRequest<{ status: string; verifiedAt: string }>('/identity/campus/exchange', { method: 'POST', data: { registrationToken } })
   const current = await sessionStore.get()
   if (current && (current.refreshToken || process.env.TARO_ENV === 'h5')) {
-    const refreshed = await apiRequest<ApiSession>('/auth/refresh', { method: 'POST', data: current.refreshToken ? { refreshToken: current.refreshToken } : { sessionTransport: 'cookie' } }, false)
+    const refreshed = await apiRequest<ApiSession>('/auth/refresh', { method: 'POST', data: current.refreshToken ? { refreshToken: current.refreshToken } : {} }, false)
     await sessionStore.set({ ...current, ...refreshed, transport: process.env.TARO_ENV === 'h5' ? 'cookie' : refreshed.transport })
   }
   return result

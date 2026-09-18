@@ -10,15 +10,18 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   ServiceUnavailableException,
   UseGuards
 } from '@nestjs/common'
 import type { FastifyRequest } from 'fastify'
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { assertNotMuted, AuthGuard, CurrentUser, NotMutedGuard, VerifiedGuard, type AuthUser } from '../../common/auth.js'
+import { accessTokenSecret } from '../../common/security-config.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
+import { reportTargetLabels } from './report-progress.js'
 
 const reportTargetTypes = ['LISTING', 'USER', 'MESSAGE'] as const
 type ReportTargetType = typeof reportTargetTypes[number]
@@ -42,6 +45,49 @@ export class ModerationController {
   @Get('notifications')
   listNotifications(@CurrentUser() user: AuthUser) {
     return this.prisma.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100 })
+  }
+
+  @Post('notifications/read-all')
+  async readAllNotifications(@CurrentUser() user: AuthUser) {
+    await this.prisma.notification.updateMany({ where: { userId: user.id, readAt: null }, data: { readAt: new Date() } })
+    return { ok: true }
+  }
+
+  @Post('notifications/:id/read')
+  async readNotification(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const targetId = this.normalizeTargetId(id)
+    if (!targetId) throw new BadRequestException('通知标识无效')
+    const result = await this.prisma.notification.updateMany({ where: { id: targetId, userId: user.id }, data: { readAt: new Date() } })
+    if (!result.count) throw new NotFoundException('通知不存在')
+    return { ok: true }
+  }
+
+  @Get('blocks')
+  @UseGuards(VerifiedGuard)
+  listBlocks(@CurrentUser() user: AuthUser) {
+    return this.prisma.block.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      include: { blockedUser: { select: { id: true, nickname: true, avatarUrl: true, campus: true, campusStatus: true, bio: true } } }
+    }).then((rows) => rows.map((row) => ({ ...row.blockedUser, blockedAt: row.createdAt })))
+  }
+
+  @Get('reports/mine')
+  async myReports(@CurrentUser() user: AuthUser, @Query('cursor') cursor?: string) {
+    if (cursor !== undefined && !this.normalizeTargetId(cursor)) throw new BadRequestException('举报分页标识无效')
+    if (cursor) {
+      const ownCursor = await this.prisma.report.findFirst({ where: { id: cursor, reporterId: user.id }, select: { id: true } })
+      if (!ownCursor) throw new BadRequestException('举报分页标识无效')
+    }
+    const rows = await this.prisma.report.findMany({
+      where: { reporterId: user.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 21,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, targetType: true, targetId: true, reason: true, status: true, resolution: true, createdAt: true, updatedAt: true }
+    })
+    const page = rows.slice(0, 20)
+    const label = await reportTargetLabels(this.prisma, page)
+    return { items: page.map((row) => ({ ...row, targetLabel: label(row) })), nextCursor: rows.length > 20 ? page[19].id : null }
   }
 
   @Post('reports')
@@ -144,9 +190,10 @@ export class ModerationController {
       } catch {
         throw new BadRequestException('消息标识无效')
       }
-      const messageModel = this.prisma.message as typeof this.prisma.message | undefined
-      if (!messageModel || typeof messageModel.findUnique !== 'function') throw new NotFoundException('消息不存在')
-      const target = await messageModel.findUnique({ where: { id: messageId }, select: { id: true, senderId: true } })
+      const target = await this.prisma.message.findFirst({
+        where: { id: messageId, conversation: { members: { some: { userId: reporterId } } } },
+        select: { id: true, senderId: true }
+      })
       if (!target) throw new NotFoundException('消息不存在')
       if (target.senderId === reporterId) throw new BadRequestException('不能举报自己的消息')
       return target
@@ -171,7 +218,7 @@ export class ModerationController {
           3,
           `reports:user:${userId}`,
           `reports:target:${digest}`,
-          `reports:ip:${createHash('sha256').update(ip).digest('hex')}`,
+          `reports:ip:${createHmac('sha256', accessTokenSecret()).update(ip).digest('hex')}`,
           REPORT_WINDOW_SECONDS
         )
         const [userCount, targetCount, ipCount] = String(result).split(':').map(Number)

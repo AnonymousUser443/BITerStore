@@ -50,7 +50,7 @@ describe('Golden H5 authentication', () => {
     expect(result.user.id).toBe('student-1');
     expect(fetch).toHaveBeenCalledWith('/api/v1/auth/campus', expect.objectContaining({
       credentials: 'include',
-      body: JSON.stringify({ registrationToken: 'registration-jwt', platform: 'h5', sessionTransport: 'cookie' }),
+      body: JSON.stringify({ registrationToken: 'registration-jwt', platform: 'h5' }),
     }));
   });
 
@@ -65,8 +65,21 @@ describe('Golden H5 authentication', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/me', expect.objectContaining({ credentials: 'include' }));
     expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/auth/refresh', expect.objectContaining({
-      body: JSON.stringify({ sessionTransport: 'cookie' })
+      body: '{}'
     }));
+  });
+
+  it('treats an anonymous restore as anonymous without broadcasting an expired login', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ message: 'not authenticated' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ message: 'no refresh session' }, 401));
+
+    await expect(restoreH5Session()).resolves.toBeNull();
+
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('shares one refresh across concurrent requests when the access cookie expires', async () => {

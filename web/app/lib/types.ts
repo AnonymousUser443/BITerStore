@@ -1,5 +1,5 @@
 export type Campus = '中关村' | '良乡' | '西山' | '珠海';
-export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing';
+export type ListingStatus = 'available' | 'sold' | 'offline' | 'draft' | 'reviewing' | 'changes_requested';
 export type Condition = '全新' | '九成新' | '八成新' | '七成新及以下';
 export type FeedbackType = 'BUG' | 'SUGGESTION';
 
@@ -28,6 +28,7 @@ export interface Book {
   campus: Campus;
   description: string;
   status: ListingStatus;
+  moderationReason?: string;
   sellerId: string;
   createdAt: string;
   tags: string[];
@@ -83,6 +84,8 @@ export interface ChatThread {
   updatedAt: string;
   messages: Message[];
   participant?: User;
+  blocked?: boolean;
+  olderCursor?: string | null;
 }
 
 export interface Notification {

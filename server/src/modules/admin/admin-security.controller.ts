@@ -5,7 +5,8 @@ import { createTotpSecret, decryptTotp, encryptTotp, verifyTotp } from '../../co
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
 import { hashRefreshToken } from '../auth/auth.service.js'
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
+import { accessTokenSecret } from '../../common/security-config.js'
 
 @Controller('admin/security') @UseGuards(AuthGuard)
 export class AdminSecurityController {
@@ -15,11 +16,12 @@ export class AdminSecurityController {
     if (!this.redis) throw new ServiceUnavailableException('安全验证服务暂不可用，请稍后再试')
     const forwarded = request?.headers?.['x-forwarded-for']
     const ip = String(request?.ip || (Array.isArray(forwarded) ? forwarded[0] : forwarded || 'unknown')).split(',')[0].trim().slice(0, 80) || 'unknown'
+    const ipHash = createHmac('sha256', accessTokenSecret()).update(ip).digest('base64url').slice(0, 24)
     try {
       await this.redis.ensureConnected()
       const count = await this.redis.client.eval(
         "local userCount = redis.call('INCR', KEYS[1]); local ipCount = redis.call('INCR', KEYS[2]); if userCount == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; if ipCount == 1 then redis.call('EXPIRE', KEYS[2], ARGV[1]); end; return math.max(userCount, ipCount)",
-        2, `admin-totp:${action}:user:${userId}`, `admin-totp:${action}:ip:${ip}`, 300
+        2, `admin-totp:${action}:user:${userId}`, `admin-totp:${action}:ip:${ipHash}`, 300
       )
       if (Number(count) > 5) throw new HttpException('动态验证码尝试次数过多，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
     } catch (error) {
@@ -32,7 +34,8 @@ export class AdminSecurityController {
     if (!this.redis) return
     const forwarded = request?.headers?.['x-forwarded-for']
     const ip = String(request?.ip || (Array.isArray(forwarded) ? forwarded[0] : forwarded || 'unknown')).split(',')[0].trim().slice(0, 80) || 'unknown'
-    await this.redis.client.del(`admin-totp:${action}:user:${userId}`, `admin-totp:${action}:ip:${ip}`).catch(() => undefined)
+    const ipHash = createHmac('sha256', accessTokenSecret()).update(ip).digest('base64url').slice(0, 24)
+    await this.redis.client.del(`admin-totp:${action}:user:${userId}`, `admin-totp:${action}:ip:${ipHash}`).catch(() => undefined)
   }
 
   private async adminRecord(userId: string) {

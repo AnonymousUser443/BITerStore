@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common'
 import { AdminGuard, AuthGuard, VerifiedGuard, signAccessToken } from '../src/common/auth.js'
-import { assertHttpsConfiguration, assertSecurityConfiguration, securityHeadersForRequest } from '../src/common/security-config.js'
+import { assertHttpsConfiguration, assertSecurityConfiguration, sanitizedRequestUrl, securityHeadersForRequest, trustedProxySetting } from '../src/common/security-config.js'
 import { AuthService } from '../src/modules/auth/auth.service.js'
 import { AdminSecurityController } from '../src/modules/admin/admin-security.controller.js'
 import { UsersController } from '../src/modules/users/users.controller.js'
@@ -16,12 +16,15 @@ describe('security configuration', () => {
     process.env.NODE_ENV = 'production'
     delete process.env.ACCESS_TOKEN_SECRET
     delete process.env.ADMIN_TOTP_ENCRYPTION_KEY
+    delete process.env.CAMPUS_IDENTITY_HASH_KEY
     expect(() => assertSecurityConfiguration()).toThrow('ACCESS_TOKEN_SECRET')
     process.env.ACCESS_TOKEN_SECRET = 'access-production-secret-with-sufficient-entropy'
     expect(() => assertSecurityConfiguration()).toThrow('ADMIN_TOTP_ENCRYPTION_KEY')
     process.env.ADMIN_TOTP_ENCRYPTION_KEY = 'b'.repeat(31)
     expect(() => assertSecurityConfiguration()).toThrow('ADMIN_TOTP_ENCRYPTION_KEY')
     process.env.ADMIN_TOTP_ENCRYPTION_KEY = 'totp-production-secret-with-sufficient-entropy'
+    expect(() => assertSecurityConfiguration()).toThrow('CAMPUS_IDENTITY_HASH_KEY')
+    process.env.CAMPUS_IDENTITY_HASH_KEY = 'campus-hash-production-secret-with-entropy'
     expect(() => assertSecurityConfiguration()).not.toThrow()
     process.env.ADMIN_TOTP_ENCRYPTION_KEY = process.env.ACCESS_TOKEN_SECRET
     expect(() => assertSecurityConfiguration()).toThrow('must be different')
@@ -44,6 +47,30 @@ describe('security configuration', () => {
       'Content-Security-Policy': expect.stringContaining("default-src 'none'")
     })
     expect(securityHeadersForRequest({ url: '/api/v1/listings', protocol: 'http' })).not.toHaveProperty('Strict-Transport-Security')
+  })
+
+  it('marks authentication and account responses as non-cacheable', () => {
+    expect(securityHeadersForRequest({ url: '/api/v1/auth/wechat/web/status?state=secret' })).toMatchObject({ 'Cache-Control': 'no-store' })
+    expect(securityHeadersForRequest({ url: '/api/v1/me' })).toMatchObject({ 'Cache-Control': 'no-store' })
+    expect(securityHeadersForRequest({ url: '/api/v1/listings?limit=20' })).not.toHaveProperty('Cache-Control')
+  })
+
+  it('trusts a bounded proxy chain and strips query values from request logs', () => {
+    process.env.NODE_ENV = 'production'
+    delete process.env.TRUSTED_PROXY_CIDRS
+    delete process.env.TRUST_PROXY_HOPS
+    const defaultTrust = trustedProxySetting()
+    expect(typeof defaultTrust).toBe('function')
+    expect((defaultTrust as (address: string, hop: number) => boolean)('127.0.0.1', 0)).toBe(true)
+    expect((defaultTrust as (address: string, hop: number) => boolean)('127.0.0.1', 1)).toBe(false)
+    process.env.TRUST_PROXY_HOPS = '2'
+    const twoHopTrust = trustedProxySetting()
+    expect(typeof twoHopTrust).toBe('function')
+    expect((twoHopTrust as (address: string, hop: number) => boolean)('127.0.0.1', 1)).toBe(true)
+    expect((twoHopTrust as (address: string, hop: number) => boolean)('127.0.0.1', 2)).toBe(false)
+    process.env.TRUST_PROXY_HOPS = '99'
+    expect(() => trustedProxySetting()).toThrow('TRUST_PROXY_HOPS')
+    expect(sanitizedRequestUrl('/api/v1/auth/wechat/web/status?state=sensitive')).toBe('/api/v1/auth/wechat/web/status')
   })
 })
 
@@ -172,6 +199,11 @@ describe('administrator TOTP protection and account deletion', () => {
     const prisma: any = {
       session: { updateMany: vi.fn() },
       listing: { updateMany: vi.fn() },
+      wechatAccount: { deleteMany: vi.fn() },
+      campusIdentity: { updateMany: vi.fn() },
+      favorite: { deleteMany: vi.fn() },
+      block: { deleteMany: vi.fn() },
+      notification: { deleteMany: vi.fn() },
       user: { update: vi.fn() },
       $transaction: vi.fn().mockResolvedValue([])
     }
@@ -181,5 +213,6 @@ describe('administrator TOTP protection and account deletion', () => {
       where: { sellerId: 'student-1', deletedAt: null },
       data: { status: 'OFF_SHELF', deletedAt: expect.any(Date), version: { increment: 1 } }
     })
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ studentNumber: null, campusStatus: 'REVOKED', status: 'DELETED' }) }))
   })
 })

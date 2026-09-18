@@ -11,7 +11,9 @@ function actionPrisma(target: { id: string; role: 'USER' | 'MODERATOR' | 'ADMIN'
       update: vi.fn().mockResolvedValue(target)
     },
     session: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-    listing: { findUnique: vi.fn(), update: vi.fn() },
+    listing: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    listingImage: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    notification: { create: vi.fn().mockResolvedValue({}) },
     report: { findUnique: vi.fn(), update: vi.fn() },
     moderationAction: { create: vi.fn().mockResolvedValue({}) },
     auditLog: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) }
@@ -21,6 +23,16 @@ function actionPrisma(target: { id: string; role: 'USER' | 'MODERATOR' | 'ADMIN'
 }
 
 describe('administrator moderation actions', () => {
+  it.each(['stale-page', 'concurrent-edit'])('refuses approval after a %s and leaves image approval untouched', async (scenario) => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', title: '书', version: scenario === 'stale-page' ? 4 : 3, sellerId: 'seller', status: 'PENDING_REVIEW', deletedAt: null, images: [{ role: 'COVER' }, { role: 'ISBN' }] })
+    prisma.listing.updateMany.mockResolvedValue({ count: 0 })
+    await expect(new AdminController(prisma).action(authUser, { targetType: 'LISTING', targetId: 'listing-1', action: 'ACTIVE', version: 3 })).rejects.toMatchObject({ status: 409 })
+    expect(prisma.listingImage.updateMany).not.toHaveBeenCalled()
+    expect(prisma.notification.create).not.toHaveBeenCalled()
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
   it('rejects unsupported actions before writing an audit record', async () => {
     const prisma = actionPrisma()
     const controller = new AdminController(prisma)
@@ -74,6 +86,28 @@ describe('administrator moderation actions', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
+  it('requires an explanation when a listing is removed or blocked', async () => {
+    const prisma = actionPrisma()
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', action: 'BLOCKED', version: 3
+    })).rejects.toMatchObject({ status: 400 })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('requires a reason and stores a fixable moderation decision', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: 'test listing', sellerId: 'seller-1', status: 'PENDING_REVIEW', deletedAt: null, images: [] })
+    const controller = new AdminController(prisma)
+    await expect(controller.action(authUser, { targetType: 'LISTING', targetId: 'listing-1', action: 'CHANGES_REQUESTED', version: 3 }))
+      .rejects.toMatchObject({ status: 400 })
+    await expect(controller.action(authUser, { targetType: 'LISTING', targetId: 'listing-1', action: 'CHANGES_REQUESTED', version: 3, reason: 'missing isbn page' }))
+      .resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.listing.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'CHANGES_REQUESTED', moderationDecision: 'CHANGES_REQUESTED', moderationReason: 'missing isbn page' })
+    }))
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: '商品需要修改后重新提交' }) }))
+  })
   it('returns repeated success without applying the same request twice', async () => {
     const prisma = actionPrisma()
     prisma.auditLog.findFirst.mockResolvedValue({ actorId: 'admin-1', action: 'BANNED', resourceType: 'USER', resourceId: 'user-1' })
@@ -83,6 +117,15 @@ describe('administrator moderation actions', () => {
     })).resolves.toEqual({ ok: true, repeated: true })
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(prisma.moderationAction.create).not.toHaveBeenCalled()
+  })
+
+  it('turns a concurrent request-id unique conflict into idempotent success', async () => {
+    const prisma = actionPrisma()
+    prisma.$transaction.mockRejectedValue({ code: 'P2002', meta: { target: ['requestId'] } })
+    prisma.auditLog.findFirst.mockResolvedValue({ actorId: 'admin-1', action: 'BANNED', resourceType: 'USER', resourceId: 'user-1' })
+    await expect(new AdminController(prisma).action(authUser, {
+      targetType: 'USER', targetId: 'user-1', action: 'BANNED', reason: '并发重试', requestId: 'same-request'
+    })).resolves.toEqual({ ok: true, repeated: true })
   })
 
   it('rejects reuse of a request identifier for a different action', async () => {
@@ -106,22 +149,56 @@ describe('administrator moderation actions', () => {
 
   it('does not restore a sold listing to active through a direct API call', async () => {
     const prisma = actionPrisma()
-    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', status: 'SOLD', deletedAt: null })
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: '测试商品', sellerId: 'seller-1', status: 'SOLD', deletedAt: null })
     const controller = new AdminController(prisma)
     await expect(controller.action(authUser, {
-      targetType: 'LISTING', targetId: 'listing-1', action: 'ACTIVE', reason: '非法状态回退'
+      targetType: 'LISTING', targetId: 'listing-1', version: 3, action: 'ACTIVE', reason: '非法状态回退'
     })).rejects.toMatchObject({ status: 400 })
-    expect(prisma.listing.update).not.toHaveBeenCalled()
+    expect(prisma.listing.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('approves attached images when a pending listing passes review', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: '测试商品', sellerId: 'seller-1', status: 'PENDING_REVIEW', deletedAt: null, images: [{ role: 'COVER' }, { role: 'ISBN' }] })
+    await expect(new AdminController(prisma).action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', version: 3, action: 'ACTIVE', reason: '图片与描述符合规范'
+    })).resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.listingImage.updateMany).toHaveBeenCalledWith({
+      where: { listingId: 'listing-1', uploadedAt: { not: null } },
+      data: { moderationStatus: 'APPROVED', moderationReason: null, moderatedAt: expect.any(Date) }
+    })
+  })
+
+  it('does not approve a listing without both required uploaded images', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: '测试商品', sellerId: 'seller-1', status: 'PENDING_REVIEW', deletedAt: null, images: [{ role: 'COVER' }] })
+    await expect(new AdminController(prisma).action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', version: 3, action: 'ACTIVE', reason: '缺少凭证'
+    })).rejects.toMatchObject({ status: 400 })
+    expect(prisma.listing.updateMany).not.toHaveBeenCalled()
+    expect(prisma.listingImage.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('rejects attached images with the recorded moderation reason', async () => {
+    const prisma = actionPrisma()
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: '测试商品', sellerId: 'seller-1', status: 'PENDING_REVIEW', deletedAt: null })
+    await expect(new AdminController(prisma).action(authUser, {
+      targetType: 'LISTING', targetId: 'listing-1', version: 3, action: 'BLOCKED', reason: '图片包含违规联系方式'
+    })).resolves.toEqual({ ok: true, repeated: false })
+    expect(prisma.listingImage.updateMany).toHaveBeenCalledWith({
+      where: { listingId: 'listing-1', uploadedAt: { not: null } },
+      data: { moderationStatus: 'REJECTED', moderationReason: '图片包含违规联系方式', moderatedAt: expect.any(Date) }
+    })
   })
 
   it('persists an ignored listing decision without changing its sale status', async () => {
     const prisma = actionPrisma()
-    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', status: 'SOLD', deletedAt: null })
+    prisma.listing.findUnique.mockResolvedValue({ id: 'listing-1', version: 3, title: '测试商品', sellerId: 'seller-1', status: 'SOLD', deletedAt: null })
     const controller = new AdminController(prisma)
     await expect(controller.action(authUser, {
-      targetType: 'LISTING', targetId: 'listing-1', action: 'IGNORE', reason: '管理员确认无需处置'
+      targetType: 'LISTING', targetId: 'listing-1', version: 3, action: 'IGNORE', reason: '管理员确认无需处置'
     })).resolves.toEqual({ ok: true, repeated: false })
-    expect(prisma.listing.update).not.toHaveBeenCalled()
+    expect(prisma.listing.updateMany).toHaveBeenCalledWith({ where: { id: 'listing-1', version: 3, deletedAt: null }, data: expect.objectContaining({ moderationDecision: 'IGNORE' }) })
     expect(prisma.moderationAction.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ targetType: 'LISTING', targetId: 'listing-1', action: 'IGNORE' })
     })
@@ -139,15 +216,25 @@ describe('administrator moderation actions', () => {
 })
 
 describe('administrator listing review queue', () => {
-  it('excludes persisted decisions from the default pending queue', async () => {
+  it('only returns real pending-review records from the default queue', async () => {
     const prisma: any = {
-      moderationAction: { findMany: vi.fn().mockResolvedValue([{ targetId: 'ignored-1', action: 'IGNORE', createdAt: new Date() }]) },
       listing: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) }
     }
     await new AdminController(prisma).listings()
     expect(prisma.listing.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { AND: expect.arrayContaining([{ status: { not: 'BLOCKED' }, id: { notIn: ['ignored-1'] } }]) }
+      where: { AND: expect.arrayContaining([{ status: 'PENDING_REVIEW' }]) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
     }))
+  })
+
+  it('provides status counts for the all-products view', async () => {
+    const prisma: any = {
+      listing: { count: vi.fn().mockResolvedValue(2) }
+    }
+    const result = await new AdminController(prisma).listingSummary('physics')
+    expect(result.total).toBe(2)
+    expect(result.counts.PENDING_REVIEW).toBe(2)
+    expect(prisma.listing.count).toHaveBeenCalled()
   })
 })
 

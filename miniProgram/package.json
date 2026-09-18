@@ -20,6 +20,7 @@
     "assets:verify-weapp": "node scripts/verify-weapp-assets.mjs",
     "package:verify-weapp": "node scripts/verify-weapp-package.mjs",
     "lint": "eslint src scripts test --ext .js,.mjs,.ts,.tsx",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "weapp:doctor": "node scripts/weapp-doctor.mjs",
     "weapp:open": "node scripts/weapp-open.mjs",

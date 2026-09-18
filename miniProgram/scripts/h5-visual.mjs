@@ -4,6 +4,8 @@ import { createServer } from 'node:http'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { root } from './weapp-env.mjs'
+import { checkBackNavigation } from './h5-interaction-regressions.mjs'
+import { checkAdminReview } from './admin-review-regression.mjs'
 
 const preview = process.env.BITERSTORE_H5_URL || 'http://127.0.0.1:4173'
 const browserCandidates = [
@@ -30,7 +32,9 @@ const allTargets = [
   ['home-landscape-844', 844, 390, '/home'],
   ['home-1024', 1024, 768, '/home'],
   ['home-1440', 1440, 900, '/home'],
+  ['home-1872-831', 1872, 831, '/home'],
   ['home-1920', 1920, 1080, '/home'],
+  ['home-960-dpi2', 960, 540, '/home', 2],
   ['search-320', 320, 700, '/search'],
   ['search-390', 390, 900, '/search'],
   ['search-600', 600, 900, '/search'],
@@ -48,12 +52,16 @@ const allTargets = [
   ['messages-768', 768, 1024, '/messages'],
   ['messages-1440', 1440, 900, '/messages'],
   ['notification-390', 390, 900, '/notifications?type=comment'],
+  ['notification-system-390', 390, 900, '/notifications?type=system'],
   ['notification-768', 768, 1024, '/messages/notifications/comment'],
   ['chat-320', 320, 700, '/chat?id=thread-lin'],
   ['chat-390', 390, 900, '/chat?id=thread-lin'],
   ['chat-768', 768, 1024, '/chat?id=thread-lin'],
   ['chat-1440', 1440, 900, '/chat?id=thread-lin'],
   ['detail-390', 390, 900, '/books?id=math-7'],
+  ['detail-owner-review-390', 390, 900, '/books?id=qa-owned'],
+  ['detail-guest-390', 390, 900, '/books?id=math-7&qa_guest=1'],
+  ['detail-direct-390', 390, 900, '/books/math-7'],
   ['detail-600', 600, 900, '/books?id=math-7'],
   ['detail-768', 768, 1024, '/books?id=math-7'],
   ['detail-1024', 1024, 768, '/books?id=math-7'],
@@ -66,6 +74,7 @@ const allTargets = [
   ['states-390', 390, 900, '/states'],
   ['states-600', 600, 900, '/states'],
   ['states-1440', 1440, 900, '/states'],
+  ['not-found-390', 390, 900, '/definitely-not-a-page'],
   ['unavailable-390', 390, 900, '/states?type=unavailable'],
   ['profile-600', 600, 900, '/profile'],
   ['feedback-390', 390, 900, '/feedback'],
@@ -73,6 +82,7 @@ const allTargets = [
   ['detail-1024-768', 1024, 768, '/books?id=math-7'],
   ['detail-1280-600', 1280, 600, '/books?id=math-7'],
   ['home-1280-720', 1280, 720, '/home'],
+  ['home-1280-600', 1280, 600, '/home'],
   ['detail-1366-768', 1366, 768, '/books?id=math-7'],
   ['my-listings-1366-768', 1366, 768, '/my-listings'],
   ['profile-699', 699, 900, '/profile'],
@@ -90,6 +100,10 @@ const expectedPageClass = {
   'messages-390': 'messages-page',
   'notification-390': 'notification-detail-page',
   'chat-390': 'chat-page',
+  'detail-guest-390': 'detail-page',
+  'detail-owner-review-390': 'detail-page',
+  'detail-direct-390': 'detail-page',
+  'not-found-390': 'full-state',
   'favorites-390': 'simple-list-page',
   'my-listings-390': 'simple-list-page',
   'my-listings-1366-768': 'simple-list-page',
@@ -102,6 +116,8 @@ const expectedPageClass = {
 }
 
 const authenticatedFixture = `(() => {
+  if (location.pathname.startsWith('/admin/')) return;
+  const guest = new URL(location.href).searchParams.has('qa_guest');
   const user = {
     id: 'qa-student', studentNumber: '1120260001', nickname: '视觉巡检用户', avatarUrl: null,
     campus: '良乡', bio: '用于响应式页面巡检', role: 'USER', campusStatus: 'VERIFIED',
@@ -114,17 +130,22 @@ const authenticatedFixture = `(() => {
     condition: '九成新', campus: '良乡', description: '页面巡检用商品', status: 'ACTIVE',
     sellerId: seller.id, seller, createdAt: '2026-08-29T08:00:00.000Z', tags: ['教材'], images: [], version: 1
   };
-  const ownedListing = { ...listing, id: 'qa-owned', title: '我的巡检商品', sellerId: user.id, seller: user };
+  const ownedListing = { ...listing, id: 'qa-owned', title: '我的待审核商品', status: 'PENDING_REVIEW', sellerId: user.id, seller: user };
+  const message = { id: '12', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
   const conversation = {
-    id: 'thread-lin', listingId: listing.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
-    unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }]
+    id: 'thread-lin', listingId: listing.id, listing, buyerId: user.id, sellerId: seller.id, lastMessageAt: '2026-08-29T08:30:00.000Z',
+    unread: 1, members: [{ userId: user.id, user }, { userId: seller.id, user: seller }], messages: [message]
   };
-  const message = { id: 'qa-message', senderId: seller.id, content: '你好，这本书还在吗？', createdAt: '2026-08-29T08:30:00.000Z' };
-  localStorage.setItem('biterstore:v1:authenticated-sid', JSON.stringify(user.id));
-  localStorage.setItem('biterstore:v1:snapshot:profile', JSON.stringify({
+  if (guest) {
+    localStorage.removeItem('biterstore:v1:authenticated-sid');
+    localStorage.removeItem('biterstore:v1:snapshot:profile');
+  } else {
+    localStorage.setItem('biterstore:v1:authenticated-sid', JSON.stringify(user.id));
+    localStorage.setItem('biterstore:v1:snapshot:profile', JSON.stringify({
     id: user.id, studentNumber: user.studentNumber, name: user.nickname, campus: user.campus,
     verified: true, bio: user.bio, responseTime: '通常很快回复', avatarTone: 'sage'
-  }));
+    }));
+  }
   localStorage.setItem('biterstore.ui-assets.bundle', '2026.08.24.11');
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
@@ -132,13 +153,21 @@ const authenticatedFixture = `(() => {
     if (!url.pathname.startsWith('/api/v1/')) return nativeFetch(input, init);
     const path = url.pathname.slice('/api/v1'.length);
     const method = (init.method || (typeof input === 'string' ? 'GET' : input.method) || 'GET').toUpperCase();
+    if (guest && (path === '/me' || path === '/auth/refresh')) {
+      return new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
     let body;
     if (path === '/me') body = user;
     else if (path === '/listings/favorites/mine') body = [listing];
     else if (path === '/listings/mine/all') body = { items: [ownedListing] };
+    else if (path === '/listings/mine/qa-owned') body = ownedListing;
+    else if (path === '/listings/qa-owned') return new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
     else if (path === '/listings' && method === 'GET') body = { items: [listing] };
     else if (path === '/conversations' && method === 'GET') body = [conversation];
+    else if (path === '/conversations/thread-lin' && method === 'GET') body = conversation;
     else if (path === '/conversations/thread-lin/messages' && method === 'GET') body = { items: [message] };
+    else if (path === '/blocks' && method === 'GET') body = [];
+    else if (path === '/reports/mine') body = { items: [{ id: 'report-qa', targetType: 'LISTING', targetId: 'math-7', targetLabel: '商品《高等数学（第七版）》', reason: '商品描述与图片不符', status: 'RESOLVED', resolution: '已核实并下架相关商品。', createdAt: '2026-09-17T08:00:00.000Z', updatedAt: '2026-09-18T08:00:00.000Z' }], nextCursor: null };
     else if (path === '/notifications') body = [{
       id: 'qa-notification', type: 'COMMENT', title: '新的留言', body: '巡检消息',
       readAt: null, createdAt: '2026-08-29T08:30:00.000Z'
@@ -198,15 +227,37 @@ if (!process.env.BITERSTORE_H5_URL) {
   previewServer = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url || '/', preview).pathname)
+      const redirects = [
+        [/^\/books\/([A-Za-z0-9_-]+)$/, (match) => `/books?id=${encodeURIComponent(match[1])}`],
+        [/^\/messages\/notifications\/(like|comment|system|follow)$/, (match) => `/notifications?type=${encodeURIComponent(match[1])}`],
+        [/^\/messages\/([A-Za-z0-9_-]+)$/, (match) => `/chat?id=${encodeURIComponent(match[1])}`],
+        [/^\/states\/([A-Za-z0-9_-]+)$/, (match) => `/states?type=${encodeURIComponent(match[1])}`]
+      ]
+      const redirect = redirects.map(([pattern, destination]) => {
+        const match = pathname.match(pattern)
+        return match ? destination(match) : null
+      }).find(Boolean)
+      if (redirect) {
+        response.writeHead(302, { Location: redirect, 'Cache-Control': 'no-store' }).end()
+        return
+      }
       const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '')
       const requestedFile = path.resolve(distDir, relative)
       if (requestedFile !== distDir && !requestedFile.startsWith(`${distDir}${path.sep}`)) {
         response.writeHead(403).end('Forbidden')
         return
       }
+      const knownRoutes = new Set(['/', '/welcome', '/onboarding', '/login', '/home', '/search', '/category', '/books', '/publish', '/messages', '/notifications', '/chat', '/profile', '/profile/edit', '/feedback', '/favorites', '/my-listings', '/states'])
       let file = requestedFile
       let body
-      try { body = await fs.readFile(file) } catch { file = path.join(distDir, 'index.html'); body = await fs.readFile(file) }
+      try { body = await fs.readFile(file) } catch {
+        if (!knownRoutes.has(pathname)) {
+          response.writeHead(302, { Location: '/states?type=404', 'Cache-Control': 'no-store' }).end()
+          return
+        }
+        file = path.join(distDir, 'index.html')
+        body = await fs.readFile(file)
+      }
       response.writeHead(200, { 'Content-Type': contentTypes[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' })
       response.end(body)
     } catch (error) {
@@ -218,7 +269,7 @@ if (!process.env.BITERSTORE_H5_URL) {
     previewServer.listen(Number(previewUrl.port || 80), previewUrl.hostname, resolve)
   })
 }
-const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--hide-scrollbars', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
+const browser = spawn(chrome, ['--headless=new', '--no-first-run', '--no-sandbox', '--disable-gpu', '--disable-gpu-sandbox', '--use-angle=swiftshader', '--remote-allow-origins=*', '--remote-debugging-port=9333', `--user-data-dir=${profileDir}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let client
 const diagnostics = []
 const pages = []
@@ -234,8 +285,8 @@ try {
   await client.send('Runtime.enable')
   await client.send('Storage.clearDataForOrigin', { origin: preview, storageTypes: 'all' })
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authenticatedFixture })
-  for (const [name, width, height, route] of targets) {
-    await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 700 })
+  for (const [name, width, height, route, requestedScale = 1] of targets) {
+    await client.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: requestedScale, mobile: width < 700 })
     const loaded = client.once('Page.loadEventFired')
     await client.send('Page.navigate', { url: `${preview}${route}` })
     await loaded
@@ -250,7 +301,7 @@ try {
       await client.send('Runtime.evaluate', { expression: `document.querySelector('#e2e-feedback-bug')?.click()` })
       await delay(150)
     }
-    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const shell = document.querySelector('.phone-shell'); const content = document.querySelector('.content-scroll'); const nav = document.querySelector('.bottom-nav'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero','.login-hero > taro-image-core','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.upload-card','.image-grid','.add-image','.tobby-tip','.tobby-tip > taro-image-core','.ai-card','.publish-actions','.notification-grid','.notification-grid > taro-button-core','.notice-copy','.notice-title','.notice-subtitle','.notice-link','.notice-chevron','.notification-feed > taro-button-core','.thread-list > taro-button-core','.thread-list h3 span','.thread-list time','.top-actions .avatar-action','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const rect = element => { const box = element.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), right: Math.round(box.right), bottom: Math.round(box.bottom) } }; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), minHeight: style.minHeight, boxSizing: style.boxSizing, display: style.display, fontSize: style.fontSize, lineHeight: style.lineHeight, margin: style.margin, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); const shellRect = shell ? rect(shell) : null; const contentRect = content ? rect(content) : null; const navRect = nav ? rect(nav) : null; const profileMenus = [...document.querySelectorAll('.profile-menu')].map((menu) => { const menuRect = menu.getBoundingClientRect(); const clippedButtons = [...menu.querySelectorAll('button')].filter((button) => { const buttonRect = button.getBoundingClientRect(); return buttonRect.top < menuRect.top - 1 || buttonRect.bottom > menuRect.bottom + 1; }).map((button) => button.innerText.trim()); return { clientHeight: menu.clientHeight, scrollHeight: menu.scrollHeight, buttonCount: menu.querySelectorAll('button').length, clippedButtons }; }); const profileHero = document.querySelector('.profile-hero'); const profileHeroRect = profileHero?.getBoundingClientRect(); const profileHeroClipped = profileHero && profileHeroRect ? [...profileHero.children].filter((child) => { const childRect = child.getBoundingClientRect(); return childRect.top < profileHeroRect.top - 1 || childRect.bottom > profileHeroRect.bottom + 1; }).map((child) => child.className || child.tagName) : []; const documentScroll = { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, clientHeight: document.documentElement.clientHeight, scrollHeight: document.documentElement.scrollHeight }; let bottomReachable = null; if (content) { const previousScrollTop = content.scrollTop; const previousScrollBehavior = content.style.scrollBehavior; const maxScrollTop = Math.max(0, content.scrollHeight - content.clientHeight); content.style.scrollBehavior = 'auto'; content.scrollTop = content.scrollHeight; bottomReachable = Math.abs(content.scrollTop - maxScrollTop) <= 1; content.scrollTop = previousScrollTop; content.style.scrollBehavior = previousScrollBehavior; } const layout = { viewport: { width: innerWidth, height: innerHeight }, shellRect, contentRect, navRect, profileMenus, profileHeroClipped, documentScroll, contentScroll: content ? { clientHeight: content.clientHeight, scrollHeight: content.scrollHeight, overflowY: getComputedStyle(content).overflowY, canScroll: content.scrollHeight > content.clientHeight + 1, bottomReachable } : null, shellInsideViewport: shellRect ? shellRect.x >= -1 && shellRect.y >= -1 && shellRect.right <= innerWidth + 1 && shellRect.bottom <= innerHeight + 1 : null, navInsideShell: shellRect && navRect ? navRect.x >= shellRect.x - 1 && navRect.y >= shellRect.y - 1 && navRect.right <= shellRect.right + 1 && navRect.bottom <= shellRect.bottom + 1 : null, contentInsideShell: shellRect && contentRect ? contentRect.x >= shellRect.x - 1 && contentRect.y >= shellRect.y - 1 && contentRect.right <= shellRect.right + 1 && contentRect.bottom <= shellRect.bottom + 1 : null }; return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, layout, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
+    const pageState = await client.send('Runtime.evaluate', { expression: `(() => { const stage = document.querySelector('.app-stage'); const shell = document.querySelector('.phone-shell'); const content = document.querySelector('.content-scroll'); const nav = document.querySelector('.bottom-nav'); const selectors = ['.page-title','.primary-button','.welcome-title','.login-hero','.login-hero > taro-image-core','.login-card','.profile-badges','.hero-card','.search-box','.category-chips .chip','.quick-filters > *','.listing-card','.detail-gallery','.detail-gallery .book-cover','.upload-card','.image-grid','.add-image','.tobby-tip','.tobby-tip > taro-image-core','.ai-card','.publish-actions','.notification-grid','.notification-grid > taro-button-core','.notice-copy','.notice-title','.notice-subtitle','.notice-link','.notice-chevron','.notification-feed > taro-button-core','.thread-list > taro-button-core','.thread-list h3 span','.thread-list time','.top-actions .avatar-action','.state-grid taro-button-core','.state-grid taro-image-core','.inline-state taro-image-core','.full-state .state-image','.chat-composer']; const rect = element => { const box = element.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), right: Math.round(box.right), bottom: Math.round(box.bottom) } }; const measure = element => { const box = element.getBoundingClientRect(); const style = getComputedStyle(element); const child = element.querySelector(':scope > img'); const childBox = child?.getBoundingClientRect(); return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height), minHeight: style.minHeight, boxSizing: style.boxSizing, display: style.display, fontSize: style.fontSize, lineHeight: style.lineHeight, margin: style.margin, padding: style.padding, overflow: style.overflow, objectFit: style.objectFit, transform: style.transform, child: childBox ? { x: Math.round(childBox.x), y: Math.round(childBox.y), width: Math.round(childBox.width), height: Math.round(childBox.height), objectFit: getComputedStyle(child).objectFit, transform: getComputedStyle(child).transform } : null }; }; const metrics = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector) ? measure(document.querySelector(selector)) : null])); const stageRect = stage ? rect(stage) : null; const shellRect = shell ? rect(shell) : null; const contentRect = content ? rect(content) : null; const navRect = nav ? rect(nav) : null; const profileMenus = [...document.querySelectorAll('.profile-menu')].map((menu) => { const menuRect = menu.getBoundingClientRect(); const clippedButtons = [...menu.querySelectorAll('button')].filter((button) => { const buttonRect = button.getBoundingClientRect(); return buttonRect.top < menuRect.top - 1 || buttonRect.bottom > menuRect.bottom + 1; }).map((button) => button.innerText.trim()); return { clientHeight: menu.clientHeight, scrollHeight: menu.scrollHeight, buttonCount: menu.querySelectorAll('button').length, clippedButtons }; }); const profileHero = document.querySelector('.profile-hero'); const profileHeroRect = profileHero?.getBoundingClientRect(); const profileHeroClipped = profileHero && profileHeroRect ? [...profileHero.children].filter((child) => { const childRect = child.getBoundingClientRect(); return childRect.top < profileHeroRect.top - 1 || childRect.bottom > profileHeroRect.bottom + 1; }).map((child) => child.className || child.tagName) : []; const documentScroll = { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, clientHeight: document.documentElement.clientHeight, scrollHeight: document.documentElement.scrollHeight }; let bottomReachable = null; if (content) { const previousScrollTop = content.scrollTop; const previousScrollBehavior = content.style.scrollBehavior; const maxScrollTop = Math.max(0, content.scrollHeight - content.clientHeight); content.style.scrollBehavior = 'auto'; content.scrollTop = content.scrollHeight; bottomReachable = Math.abs(content.scrollTop - maxScrollTop) <= 1; content.scrollTop = previousScrollTop; content.style.scrollBehavior = previousScrollBehavior; } const layout = { viewport: { width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio }, stageRect, stageBackground: stage ? getComputedStyle(stage).backgroundImage : '', shellRect, contentRect, navRect, profileMenus, profileHeroClipped, documentScroll, contentScroll: content ? { clientHeight: content.clientHeight, scrollHeight: content.scrollHeight, overflowY: getComputedStyle(content).overflowY, canScroll: content.scrollHeight > content.clientHeight + 1, bottomReachable } : null, stageCoversViewport: stageRect ? stageRect.x <= 0 && stageRect.y <= 0 && stageRect.right >= innerWidth && stageRect.bottom >= innerHeight : null, shellInsideViewport: shellRect ? shellRect.x >= -1 && shellRect.y >= -1 && shellRect.right <= innerWidth + 1 && shellRect.bottom <= innerHeight + 1 : null, navInsideShell: shellRect && navRect ? navRect.x >= shellRect.x - 1 && navRect.y >= shellRect.y - 1 && navRect.right <= shellRect.right + 1 && navRect.bottom <= shellRect.bottom + 1 : null, contentInsideShell: shellRect && contentRect ? contentRect.x >= shellRect.x - 1 && contentRect.y >= shellRect.y - 1 && contentRect.right <= shellRect.right + 1 && contentRect.bottom <= shellRect.bottom + 1 : null }; return { url: location.href, text: document.body.innerText, html: document.body.innerHTML.slice(0, 500), metrics, layout, shell: shell ? { className: shell.className, display: getComputedStyle(shell).display, visibility: getComputedStyle(shell).visibility, text: shell.innerText.slice(0, 160) } : null } })()`, returnByValue: true })
     pages.push({ name, url: pageState.result.value.url, textLength: pageState.result.value.text.length, shellClass: pageState.result.value.shell?.className || null, metrics: pageState.result.value.metrics, layout: pageState.result.value.layout })
     if (!pageState.result.value.shell || pageState.result.value.text.trim().length === 0) diagnostics.push({ type: 'blank-page', text: `${name}: ${pageState.result.value.url}` })
     if (name.startsWith('login-')) {
@@ -259,19 +310,33 @@ try {
     }
     if (name === 'feedback-390' && (!pageState.result.value.text.includes('提交 Bug') || !pageState.result.value.text.includes('提交建议') || !pageState.result.value.text.includes('反馈内容'))) diagnostics.push({ type: 'feedback-form-incomplete', text: name })
     if (expectedPageClass[name] && !pageState.result.value.shell?.className.includes(expectedPageClass[name])) diagnostics.push({ type: 'unexpected-page', text: `${name}: expected ${expectedPageClass[name]}, got ${pageState.result.value.shell?.className || 'no shell'}` })
+    if (name === 'detail-guest-390' && !pageState.result.value.text.includes('ISBN 9787040396638')) diagnostics.push({ type: 'missing-guest-listing-detail', text: name })
     const layout = pageState.result.value.layout
     if (layout?.documentScroll?.scrollWidth > width + 1) diagnostics.push({ type: 'horizontal-overflow', text: `${name}: document ${layout.documentScroll.scrollWidth}px > viewport ${width}px` })
+    if (layout?.stageCoversViewport === false || !layout?.stageBackground || layout.stageBackground === 'none') diagnostics.push({ type: 'background-not-covered', text: `${name}: ${JSON.stringify({ stageRect: layout?.stageRect, viewport: layout?.viewport, background: layout?.stageBackground })}` })
     if (width >= 480 && width < 700 && layout?.shellRect?.width < width - 40) diagnostics.push({ type: 'fixed-compact-canvas', text: `${name}: ${layout.shellRect.width}px shell did not expand with ${width}px viewport` })
     if (layout?.shellInsideViewport === false || layout?.navInsideShell === false || layout?.contentInsideShell === false) diagnostics.push({ type: 'layout-overflow', text: `${name}: ${JSON.stringify(layout)}` })
     if (layout?.contentScroll?.bottomReachable === false) diagnostics.push({ type: 'unreachable-content', text: `${name}: ${JSON.stringify(layout.contentScroll)}` })
     if (layout?.profileMenus?.some((menu) => menu.clippedButtons.length)) diagnostics.push({ type: 'clipped-profile-action', text: `${name}: ${JSON.stringify(layout.profileMenus)}` })
     if (layout?.profileHeroClipped?.length) diagnostics.push({ type: 'clipped-profile-identity', text: `${name}: ${JSON.stringify(layout.profileHeroClipped)}` })
     if (layout?.documentScroll && (layout.documentScroll.scrollWidth > layout.documentScroll.clientWidth + 1 || layout.documentScroll.scrollHeight > layout.documentScroll.clientHeight + 1)) diagnostics.push({ type: 'document-overflow', text: `${name}: ${JSON.stringify(layout.documentScroll)}` })
+    if (name.startsWith('home-') && width >= 1024) {
+      const responsive = await client.send('Runtime.evaluate', { expression: `(() => { const content = document.querySelector('.home-page .content-scroll'); const hero = document.querySelector('.home-page .hero-card'); const nav = document.querySelector('.bottom-nav'); const box = (element) => { const value = element?.getBoundingClientRect(); return value ? { top: value.top, right: value.right, bottom: value.bottom, left: value.left, width: value.width, height: value.height } : null }; const style = content ? getComputedStyle(content) : null; const items = [...document.querySelectorAll('.bottom-nav .nav-item')].map(box); return { hero: box(hero), content: box(content), paddingLeft: Number.parseFloat(style?.paddingLeft || '0'), paddingRight: Number.parseFloat(style?.paddingRight || '0'), nav: box(nav), items }; })()`, returnByValue: true })
+      const value = responsive.result.value
+      const expectedLeft = value.content.left + value.paddingLeft
+      const expectedRight = value.content.right - value.paddingRight
+      if (!value.hero || Math.abs(value.hero.left - expectedLeft) > 2 || Math.abs(value.hero.right - expectedRight) > 2) diagnostics.push({ type: 'hero-not-full-width', text: `${name}: ${JSON.stringify(value)}` })
+      if (value.items.length !== 5 || value.items.some((item, index) => !item || item.height < 36 || item.top < value.nav.top - 1 || item.bottom > value.nav.bottom + 1 || index > 0 && item.top < value.items[index - 1].bottom - 1)) diagnostics.push({ type: 'stacked-navigation', text: `${name}: ${JSON.stringify(value)}` })
+    }
+    if (name === 'messages-390' && !pageState.result.value.text.includes('新消息 · 你好，这本书还在吗？')) diagnostics.push({ type: 'missing-unread-preview', text: name })
+    if (name === 'not-found-390' && !pageState.result.value.text.includes('好像翻错书页了')) diagnostics.push({ type: 'missing-not-found-state', text: name })
     if (name === 'messages-390' && [...(pageState.result.value.metrics['.thread-list h3 span'] ? [pageState.result.value.metrics['.thread-list h3 span']] : [])].some((metric) => metric.height > 28)) diagnostics.push({ type: 'wrapped-campus-label', text: `${name}: ${JSON.stringify(pageState.result.value.metrics['.thread-list h3 span'])}` })
     const result = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await fs.writeFile(path.join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'))
   }
-  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height]) => `${width}x${height}`), pages, diagnostics }))
+  await checkBackNavigation(client, preview, artifactDir)
+  if (process.env.BITERSTORE_CHECK_ADMIN === '1') await checkAdminReview(client, artifactDir)
+  console.log(JSON.stringify({ ok: diagnostics.length === 0, artifactDir, viewports: targets.map(([, width, height, , scale = 1]) => `${width}x${height}@${scale}x`), pages, diagnostics }))
   if (diagnostics.length) process.exitCode = 1
 } finally {
   client?.close()

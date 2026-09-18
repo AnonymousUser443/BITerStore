@@ -293,6 +293,7 @@ button::after { border: 0; }
 .results-heading > text:first-child { font-family: "Songti SC", serif; font-size: 17px; font-weight: 700; }
 .results-heading > text:first-child text { color: #c56e3b; }
 .results-heading > text:last-child { color: #77766e; font-size: 10px; }
+.catalog-load-more { display: block; margin: 16px auto 4px; min-width: 128px; }
 .listing-stack { display: flex; flex-direction: column; }
 .listing-card { position: relative; overflow: hidden; margin-bottom: 12px; padding: 11px; border: 1px solid #d5c7a7; border-radius: 21px; background: #fffdf8; box-shadow: 0 8px 20px rgba(70,71,54,0.07); }
 .listing-main { width: 100%; display: flex; background: transparent; text-align: left; }
@@ -363,6 +364,7 @@ button::after { border: 0; }
 .safety-note { display: flex; align-items: flex-start; margin: 12px 0; padding: 11px 13px; border-radius: 14px; background: #edf0e3; color: #657054; font-size: 11px; line-height: 1.6; }
 .safety-note .glyph { margin-right: 7px; }
 .detail-cta { display: flex; margin-top: 10px; padding: 9px; border: 1px solid #d5c7a7; border-radius: 20px; background: #fffdf8; box-shadow: 0 10px 24px rgba(76,73,54,0.1); }
+.detail-cta .block-user-action { flex: 0 0 66px; color: #914f42; font-size: 11px; }
 .detail-cta > button:first-child { flex: 0 0 88px; color: #777269; font-size: 11px; }
 .detail-cta > .primary-button { flex: 1; }
 
@@ -531,6 +533,7 @@ button::after { border: 0; }
 .chat-user > text { margin-left: 8px; }
 .chat-safety { display: flex; align-items: center; margin: 7px auto 18px; padding: 8px 12px; border: 1px solid #dbd1b9; border-radius: 16px; background: #fffdf8; color: #6a715d; font-size: 10px; }
 .chat-safety .glyph { margin-right: 6px; }
+.chat-block-action { margin-left: auto; padding: 5px 9px; border: 1px solid #caa896; border-radius: 10px; color: #914f42; background: #fff8f3; font-size: 10px; }
 .message-stream { display: flex; flex-direction: column; }
 .message-row { display: flex; align-items: flex-end; margin-bottom: 13px; }
 .message-row.mine { justify-content: flex-end; }
@@ -551,6 +554,8 @@ button::after { border: 0; }
 .chat-composer > button { flex: 0 0 38px; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; margin-right: 6px; border: 1px solid #ded4be; border-radius: 12px; color: #4f5940; }
 .chat-composer input { flex: 1; min-width: 0; height: 42px; box-sizing: border-box; padding: 0 11px; border: 1px solid #dfd4bd; border-radius: 13px; background: #fbf9f2; font-size: 12px; }
 .chat-composer .send-button { flex: 0 0 58px; width: 58px; margin: 0 0 0 6px; border-color: #6f7956; background: #6f7956; color: #ffffff; font-size: 13px; font-weight: 700; }
+.chat-composer.blocked-composer { justify-content: center; color: #8a5a4b; font-size: 11px; }
+.chat-load-older { display: block; margin: 0 auto 12px; }
 
 /* States */
 .states-index .content-scroll { padding-top: 12px; }

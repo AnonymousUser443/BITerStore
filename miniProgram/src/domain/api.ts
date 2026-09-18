@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro'
-import { mediaAdapter, setMediaOwner, STORAGE_NAMESPACE, storageAdapter } from '@/platform'
+import { mediaAdapter, privateMediaAdapter, setMediaOwner, STORAGE_NAMESPACE, storageAdapter } from '@/platform'
 
 type RequestOptions = { method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'; data?: unknown }
 const SESSION_KEY = 'api-session'
@@ -50,7 +50,7 @@ async function refreshSession(session: ApiSession): Promise<ApiSession> {
   const refreshKey = `${session.user.id}:${session.refreshToken || 'cookie'}`
   if (refreshInFlight?.token === refreshKey) return refreshInFlight.promise
   const cookieSession = process.env.TARO_ENV === 'h5' && !session.refreshToken
-  const promise = sendRequest<ApiSession>('/auth/refresh', { method: 'POST', data: cookieSession ? { sessionTransport: 'cookie' } : { refreshToken: session.refreshToken } }, session)
+  const promise = sendRequest<ApiSession>('/auth/refresh', { method: 'POST', data: cookieSession ? {} : { refreshToken: session.refreshToken } }, session)
     .then(async (response) => {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         const message = response.data && typeof response.data === 'object' && 'message' in response.data ? String(response.data.message) : `请求失败（${response.statusCode}）`
@@ -111,6 +111,32 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
 }
 
 export type SessionMode = 'authenticated' | 'guest' | 'anonymous'
+
+export function isPrivateMedia(url: string) {
+  const base = __API_URL__.replace(/\/$/, '')
+  return url.startsWith(`${base}/media/owner/`) || url.startsWith(`${base}/media/conversation/`)
+}
+
+export async function resolveMediaSource(url: string) {
+  if (process.env.TARO_ENV === 'h5' || !isPrivateMedia(url)) return url
+  let session = await readSession()
+  if (!session?.accessToken) throw new Error('请先登录')
+  const userId = session.user.id
+  if (canRefresh(session) && session.expiresAt && session.expiresAt <= Date.now() + REFRESH_EARLY_MS) session = await refreshSession(session)
+  if (session.user.id !== userId || !session.accessToken) throw new Error('会话已切换或退出')
+  let result = await privateMediaAdapter.download(url, session.accessToken)
+  if (result.statusCode === 401 && canRefresh(session)) {
+    session = await refreshSession(session)
+    if (session.user.id !== userId || !session.accessToken) throw new Error('会话已切换或退出')
+    result = await privateMediaAdapter.download(url, session.accessToken)
+  }
+  if ((await readSession())?.user.id !== userId) {
+    await privateMediaAdapter.release(result.tempFilePath)
+    throw new Error('会话已切换或退出')
+  }
+  if (result.statusCode < 200 || result.statusCode >= 300) throw new Error('图片暂时不可用')
+  return result.tempFilePath
+}
 
 export const sessionStore = {
   peek() {

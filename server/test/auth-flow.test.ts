@@ -19,7 +19,7 @@ describe('student-first authentication', () => {
         create: vi.fn(),
         update: vi.fn()
       },
-      session: { create: vi.fn(), updateMany: vi.fn() },
+      session: { create: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
       user: { update: vi.fn() },
       $transaction: vi.fn()
     }
@@ -37,6 +37,25 @@ describe('student-first authentication', () => {
     expect(identity.loginOrCreate).toHaveBeenCalledWith('registration-jwt')
     expect(prisma.session.create).toHaveBeenCalledOnce()
     expect(result.user).toMatchObject({ id: 'student-1', campusStatus: 'VERIFIED' })
+  })
+
+  it('allows a muted student to log in and rotate a refresh token', async () => {
+    const user = { id: 'student-1', role: 'USER', campusStatus: 'VERIFIED', status: 'MUTED', campusIdentities: [{ revokedAt: null }] }
+    identity.loginOrCreate.mockResolvedValue(user)
+    await expect(service.campus('registration-jwt', 'weapp')).resolves.toHaveProperty('accessToken')
+    prisma.session.findUnique.mockResolvedValue({ id: 'old-session', user, platform: 'weapp', expiresAt: new Date(Date.now() + 60_000), revokedAt: null })
+    prisma.session.updateMany.mockResolvedValue({ count: 1 })
+    await expect(service.refresh('old-refresh')).resolves.toHaveProperty('refreshToken')
+    expect(prisma.session.create).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['BANNED', 'DELETED'])('keeps %s accounts unable to log in or refresh', async (status) => {
+    const user = { id: 'student-1', role: 'USER', campusStatus: 'VERIFIED', status }
+    identity.loginOrCreate.mockResolvedValue(user)
+    await expect(service.campus('registration-jwt', 'weapp')).rejects.toMatchObject({ status: 403 })
+    prisma.session.findUnique.mockResolvedValue({ id: 'old-session', user, expiresAt: new Date(Date.now() + 60_000), revokedAt: null })
+    await expect(service.refresh('old-refresh')).rejects.toMatchObject({ status: 401 })
+    expect(prisma.session.create).not.toHaveBeenCalled()
   })
 
   it('does not create an account when an unbound WeChat identity logs in', async () => {

@@ -83,22 +83,30 @@ describe('demoRepository persistence', () => {
     expect(demoRepository.getAuthenticatedSid()).toBe('');
   });
 
-  it('switches Golden pages to the real API after authentication', async () => {
-    demoRepository.markAuthenticated('user-real');
+  it('loads the real public catalog for guests and sends filters to the server', async () => {
+    demoRepository.markAuthenticated('guest');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{
       id: 'real-listing', title: '真实教材', author: '真实卖家', isbn: '9787300000000', category: '教材教辅',
       course: '测试课程', priceCents: 1800, originalPriceCents: 3600, condition: '九成新', campus: '良乡',
       description: '来自服务端的数据', status: 'ACTIVE', sellerId: 'seller-real', createdAt: '2026-08-28T00:00:00.000Z', tags: [],
       seller: { id: 'seller-real', nickname: '真实卖家', campus: '良乡', campusStatus: 'VERIFIED' }, images: [],
-    }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }], nextCursor: 'real-listing' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const books = await demoRepository.listBooks();
+    const page = await demoRepository.listBooksPage({ ...defaultFilters, query: ' 数据结构 ', condition: '九成新', minPrice: 10, maxPrice: 90, sort: '价格从低到高' });
+    const books = page.items;
 
     expect(books).toHaveLength(1);
+    expect(page.nextCursor).toBe('real-listing');
     expect(books[0]).toMatchObject({ id: 'real-listing', title: '真实教材', seller: { name: '真实卖家' } });
-    expect(peekBooks()?.[0]).toMatchObject({ id: 'real-listing', title: '真实教材' });
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/listings?');
+    expect(peekBooks({ ...defaultFilters, query: ' 数据结构 ', condition: '九成新', minPrice: 10, maxPrice: 90, sort: '价格从低到高' })?.[0]).toMatchObject({ id: 'real-listing', title: '真实教材' });
+    const requestedUrl = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
+    expect(requestedUrl).toContain('/api/v1/listings?');
+    expect(requestedUrl).toContain('q=数据结构');
+    expect(requestedUrl).toContain('condition=九成新');
+    expect(requestedUrl).toContain('minPriceCents=1000');
+    expect(requestedUrl).toContain('maxPriceCents=9000');
+    expect(requestedUrl).toContain('sort=price_asc');
   });
 
   it('submits authenticated feedback through the real API', async () => {
@@ -119,11 +127,11 @@ describe('demoRepository persistence', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'listing-a', title: '我的下架商品', priceCents: 1200, condition: '八成新', campus: '良乡', status: 'OFF_SHELF', sellerId: 'user-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ version: 4 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      .mockResolvedValueOnce(new Response('{"status":"PENDING_REVIEW","version":5}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(demoRepository.getBook('listing-a')).resolves.toMatchObject({ id: 'listing-a', status: 'offline' });
-    await demoRepository.updateListingStatus('listing-a', 'available');
+    await expect(demoRepository.updateListingStatus('listing-a', 'available')).resolves.toBe('reviewing');
     expect(String(fetchMock.mock.calls[1][0])).toContain('/api/v1/listings/mine/listing-a');
     expect(String(fetchMock.mock.calls[2][0])).toContain('/api/v1/listings/mine/listing-a');
     expect(fetchMock.mock.calls[3][1]).toMatchObject({ body: JSON.stringify({ status: 'ACTIVE', version: 4 }) });
@@ -152,24 +160,60 @@ describe('demoRepository persistence', () => {
     }));
   });
 
-  it('formats API conversation timestamps for compact message cards', async () => {
+  it('preserves API conversation timestamps so the UI can sort and format them', async () => {
     demoRepository.markAuthenticated('user-real');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-30T00:00:00Z'));
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{
       id: 'thread-real', listingId: 'real-listing', buyerId: 'user-real', sellerId: 'seller-real', lastMessageAt: '2026-08-29T12:24:07.770Z',
-      unread: 0, members: [{ userId: 'user-real', user: { id: 'user-real', nickname: '自己', campus: null } }, { userId: 'seller-real', user: { id: 'seller-real', nickname: '卖家', campus: null } }],
+      unread: 2, members: [{ userId: 'user-real', user: { id: 'user-real', nickname: '自己', campus: null } }, { userId: 'seller-real', user: { id: 'seller-real', nickname: '卖家', campus: null } }],
+      messages: [{ id: '9', senderId: 'seller-real', content: '这本书还在', createdAt: '2026-08-29T12:24:07.770Z' }],
       listing: { id: 'real-listing', title: '真实教材', author: '真实作者', priceCents: 1800, condition: '九成新', campus: '良乡', status: 'ACTIVE', sellerId: 'seller-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] },
     }]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const threads = await demoRepository.listThreads();
 
-    expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', updatedAt: '8月29日', book: { id: 'real-listing', title: '真实教材' } });
+    expect(threads[0]).toMatchObject({ id: 'thread-real', buyerId: 'user-real', unread: 2, updatedAt: '2026-08-29T12:24:07.770Z', messages: [{ id: '9', text: '这本书还在', createdAt: '2026-08-29T12:24:07.770Z' }], book: { id: 'real-listing', title: '真实教材' } });
     expect(peekThreads()?.[0].id).toBe('thread-real');
     expect(peekThread('thread-real')?.book?.title).toBe('真实教材');
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: '商品不存在' }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
     expect(await demoRepository.getBook('real-listing')).toMatchObject({ id: 'real-listing', title: '真实教材' });
     vi.useRealTimers();
+  });
+
+  it('marks every visible message as read and keeps full history after summary refreshes', async () => {
+    demoRepository.markAuthenticated('user-real');
+    const conversation = {
+      id: 'thread-read', listingId: 'listing-read', buyerId: 'user-real', sellerId: 'seller-real', lastMessageAt: '2026-08-30T12:02:00.000Z', unread: 2,
+      members: [{ userId: 'user-real', user: { id: 'user-real', nickname: '自己', campus: '良乡' } }, { userId: 'seller-real', user: { id: 'seller-real', nickname: '卖家', campus: '良乡' } }],
+      listing: { id: 'listing-read', title: '消息测试书', author: '作者', priceCents: 1800, condition: '九成新', campus: '良乡', status: 'ACTIVE', sellerId: 'seller-real', createdAt: '2026-08-28T00:00:00.000Z', images: [] },
+      messages: [{ id: '12', senderId: 'user-real', content: '我刚补充了一句', createdAt: '2026-08-30T12:02:00.000Z' }],
+    };
+    const messagePage = { items: [
+      { id: '10', senderId: 'seller-real', content: '第一条未读', createdAt: '2026-08-30T12:00:00.000Z' },
+      { id: '11', senderId: 'seller-real', content: '第二条未读', createdAt: '2026-08-30T12:01:00.000Z' },
+      conversation.messages[0],
+    ], olderCursor: null };
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ items: [conversation] }))
+      .mockResolvedValueOnce(response(messagePage))
+      .mockResolvedValueOnce(response(conversation))
+      .mockResolvedValueOnce(response({ ok: true }))
+      .mockResolvedValueOnce(response({ items: [{ ...conversation, unread: 0 }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await demoRepository.listThreads();
+    const loaded = await demoRepository.getThread('thread-read');
+
+    expect(loaded?.messages.map((item) => item.id)).toEqual(['10', '11', '12']);
+    expect(loaded?.unread).toBe(0);
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/conversations/thread-read/read', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ messageId: '12' }),
+    }));
+
+    await demoRepository.listThreads();
+    expect(peekThread('thread-read')?.messages.map((item) => item.id)).toEqual(['10', '11', '12']);
   });
 });

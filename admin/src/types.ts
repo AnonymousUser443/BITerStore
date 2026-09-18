@@ -69,6 +69,7 @@ export interface UserRow {
 
 export interface ListingRow {
   id: string
+  version: number
   title: string
   author: string
   isbn: string
@@ -76,12 +77,26 @@ export interface ListingRow {
   priceCents: number
   campus: string
   status: string
-  moderationDecision?: 'IGNORE' | 'BLOCKED' | null
+  moderationDecision?: 'IGNORE' | 'CHANGES_REQUESTED' | 'BLOCKED' | 'ACTIVE' | null
+  moderatedAt?: string | null
   viewCount: number
   createdAt: string
   seller: { id: string; nickname: string; status: string }
-  images: Array<{ id: string; role: string; sortOrder: number }>
+  images: Array<{ id: string; role: string; sortOrder: number; moderationStatus: 'PENDING' | 'APPROVED' | 'REJECTED'; moderationReason?: string | null; moderatedAt?: string | null }>
   _count: { favorites: number; conversations: number }
+}
+
+export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'title' | 'author' | 'isbn' | 'category' | 'priceCents' | 'campus' | 'status' | 'seller' | 'createdAt'> {
+  course: string
+  condition: string
+  description: string
+  originalPriceCents?: number | null
+  tags: string[]
+  deletedAt?: string | null
+  updatedAt: string
+  moderationDecision?: string | null
+  moderationReason?: string | null
+  images: Array<{ id: string; role: string; moderationStatus: string; moderationReason?: string | null }>
 }
 
 export interface ReportRow {
@@ -118,11 +133,18 @@ export interface AuditRow {
   ip?: string | null
   createdAt: string
   actor?: { id: string; nickname: string; role: string } | null
+  target?: { label: string; status: string } | null
+}
+
+export interface ListingSummary {
+  total: number
+  counts: Record<string, number>
 }
 
 export interface PendingAction {
   targetType: TargetType
   targetId: string
+  version?: number
   targetLabel: string
   action: string
   actionLabel: string

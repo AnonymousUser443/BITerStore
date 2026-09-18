@@ -27,10 +27,24 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, tokenO
   return response.json() as Promise<T>
 }
 
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = sessionStorage.getItem(ADMIN_TOKEN_KEY)
+  const response = await fetch(`${API_ROOT}${path}`, {
+    credentials: 'same-origin',
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string | string[] } | null
+    const message = Array.isArray(payload?.message) ? payload.message.join('；') : payload?.message
+    throw new ApiError(message || `图片加载失败（${response.status}）`, response.status)
+  }
+  return response.blob()
+}
+
 export async function refreshBrowserSession() {
   return apiRequest('/auth/refresh', {
     method: 'POST',
-    body: JSON.stringify({ sessionTransport: 'cookie' })
+    body: '{}'
   }, null)
 }
 

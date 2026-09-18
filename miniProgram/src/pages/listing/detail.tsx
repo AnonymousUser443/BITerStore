@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { Button, Image, Swiper, SwiperItem, Text, View } from '@tarojs/components'
-import { isNetworkWebp } from '@/assets'
+import { Button, Swiper, SwiperItem, Text, View } from '@tarojs/components'
+import { ListingImage } from '@/components/ListingImage'
 import { AppShell, Avatar, BookCover } from '@/components/ui'
 import { Glyph } from '@/components/Glyph'
 import { demoRepository, getUser } from '@/domain/repository'
@@ -11,24 +11,33 @@ import { feedbackAdapter, mediaAdapter, navigationAdapter } from '@/platform'
 
 export default function ListingDetailPage() {
   const params = Taro.getCurrentInstance().router?.params
-  const id = params?.id || 'math-7'
+  const id = params?.id || ''
   const ownerView = params?.mine === '1'
   const [item, setItem] = useState<Listing | undefined>(() => demoRepository.peekListing(id))
   const [favorite, setFavorite] = useState(false)
+  const [blocked, setBlocked] = useState(false)
   const [localImages, setLocalImages] = useState<string[]>([])
   const [viewerId, setViewerId] = useState<string>()
-  const [pendingAction, setPendingAction] = useState<'favorite' | 'contact'>()
-  useEffect(() => { void demoRepository.getListing(id, { owner: ownerView }).then(setItem).catch(() => navigationAdapter.go('/pages/states/index?type=not-found')) }, [id, ownerView])
+  const [pendingAction, setPendingAction] = useState<'favorite' | 'contact' | 'block'>()
+  useEffect(() => {
+    if (!id) { void navigationAdapter.go('/pages/states/index?type=not-found'); return }
+    void demoRepository.getListing(id, { owner: ownerView }).then(setItem).catch(() => navigationAdapter.go('/pages/states/index?type=not-found'))
+  }, [id, ownerView])
   useEffect(() => { if (item?.imageUrls?.length) return setLocalImages(item.imageUrls); if (item?.mediaIds.length) void mediaAdapter.list().then((media) => setLocalImages(media.filter((value) => item.mediaIds.includes(value.id)).map((value) => value.uri))) }, [item])
   useEffect(() => {
     let active = true
     void getAuthenticatedUserId().then(async (userId) => {
       if (!active) return
       setViewerId(userId)
-      if (userId) setFavorite((await demoRepository.listFavorites()).some((value) => value.id === id))
+      if (userId) {
+        const [favorites, blockedUsers] = await Promise.all([demoRepository.listFavorites(), demoRepository.listBlockedUsers()])
+        if (!active) return
+        setFavorite(favorites.some((value) => value.id === id))
+        if (item && item.sellerId !== userId) setBlocked(blockedUsers.some((value) => value.id === item.sellerId))
+      }
     }).catch(() => undefined)
     return () => { active = false }
-  }, [id])
+  }, [id, item])
   if (!item) return <AppShell title='商品详情' back><View className='empty'>正在翻找这本书…</View></AppShell>
   const seller = item.seller || getUser(item.sellerId)
   const ownListing = viewerId === item.sellerId
@@ -46,6 +55,7 @@ export default function ListingDetailPage() {
     if (!await requireAccount('请先使用学号登录后联系卖家')) return
     const userId = viewerId || await getAuthenticatedUserId()
     if (userId === item.sellerId) return feedbackAdapter.toast('不能联系自己发布的商品')
+    if (blocked) return feedbackAdapter.toast('请先解除对该卖家的拉黑')
     if (pendingAction) return
     setPendingAction('contact')
     try { const thread = await demoRepository.ensureThread(item.id); await navigationAdapter.go(`/pages/chat/index?id=${thread}`) }
@@ -58,13 +68,23 @@ export default function ListingDetailPage() {
     try { await demoRepository.reportListing(item.id, '商品信息不当或疑似虚假'); await feedbackAdapter.toast('举报已提交') }
     catch (cause) { await feedbackAdapter.toast(cause instanceof Error ? cause.message : '举报提交失败') }
   }
+  const toggleBlocked = async () => {
+    if (!await requireAccount('请先使用学号登录后管理拉黑')) return
+    if (ownListing || pendingAction) return
+    const next = !blocked
+    if (next && !await feedbackAdapter.confirm('拉黑卖家', '拉黑后双方无法新建会话或继续发送消息，历史消息仍可查看。')) return
+    setPendingAction('block')
+    try { await demoRepository.setBlocked(item.sellerId, next); setBlocked(next); await feedbackAdapter.toast(next ? '已拉黑该卖家' : '已解除拉黑') }
+    catch (cause) { await feedbackAdapter.toast(cause instanceof Error ? cause.message : '拉黑操作失败') }
+    finally { setPendingAction(undefined) }
+  }
   const unavailable = item.status !== 'available'
-  const label = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核' }[item.status]
+  const label = { available: '可交易', sold: '已售', offline: '已下架', draft: '草稿', reviewing: '待审核', changes_requested: '待修改' }[item.status]
   return <AppShell title='商品详情' back className='detail-page'>
-    <View className='detail-gallery-shell'><Swiper className='detail-gallery' indicatorDots={localImages.length > 1} indicatorColor='rgba(255,255,255,.58)' indicatorActiveColor='#ffffff' autoplay={localImages.length > 1} circular={localImages.length > 1} interval={4000} duration={500}>{localImages.length ? localImages.map((url, index) => <SwiperItem key={`${url}-${index}`}><Image className='detail-slide' src={url} webp={isNetworkWebp(url)} mode='aspectFit' /></SwiperItem>) : <SwiperItem><BookCover listing={item} /></SwiperItem>}</Swiper>{unavailable && <Text className='gallery-status'>{label}</Text>}</View>
+    <View className='detail-gallery-shell'><Swiper className='detail-gallery' indicatorDots={localImages.length > 1} indicatorColor='rgba(255,255,255,.58)' indicatorActiveColor='#ffffff' autoplay={localImages.length > 1} circular={localImages.length > 1} interval={4000} duration={500}>{localImages.length ? localImages.map((url, index) => <SwiperItem key={`${url}-${index}`}><ListingImage className='detail-slide' src={url} mode='aspectFit' /></SwiperItem>) : <SwiperItem><BookCover listing={item} /></SwiperItem>}</Swiper>{unavailable && <Text className='gallery-status'>{label}</Text>}</View>
     <View className='detail-card'><View className='detail-title'><View><Text className={`status-pill ${item.status}`}>{label}</Text><Text className='detail-heading'>{item.title}</Text><Text className='detail-author'>{item.author}</Text></View><Button id='e2e-detail-favorite' disabled={pendingAction === 'favorite'} onClick={toggleFavorite}><Glyph name='heart' />{favorite ? '✓' : ''}</Button></View><View className='detail-price'><Text className='detail-current-price'>¥{item.price.toFixed(2)}</Text><Text className='detail-condition'>{item.condition}</Text></View><View className='detail-facts'><Text>⌖ {item.campus}校区</Text>{item.course.trim() ? <Text>▥ {item.course}</Text> : null}<Text>ⓘ ISBN {item.isbn}</Text></View><View className='description-block'><Text className='description-title'>书籍简介</Text><Text className='description-copy'>{item.description}</Text><View>{item.tags.map((tag) => <Text key={tag}>#{tag}</Text>)}</View></View></View>
-    <View className='seller-card'><Avatar user={seller} size={52} /><View><Text className='seller-name'>{seller.name} ◈</Text><Text className='seller-campus'>{seller.campus}校区 · 已完成校园认证</Text><Text className='seller-response'>{seller.responseTime}</Text></View><Button disabled={unavailable || pendingAction === 'contact'} onClick={contact}>{ownListing ? '本人商品' : pendingAction === 'contact' ? '正在联系…' : '联系'}</Button></View>
+    <View className='seller-card'><Avatar user={seller} size={52} /><View><Text className='seller-name'>{seller.name} ◈</Text><Text className='seller-campus'>{seller.campus}校区 · 已完成校园认证</Text><Text className='seller-response'>{seller.responseTime}</Text></View><Button disabled={unavailable || blocked || pendingAction === 'contact'} onClick={contact}>{ownListing ? '本人商品' : blocked ? '已拉黑' : pendingAction === 'contact' ? '正在联系…' : '联系'}</Button></View>
     <View className='safety-note'><Glyph name='shield' />建议在校内公共场所当面验书，确认书况后再付款。</View>
-    <View className='detail-cta'><Button className='report-action' onClick={report}><Glyph name='warning' />举报</Button><Button id='e2e-detail-contact' className='primary-button' disabled={unavailable || pendingAction === 'contact'} onClick={contact}><Glyph name='message' />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</Button></View>
+    <View className={`detail-cta ${!ownListing ? 'three-actions' : ''}`}><Button className='report-action' onClick={report}><Glyph name='warning' />举报</Button>{!ownListing && <Button className={`block-user-action ${blocked ? 'is-active' : ''}`} disabled={pendingAction === 'block'} onClick={toggleBlocked}><Glyph name='shield' />{blocked ? '解除' : '拉黑'}</Button>}<Button id='e2e-detail-contact' className='primary-button' disabled={unavailable || blocked || pendingAction === 'contact'} onClick={contact}><Glyph name='message' />{unavailable ? '当前不可联系' : ownListing ? '这是我的商品' : blocked ? '已拉黑卖家' : pendingAction === 'contact' ? '正在联系卖家…' : '联系卖家'}</Button></View>
   </AppShell>
 }

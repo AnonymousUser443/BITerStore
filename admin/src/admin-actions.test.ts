@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { accessSummary, listingActions, listingDetailHref, reportActions, userActions } from './App'
+import { accessSummary, listingActions, listingReviewImages, reportActions, userActions } from './App'
+import { listingReviewPath } from './ListingDetailDialog'
 import type { AdminIdentity, ListingRow, ReportRow, UserRow } from './types'
 
 const identity: AdminIdentity = { id: 'operator', nickname: '管理员', role: 'ADMIN' }
@@ -8,7 +9,7 @@ const user = (values: Partial<UserRow> = {}): UserRow => ({
   adminTotpEnabled: false, createdAt: '', updatedAt: '', recentAccess: [], _count: { listings: 0, reports: 0 }, ...values
 })
 const listing = (status: string): ListingRow => ({
-  id: 'listing-1', title: '测试教材', author: '作者', isbn: '9780000000000', category: '教材',
+  id: 'listing-1', version: 7, title: '测试教材', author: '作者', isbn: '9780000000000', category: '教材',
   priceCents: 1200, campus: '良乡', status, viewCount: 0, createdAt: '',
   seller: { id: 'seller-1', nickname: '卖家', status: 'ACTIVE' }, images: [],
   _count: { favorites: 0, conversations: 0 }
@@ -39,8 +40,10 @@ describe('admin action visibility', () => {
   })
 
   it('only offers state-appropriate listing and report actions', () => {
-    expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
-    expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual(['IGNORE', 'BLOCKED'])
+    expect(listingActions(listing('PENDING_REVIEW'))[0].version).toBe(7)
+    expect(listingActions(listing('ACTIVE')).map((item) => item.action)).toEqual(['OFF_SHELF', 'BLOCKED'])
+    expect(listingActions(listing('SOLD')).map((item) => item.action)).toEqual([])
+    expect(listingActions(listing('PENDING_REVIEW')).map((item) => item.action)).toEqual(['ACTIVE', 'CHANGES_REQUESTED', 'BLOCKED'])
     expect(listingActions({ ...listing('SOLD'), moderationDecision: 'IGNORE' })).toEqual([])
     expect(listingActions(listing('BLOCKED'))).toEqual([])
     expect(listingActions(listing('DRAFT'))).toEqual([])
@@ -48,8 +51,20 @@ describe('admin action visibility', () => {
     expect(reportActions(report('RESOLVED'))).toEqual([])
   })
 
-  it('builds a safe H5 product detail URL', () => {
-    expect(listingDetailHref('listing/id with spaces')).toBe('/books?id=listing%2Fid%20with%20spaces')
+  it('loads review details through the authenticated admin API, including encoded ids', () => {
+    expect(listingReviewPath('listing/id with spaces')).toBe('/admin/listings/listing%2Fid%20with%20spaces')
+  })
+
+  it('shows both the cover and private ISBN evidence in the moderation queue', () => {
+    const images = listingReviewImages({
+      ...listing('PENDING_REVIEW'),
+      images: [
+        { id: 'cover-1', role: 'COVER', sortOrder: 0, moderationStatus: 'PENDING' },
+        { id: 'isbn-1', role: 'ISBN', sortOrder: 1, moderationStatus: 'PENDING' }
+      ]
+    })
+    expect(images.cover?.id).toBe('cover-1')
+    expect(images.isbnEvidence?.id).toBe('isbn-1')
   })
 
   it('labels access channels and device classes for administrators', () => {

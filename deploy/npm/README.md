@@ -15,7 +15,7 @@ Local ports:
 Connect to the admin UI through SSH:
 
 ```bash
-ssh -L 19081:127.0.0.1:19081 -p 33016 young@vip.hb.2.frp.one
+ssh -L 19081:127.0.0.1:19081 -p <ssh-port> <ssh-user>@<ssh-host>
 ```
 
 Create a proxy host for `store.young581.com` using `http` and upstream `nginx:80`.

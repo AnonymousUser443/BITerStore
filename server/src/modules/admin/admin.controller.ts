@@ -1,18 +1,20 @@
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, NotFoundException, Post, Query, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, NotFoundException, Optional, Param, Post, Query, UseGuards } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
+import { reportProgressBody, reportStatusLabels, reportTargetLabels } from '../moderation/report-progress.js'
 import { AdminGuard, AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
+import { CatalogCacheService } from '../../infra/catalog-cache.service.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 
 const userStatuses = ['ACTIVE', 'MUTED', 'BANNED', 'DELETED'] as const
 const roles = ['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN'] as const
 const campusStatuses = ['UNVERIFIED', 'PENDING', 'VERIFIED', 'EXPIRED', 'REVOKED'] as const
-const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
+const listingStatuses = ['DRAFT', 'PENDING_REVIEW', 'CHANGES_REQUESTED', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED'] as const
 const listingReviewStates = ['PENDING', 'REVIEWED', 'ALL'] as const
 const reportStatuses = ['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED'] as const
 const feedbackTypes = ['BUG', 'SUGGESTION'] as const
 const actionsByTarget = {
   USER: ['ACTIVE', 'MUTED', 'BANNED', 'REVOKE_SESSIONS', 'ROLE_USER', 'ROLE_MODERATOR', 'ROLE_ADMIN'],
-  LISTING: ['ACTIVE', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
+  LISTING: ['ACTIVE', 'CHANGES_REQUESTED', 'OFF_SHELF', 'BLOCKED', 'IGNORE'],
   REPORT: ['PROCESSING', 'RESOLVED', 'REJECTED']
 } as const
 const roleRank: Record<string, number> = { USER: 0, MODERATOR: 1, ADMIN: 2, SUPER_ADMIN: 3 }
@@ -21,16 +23,17 @@ const userStatusTransitions: Record<string, readonly string[]> = {
 }
 const listingActionSources: Record<string, readonly string[]> = {
   ACTIVE: ['BLOCKED', 'OFF_SHELF', 'PENDING_REVIEW'],
+  CHANGES_REQUESTED: ['PENDING_REVIEW'],
   OFF_SHELF: ['ACTIVE', 'RESERVED', 'PENDING_REVIEW'],
   BLOCKED: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW'],
-  IGNORE: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'PENDING_REVIEW']
+  IGNORE: ['ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF']
 }
 const reportStatusTransitions: Record<string, readonly string[]> = {
   OPEN: ['PROCESSING', 'RESOLVED', 'REJECTED'], PROCESSING: ['RESOLVED', 'REJECTED'], RESOLVED: [], REJECTED: []
 }
 
 type TargetType = keyof typeof actionsByTarget
-type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string }
+type ActionBody = { targetType: TargetType; targetId: string; action: string; reason?: string; requestId?: string; version?: number }
 
 function pageOptions(pageRaw?: string, pageSizeRaw?: string) {
   const page = Math.max(1, Number.parseInt(pageRaw || '1', 10) || 1)
@@ -50,7 +53,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 @Controller('admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly catalogCache?: CatalogCacheService) {}
 
   @Get('metrics')
   async metrics() {
@@ -148,44 +151,71 @@ export class AdminController {
     const status = requireValue(statusRaw, listingStatuses, '商品状态')
     const reviewState = requireValue(reviewStateRaw, listingReviewStates, '处置状态') || 'PENDING'
     const { page, pageSize, skip } = pageOptions(pageRaw, pageSizeRaw)
-    const decisions = await this.prisma.moderationAction.findMany({
-      where: { targetType: 'LISTING' },
-      select: { targetId: true, action: true, createdAt: true },
-      orderBy: { createdAt: 'desc' }
-    })
-    const latestAction = new Map<string, string>()
-    for (const decision of decisions) if (!latestAction.has(decision.targetId)) latestAction.set(decision.targetId, decision.action)
-    const latestDecision = new Map([...latestAction].filter(([, action]) => ['IGNORE', 'BLOCKED'].includes(action)))
-    const reviewedIds = [...latestDecision.keys()]
     const filters: Prisma.ListingWhereInput[] = [{ deletedAt: null }]
     if (status) filters.push({ status })
     if (q) filters.push({ OR: [
         { title: { contains: q, mode: 'insensitive' as const } },
         { author: { contains: q, mode: 'insensitive' as const } },
         { isbn: { contains: q, mode: 'insensitive' as const } },
+        { id: { contains: q, mode: 'insensitive' as const } },
         { seller: { nickname: { contains: q, mode: 'insensitive' as const } } }
     ] })
-    if (reviewState === 'PENDING') filters.push({ status: { not: 'BLOCKED' }, id: { notIn: reviewedIds } })
-    if (reviewState === 'REVIEWED') filters.push({ OR: [{ status: 'BLOCKED' }, { id: { in: reviewedIds } }] })
+    // The workbench is a review queue, not a list of every record that has never
+    // received a moderation marker. Sold/off-shelf legacy records may not have a
+    // marker, but they must never reappear as new work.
+    if (reviewState === 'PENDING') filters.push({ status: 'PENDING_REVIEW' })
+    if (reviewState === 'REVIEWED') filters.push({ OR: [{ status: 'BLOCKED' }, { moderationDecision: { not: null } }] })
     const where: Prisma.ListingWhereInput = { AND: filters }
     const [items, total] = await Promise.all([
       this.prisma.listing.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: reviewState === 'PENDING' ? [{ createdAt: 'asc' as const }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'desc' as const }],
         skip,
         take: pageSize,
         include: {
           seller: { select: { id: true, nickname: true, status: true } },
-          images: { select: { id: true, role: true, sortOrder: true }, orderBy: { sortOrder: 'asc' } },
+          images: { select: { id: true, role: true, sortOrder: true, moderationStatus: true, moderationReason: true, moderatedAt: true }, orderBy: { sortOrder: 'asc' } },
           _count: { select: { favorites: true, conversations: true } }
         }
       }),
       this.prisma.listing.count({ where })
     ])
-    return pageResult(items.map((item) => ({
-      ...item,
-      moderationDecision: latestDecision.get(item.id) || (item.status === 'BLOCKED' ? 'BLOCKED' : null)
-    })), total, page, pageSize)
+    return pageResult(items, total, page, pageSize)
+  }
+
+  @Get('listing-summary')
+  async listingSummary(@Query('q') qRaw?: string) {
+    const q = qRaw?.trim().slice(0, 80)
+    const base: Prisma.ListingWhereInput = {
+      deletedAt: null,
+      ...(q ? { OR: [
+        { title: { contains: q, mode: 'insensitive' as const } },
+        { author: { contains: q, mode: 'insensitive' as const } },
+        { isbn: { contains: q, mode: 'insensitive' as const } },
+        { id: { contains: q, mode: 'insensitive' as const } },
+        { seller: { nickname: { contains: q, mode: 'insensitive' as const } } }
+      ] } : {})
+    }
+    const statuses = ['PENDING_REVIEW', 'CHANGES_REQUESTED', 'ACTIVE', 'RESERVED', 'SOLD', 'OFF_SHELF', 'BLOCKED', 'DRAFT'] as const
+    const counts = await Promise.all(statuses.map(async (status) => [status, await this.prisma.listing.count({ where: { AND: [base, { status }] } })] as const))
+    return { total: await this.prisma.listing.count({ where: base }), counts: Object.fromEntries(counts) }
+  }
+
+  @Get('listings/:id')
+  async listingDetail(@Param('id') id: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+      select: {
+        id: true, version: true, title: true, author: true, isbn: true,
+        category: true, course: true, condition: true, description: true,
+        priceCents: true, originalPriceCents: true, campus: true, tags: true,
+        status: true, moderationDecision: true, moderationReason: true, moderatedAt: true, deletedAt: true, createdAt: true, updatedAt: true,
+        seller: { select: { id: true, nickname: true, status: true } },
+        images: { where: { uploadedAt: { not: null } }, orderBy: { sortOrder: 'asc' }, select: { id: true, role: true, moderationStatus: true, moderationReason: true } }
+      }
+    })
+    if (!listing) throw new NotFoundException('商品不存在')
+    return listing
   }
 
   @Get('reports')
@@ -233,17 +263,25 @@ export class AdminController {
   @Get('audit-logs')
   async audit(
     @Query('q') qRaw?: string,
+    @Query('resourceType') resourceTypeRaw?: string,
+    @Query('action') actionRaw?: string,
     @Query('page') pageRaw?: string,
     @Query('pageSize') pageSizeRaw?: string
   ) {
     const q = qRaw?.trim().slice(0, 80)
     const { page, pageSize, skip } = pageOptions(pageRaw, pageSizeRaw)
-    const where = q ? { OR: [
+    const resourceType = resourceTypeRaw?.trim().toUpperCase()
+    const action = actionRaw?.trim().toUpperCase()
+    const where = {
+      ...(resourceType ? { resourceType } : {}),
+      ...(action ? { action } : {}),
+      ...(q ? { OR: [
       { action: { contains: q, mode: 'insensitive' as const } },
       { resourceType: { contains: q, mode: 'insensitive' as const } },
       { resourceId: { contains: q, mode: 'insensitive' as const } },
       { actor: { nickname: { contains: q, mode: 'insensitive' as const } } }
-    ] } : {}
+    ] } : {})
+    }
     const [records, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where, orderBy: { createdAt: 'desc' }, skip, take: pageSize,
@@ -251,7 +289,11 @@ export class AdminController {
       }),
       this.prisma.auditLog.count({ where })
     ])
-    const items = records.map((item) => ({ ...item, id: item.id.toString() }))
+    const listingIds = records.filter((item) => item.resourceType === 'LISTING' && item.resourceId).map((item) => item.resourceId as string)
+    const listingTargets = listingIds.length
+      ? new Map((await this.prisma.listing.findMany({ where: { id: { in: listingIds } }, select: { id: true, title: true, status: true } })).map((item) => [item.id, { label: item.title, status: item.status }]))
+      : new Map<string, { label: string; status: string }>()
+    const items = records.map((item) => ({ ...item, id: item.id.toString(), target: item.resourceType === 'LISTING' && item.resourceId ? listingTargets.get(item.resourceId) || null : null }))
     return pageResult(items, total, page, pageSize)
   }
 
@@ -290,6 +332,9 @@ export class AdminController {
     if (!(actionsByTarget[body.targetType] as readonly string[]).includes(body.action)) throw new BadRequestException('该对象不支持此处置动作')
     const providedReason = body.reason?.trim() || ''
     if (providedReason.length > 300) throw new BadRequestException('处置原因不能超过 300 个字符')
+    if (body.targetType === 'LISTING' && ['BLOCKED', 'OFF_SHELF', 'CHANGES_REQUESTED'].includes(body.action) && !providedReason) {
+      throw new BadRequestException('退回修改、下架或违规屏蔽必须填写原因')
+    }
     const reason = providedReason || '管理员未填写原因'
     const requestId = body.requestId?.trim() || randomRequestId()
     if (requestId.length > 100) throw new BadRequestException('请求标识过长')
@@ -297,7 +342,9 @@ export class AdminController {
     const actorRecord = await this.prisma.user.findUnique({ where: { id: actor.id }, select: { id: true, role: true, status: true } })
     if (!actorRecord || actorRecord.status !== 'ACTIVE' || !['MODERATOR', 'ADMIN', 'SUPER_ADMIN'].includes(actorRecord.role)) throw new ForbiddenException('管理员账号当前不可用')
 
-    return this.prisma.$transaction(async (tx) => {
+    let result: { ok: boolean; repeated: boolean }
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.auditLog.findFirst({
         where: { requestId }, select: { actorId: true, action: true, resourceType: true, resourceId: true }
       })
@@ -331,31 +378,74 @@ export class AdminController {
       }
 
       if (body.targetType === 'LISTING') {
-        const target = await tx.listing.findUnique({ where: { id: body.targetId }, select: { id: true, status: true, deletedAt: true } })
+        const target = await tx.listing.findUnique({
+          where: { id: body.targetId },
+          select: {
+            id: true, title: true, sellerId: true, status: true, deletedAt: true, version: true, moderationDecision: true,
+            images: { where: { uploadedAt: { not: null } }, select: { role: true } }
+          }
+        })
         if (!target) throw new NotFoundException('商品不存在')
         if (target.deletedAt) throw new BadRequestException('当前商品状态不支持此操作')
+        if (!Number.isSafeInteger(body.version) || body.version !== target.version) throw new ConflictException('商品已更新，请刷新后重新审核')
         if (body.action === 'IGNORE') {
           if (!listingActionSources.IGNORE.includes(target.status)) throw new BadRequestException('当前商品状态不支持忽略')
+          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: { moderationDecision: target.moderationDecision === 'ACTIVE' ? 'ACTIVE' : 'IGNORE', moderatedAt: new Date(), version: { increment: 1 } } })
+          if (!changed.count) throw new ConflictException('商品已更新，请刷新后重新审核')
         } else {
           if (!listingActionSources[body.action]?.includes(target.status)) throw new BadRequestException('当前商品状态不支持此操作')
-          await tx.listing.update({ where: { id: target.id }, data: { status: body.action as 'ACTIVE' | 'OFF_SHELF' | 'BLOCKED', version: { increment: 1 } } })
+          if (body.action === 'ACTIVE' && (!target.images.some((image) => image.role === 'COVER') || !target.images.some((image) => image.role === 'ISBN'))) {
+            throw new BadRequestException('商品缺少已上传的封面或 ISBN 页，不能审核上架')
+          }
+          const changed = await tx.listing.updateMany({ where: { id: target.id, version: body.version, deletedAt: null }, data: {
+            status: body.action as 'ACTIVE' | 'CHANGES_REQUESTED' | 'OFF_SHELF' | 'BLOCKED',
+            moderationDecision: body.action,
+            moderationReason: body.action === 'CHANGES_REQUESTED' || body.action === 'BLOCKED' ? reason : null,
+            moderatedAt: new Date(), version: { increment: 1 }
+          } })
+          if (!changed.count) throw new ConflictException('商品已更新，请刷新后重新审核')
+          if (body.action === 'ACTIVE') {
+            await tx.listingImage.updateMany({ where: { listingId: target.id, uploadedAt: { not: null } }, data: { moderationStatus: 'APPROVED', moderationReason: null, moderatedAt: new Date() } })
+          } else if (body.action === 'BLOCKED') {
+            await tx.listingImage.updateMany({ where: { listingId: target.id, uploadedAt: { not: null } }, data: { moderationStatus: 'REJECTED', moderationReason: reason, moderatedAt: new Date() } })
+          }
+          await tx.notification.create({
+            data: {
+              userId: target.sellerId,
+              type: 'system',
+              title: body.action === 'ACTIVE' ? '商品审核通过' : body.action === 'CHANGES_REQUESTED' ? '商品需要修改后重新提交' : body.action === 'BLOCKED' ? '商品审核未通过' : '商品状态已更新',
+              body: `${target.title}：${body.action === 'CHANGES_REQUESTED' ? `请修改后重新提交。原因：${reason}` : reason}`.slice(0, 300)
+            }
+          })
         }
       }
 
       if (body.targetType === 'REPORT') {
-        const target = await tx.report.findUnique({ where: { id: body.targetId }, select: { id: true, status: true } })
+        const target = await tx.report.findUnique({ where: { id: body.targetId }, select: { id: true, reporterId: true, status: true, targetType: true, targetId: true, reason: true } })
         if (!target) throw new NotFoundException('举报工单不存在')
         if (!reportStatusTransitions[target.status]?.includes(body.action)) throw new BadRequestException('当前工单状态不支持此操作')
         await tx.report.update({
           where: { id: target.id },
           data: { status: body.action as 'PROCESSING' | 'RESOLVED' | 'REJECTED', resolution: reason, assigneeId: actor.id }
         })
+        const label = await reportTargetLabels(tx, [target])
+        await tx.notification.create({ data: { userId: target.reporterId, type: 'system', title: `举报处理进度 · ${reportStatusLabels[body.action]}`, body: reportProgressBody(target, label(target), body.action, reason) } })
       }
 
       await tx.moderationAction.create({ data: { operatorId: actor.id, targetType: body.targetType, targetId: body.targetId, action: body.action, reason } })
       await tx.auditLog.create({ data: { actorId: actor.id, action: body.action, resourceType: body.targetType, resourceId: body.targetId, requestId, metadata: { reason } } })
-      return { ok: true, repeated: false }
-    })
+        return { ok: true, repeated: false }
+      })
+    } catch (cause) {
+      const target = (cause as { meta?: { target?: unknown } }).meta?.target
+      const requestIdConflict = (cause as { code?: string }).code === 'P2002' && String(target || '').includes('requestId')
+      if (!requestIdConflict) throw cause
+      const existing = await this.prisma.auditLog.findFirst({ where: { requestId }, select: { actorId: true, action: true, resourceType: true, resourceId: true } })
+      if (existing?.actorId === actor.id && existing.action === body.action && existing.resourceType === body.targetType && existing.resourceId === body.targetId) result = { ok: true, repeated: true }
+      else throw new ConflictException('请求标识已用于其他处置操作')
+    }
+    if (body.targetType === 'LISTING' || body.targetType === 'USER') await this.catalogCache?.invalidate()
+    return result
   }
 }
 

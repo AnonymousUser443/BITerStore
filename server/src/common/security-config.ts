@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 
 // Development/test processes get a fresh, process-local fallback so a missing
 // local .env never turns into a shared signing key. Production must configure
@@ -6,8 +6,9 @@ import { randomBytes } from 'node:crypto'
 // accepting requests.
 const ephemeralAccessSecret = randomBytes(32).toString('base64url')
 const ephemeralTotpSecret = randomBytes(32).toString('base64url')
+const developmentCampusIdentitySecret = 'development-only-campus-identity-hash-key'
 
-function configuredSecret(name: 'ACCESS_TOKEN_SECRET' | 'ADMIN_TOTP_ENCRYPTION_KEY', fallback: string) {
+function configuredSecret(name: 'ACCESS_TOKEN_SECRET' | 'ADMIN_TOTP_ENCRYPTION_KEY' | 'CAMPUS_IDENTITY_HASH_KEY', fallback: string) {
   const value = process.env[name]?.trim()
   if (!value) {
     if (process.env.NODE_ENV === 'production') {
@@ -29,11 +30,16 @@ export function adminTotpEncryptionSecret() {
   return configuredSecret('ADMIN_TOTP_ENCRYPTION_KEY', ephemeralTotpSecret)
 }
 
+export function campusIdentityHashSecret() {
+  return configuredSecret('CAMPUS_IDENTITY_HASH_KEY', developmentCampusIdentitySecret)
+}
+
 export function assertSecurityConfiguration() {
   // Calling both functions performs the production presence/entropy checks.
   const access = accessTokenSecret()
   const totp = adminTotpEncryptionSecret()
-  if (process.env.NODE_ENV === 'production' && access === totp) throw new Error('ACCESS_TOKEN_SECRET and ADMIN_TOTP_ENCRYPTION_KEY must be different in production')
+  const campusIdentity = campusIdentityHashSecret()
+  if (process.env.NODE_ENV === 'production' && new Set([access, totp, campusIdentity]).size !== 3) throw new Error('ACCESS_TOKEN_SECRET, ADMIN_TOTP_ENCRYPTION_KEY and CAMPUS_IDENTITY_HASH_KEY must be different in production')
   assertHttpsConfiguration()
 }
 
@@ -54,13 +60,48 @@ export function assertHttpsConfiguration() {
 }
 
 export function isHttpsRequest(request: { protocol?: string; headers?: Record<string, unknown> }) {
-  const forwarded = request.headers?.['x-forwarded-proto']
-  // A reverse proxy is trusted only in production or when explicitly opted in.
-  if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
-    const value = Array.isArray(forwarded) ? forwarded[0] : forwarded
-    if (typeof value === 'string' && value.split(',')[0].trim().toLowerCase() === 'https') return true
-  }
+  // Fastify derives protocol only through its configured trusted-proxy chain.
+  // Reading X-Forwarded-Proto here again would re-introduce header spoofing.
   return request.protocol?.toLowerCase() === 'https'
+}
+
+export type TrustedProxyFunction = (address: string, hop: number) => boolean
+
+function trustedProxyHops(hops: number): TrustedProxyFunction {
+  return (_address, hop) => hop < hops
+}
+
+export function trustedProxySetting(): false | string[] | TrustedProxyFunction {
+  const cidrs = (process.env.TRUSTED_PROXY_CIDRS || '').split(',').map((value) => value.trim()).filter(Boolean)
+  if (cidrs.length) return cidrs
+  const configuredHops = process.env.TRUST_PROXY_HOPS?.trim()
+  if (configuredHops) {
+    const hops = Number(configuredHops)
+    if (!Number.isInteger(hops) || hops < 0 || hops > 10) throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 10')
+    return hops === 0 ? false : trustedProxyHops(hops)
+  }
+  // The API is reached through the Compose Nginx gateway in production. Trust
+  // that one direct hop by default, never an arbitrary client-supplied chain.
+  if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') return trustedProxyHops(1)
+  return false
+}
+
+export function sanitizedRequestUrl(url?: string) {
+  return (url || '/').split('?', 1)[0]
+}
+
+export function requestLoggerOptions() {
+  return {
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'],
+    serializers: {
+      req(request: { method?: string; url?: string; hostname?: string; ip?: string }) {
+        const remoteAddressHash = request.ip
+          ? createHmac('sha256', accessTokenSecret()).update(request.ip).digest('base64url').slice(0, 20)
+          : undefined
+        return { method: request.method, url: sanitizedRequestUrl(request.url), hostname: request.hostname, remoteAddressHash }
+      }
+    }
+  }
 }
 
 export const API_SECURITY_HEADERS = {
@@ -80,6 +121,19 @@ export function securityHeadersForRequest(request: { url?: string; protocol?: st
   return {
     ...API_SECURITY_HEADERS,
     'Content-Security-Policy': contentSecurityPolicy,
+    ...((path.startsWith('/api/v1/auth')
+      || path.startsWith('/api/v1/me')
+      || path.startsWith('/api/v1/conversations')
+      || path.startsWith('/api/v1/notifications')
+      || path.startsWith('/api/v1/admin')
+      || path.startsWith('/api/v1/uploads')
+      || path.startsWith('/api/v1/reports')
+      || path.startsWith('/api/v1/moderation')
+      || path.startsWith('/api/v1/media/review')
+      || path.startsWith('/api/v1/media/owner')
+      || path.startsWith('/api/v1/media/conversation')
+      || path.startsWith('/api/v1/listings/mine')
+      || path.startsWith('/api/v1/listings/favorites')) ? { 'Cache-Control': 'no-store' } : {}),
     ...(process.env.NODE_ENV === 'production' && isHttpsRequest(request) ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {})
   }
 }
