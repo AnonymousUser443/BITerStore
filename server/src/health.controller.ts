@@ -1,4 +1,4 @@
-import { Controller, Get, Header, ServiceUnavailableException } from '@nestjs/common'
+import { Controller, Get, Header, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3'
 import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
@@ -11,6 +11,7 @@ type ReadinessResult = { status: 'ready' | 'unavailable'; time: string; checks: 
 
 @Controller('health')
 export class HealthController {
+  private readonly logger = new Logger(HealthController.name)
   private readonly s3 = new S3Client({
     region: 'auto',
     endpoint: process.env.R2_ENDPOINT,
@@ -50,6 +51,7 @@ export class HealthController {
   private async runChecks(): Promise<ReadinessResult> {
     const timeout = this.timeoutMilliseconds()
     const checks: Record<string, CheckStatus> = {}
+    const startedAt = Date.now()
     const outcomes = await Promise.allSettled([
       this.withTimeout(this.prisma.$queryRaw`SELECT 1`, timeout),
       this.withTimeout(this.redis.ensureConnected().then(() => this.redis.client.ping()), timeout),
@@ -61,12 +63,25 @@ export class HealthController {
       checks[names[index]] = outcome.status === 'fulfilled'
         ? index < 2 ? 'ok' : outcome.value as CheckStatus
         : 'failed'
+      if (outcome.status === 'rejected') {
+        this.logger.warn(JSON.stringify({
+          event: 'readiness_check_failed',
+          check: names[index],
+          error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+          timeoutMs: timeout,
+          durationMs: Date.now() - startedAt
+        }))
+      }
     })
-    return {
+    const result = {
       status: Object.values(checks).every((status) => status === 'ok' || status === 'skipped') ? 'ready' : 'unavailable',
       time: new Date().toISOString(),
       checks
     }
+    if (result.status === 'unavailable') {
+      this.logger.warn(JSON.stringify({ event: 'readiness_unavailable', ...result, durationMs: Date.now() - startedAt }))
+    }
+    return result
   }
 
   private async checkStorage(timeout: number): Promise<CheckStatus> {
