@@ -73,7 +73,7 @@ export class HealthController {
         }))
       }
     })
-    const result = {
+    const result: ReadinessResult = {
       status: Object.values(checks).every((status) => status === 'ok' || status === 'skipped') ? 'ready' : 'unavailable',
       time: new Date().toISOString(),
       checks
