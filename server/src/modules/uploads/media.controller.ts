@@ -1,7 +1,7 @@
 import { Controller, Get, Header, NotFoundException, Param, StreamableFile, UseGuards } from '@nestjs/common'
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { readFile } from 'node:fs/promises'
-import { resolve, sep } from 'node:path'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { dirname, resolve, sep } from 'node:path'
 import { AdminGuard, AuthGuard, CampusVerifiedGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { PublicCatalogRateLimitGuard } from '../listings/public-catalog-rate-limit.guard.js'
@@ -15,6 +15,10 @@ export class MediaController {
   })
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private storageMode() { return process.env.UPLOAD_STORAGE || 'local' }
+  private useR2() { return this.storageMode() === 'r2' || this.storageMode() === 'dual' }
+  private useLocal() { return this.storageMode() === 'local' || this.storageMode() === 'dual' }
 
   @Get('owner/:id')
   @UseGuards(AuthGuard)
@@ -65,12 +69,32 @@ export class MediaController {
 
   private async stream(image: { objectKey: string; mime: string; size: number }) {
     try {
-      const bytes = process.env.UPLOAD_STORAGE === 'r2'
-        ? await this.readR2(image.objectKey)
-        : await readFile(this.localPath(image.objectKey))
+      let bytes: Buffer
+      if (this.useLocal()) {
+        try { bytes = await readFile(this.localPath(image.objectKey)) }
+        catch (cause) {
+          if (!this.useR2()) throw cause
+          bytes = await this.readR2(image.objectKey)
+          await this.repairLocal(image.objectKey, bytes)
+        }
+      } else {
+        bytes = await this.readR2(image.objectKey)
+      }
       return new StreamableFile(bytes, { type: image.mime, length: image.size })
     } catch {
       throw new NotFoundException('图片不存在')
+    }
+  }
+
+  private async repairLocal(objectKey: string, bytes: Buffer) {
+    const target = this.localPath(objectKey)
+    const temporary = `${target}.repair-${process.pid}-${Date.now()}`
+    try {
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(temporary, bytes, { flag: 'wx' })
+      await rename(temporary, target)
+    } catch {
+      await unlink(temporary).catch(() => undefined)
     }
   }
 

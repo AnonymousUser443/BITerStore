@@ -200,10 +200,15 @@ model ListingImage {
   moderationReason String?
   moderatedAt      DateTime?
   uploadedAt       DateTime?
+  localStoredAt    DateTime?
+  remoteStoredAt   DateTime?
+  backupAttempts   Int              @default(0)
+  backupError      String?
   createdAt        DateTime         @default(now())
   listing          Listing?         @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, uploadedAt])
+  @@index([remoteStoredAt])
   @@index([listingId, moderationStatus, sortOrder])
 }
 

@@ -18,7 +18,9 @@ export class UploadsController {
   private activeImageValidations = 0
   private readonly s3 = new S3Client({ region: 'auto', endpoint: process.env.R2_ENDPOINT, credentials: process.env.R2_ACCESS_KEY_ID ? { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '' } : undefined })
   constructor(private readonly prisma: PrismaService, @Optional() private readonly redis?: RedisService) {}
-  private useR2() { return process.env.UPLOAD_STORAGE === 'r2' }
+  private storageMode() { return process.env.UPLOAD_STORAGE || 'local' }
+  private useR2() { return this.storageMode() === 'r2' || this.storageMode() === 'dual' }
+  private useLocal() { return this.storageMode() === 'local' || this.storageMode() === 'dual' }
   private normalizeMime(value: unknown): SupportedImageMime | undefined {
     const mime = typeof value === 'string' ? value.split(';', 1)[0]?.trim().toLowerCase() : ''
     return allowed.has(mime as SupportedImageMime) ? mime as SupportedImageMime : undefined
@@ -104,16 +106,28 @@ export class UploadsController {
       }
       if (bytes.length !== row.size || bytes.length > MAX_IMAGE_BYTES) throw new ImageValidationError('上传文件与申请大小不一致')
       const metadata = await this.validateImage(bytes, row.mime)
-      if (this.useR2()) {
-        // Persist the exact inspected bytes, not a mutable presigned PUT key.
-        await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
-      } else {
+      if (this.useLocal()) {
         await mkdir(dirname(this.localPath(finalObjectKey)), { recursive: true })
         await writeFile(this.localPath(finalObjectKey), bytes, { flag: 'wx' })
       }
+      if (this.useR2()) {
+        // Persist the exact inspected bytes, not a mutable presigned PUT key.
+        await this.s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET, Key: finalObjectKey, Body: bytes, ContentType: metadata.mime, ContentLength: bytes.length }))
+      }
       const result = await this.prisma.listingImage.updateMany({
         where: { id, ownerId: user.id, uploadedAt: null, objectKey: row.objectKey },
-        data: { objectKey: finalObjectKey, uploadedAt: new Date(), width: metadata.width, height: metadata.height, mime: metadata.mime, size: bytes.length }
+        data: {
+          objectKey: finalObjectKey,
+          uploadedAt: new Date(),
+          localStoredAt: this.useLocal() ? new Date() : null,
+          remoteStoredAt: this.useR2() ? new Date() : null,
+          backupAttempts: this.useR2() ? 1 : 0,
+          backupError: null,
+          width: metadata.width,
+          height: metadata.height,
+          mime: metadata.mime,
+          size: bytes.length
+        }
       })
       committed = result.count === 1
       if (!committed) {
@@ -222,11 +236,16 @@ export class UploadsController {
   }
 
   private async removeObject(objectKey: string) {
+    let firstError: unknown
     if (this.useR2()) {
-      await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey }))
-      return
+      try { await this.s3.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: objectKey })) }
+      catch (cause) { firstError = firstError || cause }
     }
-    await unlink(this.localPath(objectKey)).catch((cause: NodeJS.ErrnoException) => { if (cause.code !== 'ENOENT') throw cause })
+    if (this.useLocal()) {
+      try { await unlink(this.localPath(objectKey)).catch((cause: NodeJS.ErrnoException) => { if (cause.code !== 'ENOENT') throw cause }) }
+      catch (cause) { firstError = firstError || cause }
+    }
+    if (firstError) throw firstError
   }
 
   private positiveLimit(raw: string | undefined, fallback: number) {
