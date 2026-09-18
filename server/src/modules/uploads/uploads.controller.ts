@@ -95,7 +95,7 @@ export class UploadsController {
     let committed = false
     try {
       let bytes: Buffer
-      if (this.useR2()) {
+      if (this.storageMode() === 'r2') {
         const head = await this.s3.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET, Key: row.objectKey }))
         if (head.ContentLength !== row.size || this.normalizeMime(head.ContentType) !== this.normalizeMime(row.mime)) throw new ImageValidationError('上传文件与申请信息不一致')
         bytes = await this.readR2(row.objectKey)
@@ -147,7 +147,11 @@ export class UploadsController {
         throw new ConflictException('上传已取消，请重新上传')
       }
       // Pending cleanup is best-effort; failure cannot undo a committed upload.
-      await this.removeObject(row.objectKey).catch(() => undefined)
+      if (this.storageMode() === 'dual') {
+        await unlink(this.localPath(row.objectKey)).catch(() => undefined)
+      } else {
+        await this.removeObject(row.objectKey).catch(() => undefined)
+      }
       const completed = await findOwned()
       if (!completed) throw new ConflictException('上传已取消，请重新上传')
       return completed
