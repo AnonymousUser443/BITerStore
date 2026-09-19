@@ -21,7 +21,7 @@ import {
   type BitLoginChallenge,
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
-import { clearImages, compressImage, getImages, saveImages, scanIsbnBarcode } from '../lib/image-store';
+import { clearImages, compressImage, getImages, imageToBlob, saveImages, scanIsbnBarcode } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
 import { formatMessageTime, formatThreadTime } from '../lib/date-time';
 import { appPathFromUrl, browserPathForAppPath, exactRouteParam, notificationRouteTypes, stateRouteTypes } from '../lib/routes';
@@ -556,7 +556,7 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
       try {
         isbn = await scanIsbnBarcode(images[1]);
       } catch {
-        const image = await fetch(images[1]).then((response) => response.blob());
+        const image = await imageToBlob(images[1]);
         const recognized = await h5ApiRequest<{ isbn: string }>('/books/isbn/recognize', { method: 'POST', headers: { 'Content-Type': image.type || 'image/jpeg' }, body: image });
         isbn = recognized.isbn;
       }

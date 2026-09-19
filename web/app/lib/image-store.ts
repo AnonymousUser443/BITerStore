@@ -24,10 +24,29 @@ export async function compressImage(file: File, maxDimension = 900, quality = .7
 type BarcodeDetectorLike = { detect(source: ImageBitmap): Promise<Array<{ rawValue: string }>> };
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike;
 
+export async function imageToBlob(image: string): Promise<Blob> {
+  if (image.startsWith('data:')) {
+    const comma = image.indexOf(',');
+    if (comma < 0) throw new Error('图片数据格式无效');
+    const header = image.slice(0, comma);
+    const payload = image.slice(comma + 1);
+    const mime = header.match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg';
+    if (/;base64/i.test(header)) {
+      const binary = atob(payload);
+      const bytes = Uint8Array.from(binary, (value) => value.charCodeAt(0));
+      return new Blob([bytes], { type: mime });
+    }
+    return new Blob([decodeURIComponent(payload)], { type: mime });
+  }
+  const response = await fetch(image);
+  if (!response.ok) throw new Error(`图片加载失败（${response.status}）`);
+  return response.blob();
+}
+
 export async function scanIsbnBarcode(image: string): Promise<string> {
   const Detector = (globalThis as typeof globalThis & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
   if (!Detector) throw new Error('当前浏览器不支持图片条码识别，请手动填写 ISBN');
-  const blob = await fetch(image).then((response) => response.blob());
+  const blob = await imageToBlob(image);
   const bitmap = await createImageBitmap(blob);
   const values = await new Detector({ formats: ['ean_13', 'ean_8'] }).detect(bitmap);
   bitmap.close();
