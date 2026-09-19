@@ -1,4 +1,4 @@
-import { getImages } from './image-store';
+import { getImages, imageToBlob } from './image-store';
 import { h5ApiRequest } from './h5-auth';
 import { sortMessagesChronologically } from './date-time';
 import type { DemoRepository } from './repository';
@@ -170,7 +170,7 @@ async function uploadDraftImages(draft: PublishDraft, onProgress?: (progress: nu
   let completed = 0;
   for (const [index, dataUrl] of images.entries()) {
     if (!dataUrl) continue;
-    const blob = await fetch(dataUrl).then((response) => response.blob());
+    const blob = await imageToBlob(dataUrl);
     const role = index === 0 ? 'COVER' : index === 1 ? 'ISBN' : 'GALLERY';
     const ticket = await h5ApiRequest<{ id: string; uploadUrl: string; authRequired?: boolean }>('/uploads/presign', {
       method: 'POST', body: JSON.stringify({ mime: blob.type || 'image/jpeg', size: blob.size, role }),
