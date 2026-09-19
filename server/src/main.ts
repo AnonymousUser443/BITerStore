@@ -21,7 +21,11 @@ async function bootstrap() {
   })
   await app.register(cookie, { secret: accessTokenSecret() })
   app.setGlobalPrefix('api/v1')
-  app.enableCors({ origin: (process.env.H5_ORIGIN || '').split(',').filter(Boolean), credentials: true })
+  app.enableCors({
+    origin: (process.env.H5_ORIGIN || '').split(',').filter(Boolean),
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']
+  })
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder().setTitle('梨苑儿 API').setVersion('1').addBearerAuth().build()
     SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config))

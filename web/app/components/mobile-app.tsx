@@ -50,6 +50,7 @@ const UI_ASSETS = [
   '/assets/tobby-question.webp', '/assets/tobby-sad.webp', '/assets/tobby-search.webp',
   '/assets/tobby-unavailable.webp',
 ] as const;
+const UI_CRITICAL_ASSETS = UI_ASSETS.slice(0, 5);
 
 const CurrentUserContext = createContext<User | undefined>(undefined);
 function warmAccountSnapshots() { return Promise.allSettled([demoRepository.listFavorites(), demoRepository.listMyListings(), demoRepository.listThreads(), demoRepository.listNotifications()]); }
@@ -135,12 +136,12 @@ function profileToUser(profile: H5Profile): User {
   };
 }
 
-async function warmUiAssetBundle(onProgress: (value: number) => void) {
+async function warmUiAssetBundle(onProgress: (value: number) => void, assets: readonly string[] = UI_ASSETS) {
   const workerReady = 'serviceWorker' in navigator
     ? navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(() => navigator.serviceWorker.ready).catch(() => undefined)
     : Promise.resolve(undefined);
   let completed = 0;
-  await Promise.all(UI_ASSETS.map((src) => new Promise<void>((resolve) => {
+  await Promise.all(assets.map((src) => new Promise<void>((resolve) => {
     const asset = new window.Image();
     let settled = false;
     const done = () => {
@@ -148,7 +149,7 @@ async function warmUiAssetBundle(onProgress: (value: number) => void) {
       settled = true;
       window.clearTimeout(timeout);
       completed += 1;
-      onProgress(Math.round((completed / UI_ASSETS.length) * 100));
+      onProgress(Math.round((completed / assets.length) * 100));
       resolve();
     };
     const timeout = window.setTimeout(done, 12000);
@@ -890,17 +891,21 @@ export function MobileApp({ initialPath }: { initialPath: string }) {
     let active = true;
     const cached = window.localStorage.getItem(UI_ASSET_BUNDLE_KEY) === UI_ASSET_BUNDLE_VERSION;
     if (cached) {
-      void warmUiAssetBundle(() => undefined);
+      void warmUiAssetBundle(() => undefined, UI_CRITICAL_ASSETS);
       return () => { active = false; };
     }
     const started = Date.now();
-    warmUiAssetBundle((value) => { if (active) setAssetProgress(value); }).then(async (complete) => {
-      if (complete) window.localStorage.setItem(UI_ASSET_BUNDLE_KEY, UI_ASSET_BUNDLE_VERSION);
+    warmUiAssetBundle((value) => { if (active) setAssetProgress(value); }, UI_CRITICAL_ASSETS).then(async () => {
       const remaining = Math.max(0, 900 - (Date.now() - started));
       if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
       if (active) { setAssetProgress(100); setAssetsReady(true); }
     });
-    return () => { active = false; };
+    const deferred = window.setTimeout(() => {
+      void warmUiAssetBundle(() => undefined).then((complete) => {
+        if (complete) window.localStorage.setItem(UI_ASSET_BUNDLE_KEY, UI_ASSET_BUNDLE_VERSION);
+      });
+    }, 1500);
+    return () => { active = false; window.clearTimeout(deferred); };
   }, []);
   useEffect(() => {
     let active = true;

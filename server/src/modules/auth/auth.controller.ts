@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { AuthService } from './auth.service.js'
@@ -61,6 +61,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @HttpCode(204)
   async logout(
     @Body() body: unknown,
     @Req() request: FastifyRequest,
