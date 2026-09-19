@@ -153,7 +153,20 @@ function draftPayload(draft: PublishDraft, imageIds: string[]) {
 function putBlob(url: string, blob: Blob, authRequired: boolean, onProgress?: (progress: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open('PUT', url);
+    // Local/dual storage returns an absolute API URL based on PUBLIC_API_URL.
+    // Keep H5 uploads on the origin the user is currently visiting so the
+    // browser sends the first-party session cookie and does not fail a
+    // cross-origin PUT before the request reaches the API.
+    let uploadUrl = url;
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(url, window.location.origin);
+        if (parsed.pathname.startsWith('/api/v1/')) uploadUrl = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+      } catch {
+        // Let XMLHttpRequest report malformed upload URLs below.
+      }
+    }
+    request.open('PUT', uploadUrl);
     request.withCredentials = authRequired;
     request.setRequestHeader('Content-Type', blob.type || 'image/jpeg');
     request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress?.(event.loaded / event.total); };
