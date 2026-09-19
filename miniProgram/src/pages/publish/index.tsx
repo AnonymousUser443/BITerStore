@@ -30,7 +30,14 @@ export default function PublishPage() {
   const publishingRef = useRef(false)
   useDidShow(() => { void requireAccount('请先使用学号登录后发布商品') })
   useEffect(() => { void demoRepository.getDraft().then((saved) => saved && setDraft({ ...saved, clientRequestId: saved.clientRequestId || newPublishRequestId(), coverMediaId: saved.coverMediaId || saved.mediaIds[0], isbnMediaId: saved.isbnMediaId || saved.mediaIds[1] })); void demoRepository.getProfile().then(setSeller).catch(() => undefined) }, [])
-  useEffect(() => { void mediaAdapter.list().then((items) => setPreviews(Object.fromEntries(items.filter((item) => draft.mediaIds.includes(item.id)).map((item) => [item.id, item.uri])))) }, [draft.mediaIds])
+  useEffect(() => {
+    void mediaAdapter.list().then((items) => {
+      const available = new Set(items.map((item) => item.id))
+      const mediaIds = draft.mediaIds.filter((id) => available.has(id))
+      setPreviews(Object.fromEntries(items.filter((item) => mediaIds.includes(item.id)).map((item) => [item.id, item.uri])))
+      if (mediaIds.length !== draft.mediaIds.length) patch({ mediaIds, coverMediaId: draft.coverMediaId && available.has(draft.coverMediaId) ? draft.coverMediaId : undefined, isbnMediaId: draft.isbnMediaId && available.has(draft.isbnMediaId) ? draft.isbnMediaId : undefined })
+    }).catch(() => setPreviews({}))
+  }, [draft.mediaIds])
   const patch = (next: Partial<PublishDraft>) => setDraft((current) => ({ ...current, ...next }))
   const pickRole = async (role: 'coverMediaId' | 'isbnMediaId') => {
     const selected = await mediaAdapter.pick({ count: 1, cameraOnly: true }); const saved = await mediaAdapter.persist(selected); const item = saved[0]; if (!item) return

@@ -199,16 +199,24 @@ function openMediaDb(): Promise<IDBDatabase> {
   })
 }
 async function putH5Media(item: StoredMedia): Promise<StoredMedia> {
-  const blob = await fetch(item.uri).then((response) => response.blob())
+  const response = await fetch(item.uri)
+  if (!response.ok) throw new Error(`media fetch failed (${response.status})`)
+  const blob = await response.blob()
+  if (!blob.size) throw new Error('media is empty')
   const db = await openMediaDb()
   await new Promise<void>((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put({ id: item.id, blob, mime: blob.type || item.mime, size: blob.size }); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
   db.close()
   return { ...item, uri: `idb:${item.id}`, mime: blob.type || item.mime, size: blob.size }
 }
 async function removeH5Media(ids: string[]) {
-  const db = await openMediaDb()
-  await new Promise<void>((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); ids.forEach((id) => tx.objectStore('files').delete(id)); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
-  db.close()
+  try {
+    const db = await openMediaDb()
+    await new Promise<void>((resolve, reject) => { const tx = db.transaction('files', 'readwrite'); ids.forEach((id) => tx.objectStore('files').delete(id)); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
+    db.close()
+  } catch {
+    // Removing stale metadata must remain idempotent when the browser has
+    // evicted or blocked the IndexedDB backing store.
+  }
 }
 async function deleteH5MediaDatabase(name: string) {
   if (typeof globalThis.indexedDB === 'undefined') return
@@ -218,9 +226,15 @@ async function deleteH5MediaDatabase(name: string) {
   })
 }
 async function listH5Media(items: StoredMedia[]): Promise<StoredMedia[]> {
-  const db = await openMediaDb()
-  const resolved = await Promise.all(items.map((item) => new Promise<StoredMedia>((resolve) => { if (!item.uri.startsWith('idb:')) return resolve(item); const request = db.transaction('files').objectStore('files').get(item.id); request.onsuccess = () => resolve(request.result?.blob ? { ...item, uri: globalThis.URL.createObjectURL(request.result.blob) } : item); request.onerror = () => resolve(item) })))
-  db.close(); return resolved
+  let db: IDBDatabase
+  try { db = await openMediaDb() } catch { return items.filter((item) => !item.uri.startsWith('idb:')) }
+  const resolved = await Promise.all(items.map((item) => new Promise<StoredMedia | null>((resolve) => {
+    if (!item.uri.startsWith('idb:')) return resolve(item)
+    const request = db.transaction('files').objectStore('files').get(item.id)
+    request.onsuccess = () => resolve(request.result?.blob ? { ...item, uri: globalThis.URL.createObjectURL(request.result.blob) } : null)
+    request.onerror = () => resolve(null)
+  })))
+  db.close(); return resolved.filter((item): item is StoredMedia => Boolean(item))
 }
 
 export function detectImageMime(value: ArrayBuffer | Uint8Array): StoredMedia['mime'] | undefined {
