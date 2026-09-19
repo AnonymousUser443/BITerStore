@@ -5,6 +5,9 @@ import { Redis } from 'ioredis'
 export class RedisService implements OnModuleDestroy {
   readonly client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
     lazyConnect: true,
+    // The production ACL intentionally does not expose INFO. Disabling the
+    // ioredis ready check avoids a repeated INFO failure and its retry delay.
+    enableReadyCheck: false,
     maxRetriesPerRequest: 1,
     username: process.env.REDIS_USERNAME || undefined,
     password: process.env.REDIS_PASSWORD || undefined

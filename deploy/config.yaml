@@ -20,7 +20,7 @@ services:
       - |
         umask 077
         test -n "$${REDIS_PASSWORD}"
-        printf 'user default off\nuser biterstore on >%s ~* +@connection +get +set +setex +getdel +del +incr +expire +ttl +eval\n' "$${REDIS_PASSWORD}" > /tmp/users.acl
+        printf 'user default off\nuser biterstore on >%s ~* +@connection +get +set +setex +getdel +del +incr +expire +ttl +eval +hincrby +hgetall +pfadd +pfcount\n' "$${REDIS_PASSWORD}" > /tmp/users.acl
         exec redis-server --appendonly yes --maxmemory 768mb --maxmemory-policy allkeys-lru --aclfile /tmp/users.acl
     volumes: [redis-data:/data]
     healthcheck: { test: ["CMD-SHELL","redis-cli --user biterstore -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping"], interval: 5s, timeout: 3s, retries: 20 }

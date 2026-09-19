@@ -4,6 +4,7 @@ import { reportProgressBody, reportStatusLabels, reportTargetLabels } from '../m
 import { AdminGuard, AuthGuard, CurrentUser, type AuthUser } from '../../common/auth.js'
 import { CatalogCacheService } from '../../infra/catalog-cache.service.js'
 import { PrismaService } from '../../infra/prisma.service.js'
+import { TrafficMetricsService } from '../../infra/traffic-metrics.service.js'
 
 const userStatuses = ['ACTIVE', 'MUTED', 'BANNED', 'DELETED'] as const
 const roles = ['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN'] as const
@@ -53,7 +54,7 @@ function pageResult<T>(items: T[], total: number, page: number, pageSize: number
 @Controller('admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminController {
-  constructor(private readonly prisma: PrismaService, @Optional() private readonly catalogCache?: CatalogCacheService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly trafficMetrics?: TrafficMetricsService, @Optional() private readonly catalogCache?: CatalogCacheService) {}
 
   @Get('metrics')
   async metrics() {
@@ -181,6 +182,13 @@ export class AdminController {
       this.prisma.listing.count({ where })
     ])
     return pageResult(items, total, page, pageSize)
+  }
+
+  @Get('traffic')
+  async traffic(@Query('days') daysRaw?: string) {
+    const days = Number.parseInt(daysRaw || '1', 10) || 1
+    if (!this.trafficMetrics) throw new Error('traffic metrics unavailable')
+    return this.trafficMetrics.summary(days)
   }
 
   @Get('listing-summary')

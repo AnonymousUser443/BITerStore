@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module.js'
+import { TrafficMetricsService } from './infra/traffic-metrics.service.js'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { accessTokenSecret, assertSecurityConfiguration, requestLoggerOptions, securityHeadersForRequest, trustedProxySetting } from './common/security-config.js'
@@ -18,6 +19,9 @@ async function bootstrap() {
     const headers = securityHeadersForRequest(request as { url?: string; protocol?: string; headers?: Record<string, unknown> })
     for (const [name, value] of Object.entries(headers)) reply.header(name, value)
     return payload
+  })
+  app.getHttpAdapter().getInstance().addHook('onResponse', async (request, reply) => {
+    void app.get(TrafficMetricsService).record(request as never, reply as never)
   })
   await app.register(cookie, { secret: accessTokenSecret() })
   app.setGlobalPrefix('api/v1')
