@@ -99,6 +99,19 @@ export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'titl
   images: Array<{ id: string; role: string; moderationStatus: string; moderationReason?: string | null }>
 }
 
+export interface TrafficDay {
+  date: string
+  requests: number
+  visitors: number
+  status: { '2xx': number; '3xx': number; '4xx': number; '5xx': number }
+  hourlyRequests: number[]
+}
+
+export interface TrafficMetrics {
+  days: TrafficDay[]
+  generatedAt: string
+}
+
 export interface ReportRow {
   id: string
   targetType: string

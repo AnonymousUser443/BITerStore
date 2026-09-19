@@ -116,6 +116,20 @@ code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; colo
 .dashboard-note p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
 .pulse { width: 10px; height: 10px; border-radius: 50%; background: #6e8a5b; box-shadow: 0 0 0 6px #e3ebdd; }
 .all-clear { display: flex; align-items: center; gap: 6px; color: #678057; font-size: 13px; font-weight: 750; }
+.traffic-panel { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 7px 24px rgba(60, 65, 48, .045); }
+.traffic-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.traffic-header h2 { margin: 2px 0 0; color: #3e483a; font: 700 20px Georgia, serif; }
+.traffic-period { color: var(--muted); font-size: 12px; }
+.traffic-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.traffic-cards article { padding: 13px 15px; border-radius: 11px; background: #f5f7f1; }
+.traffic-cards span, .traffic-cards small { display: block; color: var(--muted); font-size: 11px; }
+.traffic-cards strong { display: block; margin-top: 5px; color: #3e493a; font: 700 25px Georgia, serif; }
+.traffic-cards small { margin-top: 3px; font-size: 10px; }
+.traffic-danger { color: #a84d43 !important; }
+.traffic-chart { height: 130px; display: flex; align-items: flex-end; gap: 5px; margin-top: 20px; padding-top: 8px; border-top: 1px solid #ece9df; }
+.traffic-bar-wrap { height: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; }
+.traffic-bar { width: 100%; min-height: 3px; border-radius: 4px 4px 2px 2px; background: #9caf8b; }
+.traffic-bar-wrap span { height: 12px; color: #9a9f95; font-size: 9px; }
 
 /* Data table */
 .table-card { overflow-x: auto; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 7px 25px rgba(60, 65, 48, .045); }
@@ -266,6 +280,7 @@ td > strong { display: block; color: #30362d; }
   .metric { min-height: 120px; padding: 15px; }
   .metric strong { font-size: 28px; }
   .dashboard-note { align-items: flex-start; flex-direction: column; }
+  .traffic-cards { grid-template-columns: 1fr; }
   .table-card { overflow: visible; border: 0; background: transparent; box-shadow: none; }
   table, tbody { display: block; }
   thead { display: none; }
