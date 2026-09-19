@@ -344,6 +344,30 @@ export const uploadAdapter = {
 
 type BarcodeDetectorLike = { detect(source: ImageBitmap): Promise<Array<{ rawValue: string }>> }
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike
+async function imageBitmapFromUri(uri: string) {
+  try {
+    const response = await fetch(uri)
+    if (!response.ok) throw new Error(`image fetch failed (${response.status})`)
+    return createImageBitmap(await response.blob())
+  } catch {
+    // Some H5/WebView implementations display blob URLs successfully but do
+    // not expose them through fetch. Decode through an Image element instead.
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image()
+      element.onload = () => resolve(element)
+      element.onerror = () => reject(new Error('image load failed'))
+      element.src = uri
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')
+    if (!context || !canvas.width || !canvas.height) throw new Error('image decode failed')
+    context.drawImage(image, 0, 0)
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('image encode failed'))))
+    return createImageBitmap(blob)
+  }
+}
 export const isbnRecognitionAdapter = {
   async scan(imageUri?: string): Promise<string> {
     if (__BITERSTORE_E2E__) return '9787115428028'
@@ -355,8 +379,7 @@ export const isbnRecognitionAdapter = {
     }
     const Detector = (globalThis as typeof globalThis & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
     if (!Detector || !imageUri) throw new AppError('VALIDATION', '当前浏览器不支持图片条码识别，请在下一步手动填写 ISBN')
-    const blob = await fetch(imageUri).then((response) => response.blob())
-    const bitmap = await createImageBitmap(blob)
+    const bitmap = await imageBitmapFromUri(imageUri)
     const values = await new Detector({ formats: ['ean_13', 'ean_8'] }).detect(bitmap)
     bitmap.close()
     const isbn = String(values[0]?.rawValue || '').replace(/[^0-9Xx]/g, '').toUpperCase()
