@@ -52,6 +52,8 @@ export default defineConfig<'webpack5'>(async (merge) => {
     copy: {
       patterns: [...assetPatterns, ...(!isWeapp ? [
         { from: 'src/hosting/_redirects', to: 'dist' },
+        { from: 'src/hosting/robots.txt', to: 'dist/robots.txt' },
+        { from: 'src/hosting/sitemap.xml', to: 'dist/sitemap.xml' },
         { from: path.resolve(__dirname, '../../web/public/sw.js'), to: 'dist/sw.js' }
       ] : [])],
       options: {}

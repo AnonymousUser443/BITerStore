@@ -20,7 +20,8 @@ describe('production gateway', () => {
     expect(h5Nginx).toContain('return 302 /books?id=$1;')
     expect(h5Nginx).toContain('return 302 /chat?id=$1;')
     expect(h5Nginx).toContain('return 302 /notifications?type=$1;')
-    expect(h5Nginx).toContain('return 302 /states?type=404;')
+    expect(h5Nginx).toContain('location @app_not_found')
+    expect(h5Nginx).toContain('return 404;')
     expect(h5Nginx).toContain('location = /sw.js')
   })
 
