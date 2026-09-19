@@ -1,3 +1,4 @@
+import { TrafficPanel } from './TrafficPanel'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle, BookOpen, Check, ChevronLeft, ChevronRight, ClipboardList, Copy,
@@ -7,7 +8,7 @@ import { ListingDetailDialog } from './ListingDetailDialog'
 import { ADMIN_TOKEN_KEY, ApiError, apiBlob, apiRequest, queryString, refreshBrowserSession, requestId } from './api'
 import type {
   AdminIdentity, AuditRow, ElevatedSession, FeedbackRow, ListingRow, Metrics, PageResult,
-  ListingSummary, PendingAction, ReportRow, SecurityStatus, TotpSetup, TrafficMetrics, UserRow, View
+  ListingSummary, PendingAction, ReportRow, SecurityStatus, TotpSetup, UserRow, View
 } from './types'
 
 type ListingSection = 'review' | 'all' | 'history'
@@ -210,7 +211,6 @@ function CodeInput({ code, setCode, autoFocus = false }: { code: string; setCode
 function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity; onSessionExpired: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [data, setData] = useState<Metrics | PageResult<UserRow | ListingRow | ReportRow | FeedbackRow | AuditRow> | null>(null)
-  const [traffic, setTraffic] = useState<TrafficMetrics | null>(null)
   const [page, setPage] = useState(1)
   const [draftQ, setDraftQ] = useState('')
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({})
@@ -238,13 +238,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
         : view === 'listings' && listingSection === 'history'
           ? `/admin/audit-logs${queryString({ q: query.q, action: query.action, resourceType: 'LISTING', page, pageSize: 20 })}`
           : `/admin/${view === 'audit' ? 'audit-logs' : view}${queryString({ ...query, ...(view === 'listings' ? { reviewState: listingSection === 'review' ? 'PENDING' : 'ALL' } : {}), page, pageSize: 20 })}`
-      if (view === 'dashboard') {
-        const [metrics, trafficMetrics] = await Promise.all([apiRequest<Metrics>(path), apiRequest<TrafficMetrics>('/admin/traffic?days=1')])
-        setData(metrics)
-        setTraffic(trafficMetrics)
-      } else {
-        setData(await apiRequest(path))
-      }
+      setData(await apiRequest(path))
     } catch (cause) {
       if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) {
         sessionStorage.removeItem(ADMIN_TOKEN_KEY)
@@ -262,7 +256,6 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
     setDraftFilters({})
     setQuery({})
     setData(null)
-    setTraffic(null)
     if (next === 'listings') setListingSection('review')
   }
 
@@ -329,7 +322,7 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
       {notice && <div className="toast"><Check size={17} />{notice}</div>}
       <section className={busy && data ? 'content-area refreshing' : 'content-area'}>
         {!data ? (busy ? <LoadingRows /> : null) : view === 'dashboard'
-          ? <Dashboard data={data as Metrics} traffic={traffic} openReports={() => changeView('reports')} />
+          ? <Dashboard data={data as Metrics} openReports={() => changeView('reports')} />
           : <DataView view={view} listingSection={listingSection} data={data as PageResult<UserRow | ListingRow | ReportRow | FeedbackRow | AuditRow>} identity={identity} onAction={openActions} />}
       </section>
       {view !== 'dashboard' && data && <Pagination data={data as PageResult<unknown>} setPage={setPage} />}
@@ -372,17 +365,10 @@ function ListingTabs({ section, summary, onChange }: { section: ListingSection; 
   </div>
 }
 
-function Dashboard({ data, traffic, openReports }: { data: Metrics; traffic: TrafficMetrics | null; openReports: () => void }) {
-  const today = traffic?.days?.[0]
-  const hourly = today?.hourlyRequests || []
-  const maxHourly = Math.max(1, ...hourly)
+function Dashboard({ data, openReports }: { data: Metrics; openReports: () => void }) {
   return <>
     <div className="metrics-grid">{metricCards.map((card) => <article className={`metric ${card.tone}`} key={card.key}><div><span>{card.label}</span><small>{card.note}</small></div><strong>{data[card.key]}</strong></article>)}</div>
-    <div className="traffic-panel">
-      <div className="traffic-header"><div><p className="eyebrow">访问监测</p><h2>请求与访问人数</h2></div><span className="traffic-period">今日 ? {today?.date || '暂无数据'}</span></div>
-      <div className="traffic-cards"><article><span>请求次数</span><strong>{today?.requests ?? 0}</strong></article><article><span>独立访问人数</span><strong>{today?.visitors ?? 0}</strong><small>HyperLogLog 估算</small></article><article><span>5xx 错误</span><strong className={today?.status['5xx'] ? 'traffic-danger' : ''}>{today?.status['5xx'] ?? 0}</strong></article></div>
-      <div className="traffic-chart" aria-label="近 24 小时请求数">{hourly.map((count, hour) => <div className="traffic-bar-wrap" key={hour} title={`${String(hour).padStart(2, '0')}:00 - ${count} 次`}><div className="traffic-bar" style={{ height: `${Math.max(4, (count / maxHourly) * 100)}%` }} /><span>{hour % 4 === 0 ? String(hour).padStart(2, '0') : ''}</span></div>)}</div>
-    </div>
+    <TrafficPanel />
     <div className="dashboard-note"><div><span className="pulse" /><div><strong>数据已同步</strong><p>统计时间：{dateTime(data.generatedAt)}</p></div></div>{data.openReports > 0 ? <button className="secondary" onClick={openReports}>处理 {data.openReports} 条举报</button> : <span className="all-clear"><Check size={16} />暂无举报待办</span>}</div>
   </>
 }

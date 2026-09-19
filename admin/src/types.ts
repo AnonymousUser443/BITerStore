@@ -100,6 +100,9 @@ export interface ListingDetail extends Pick<ListingRow, 'id' | 'version' | 'titl
 }
 
 export interface TrafficDay {
+  observed: boolean
+  hourlyVisitors: number[]
+  hourlyStatus: Array<{ '2xx': number; '3xx': number; '4xx': number; '5xx': number }>
   date: string
   requests: number
   visitors: number
@@ -108,6 +111,7 @@ export interface TrafficDay {
 }
 
 export interface TrafficMetrics {
+  timeZone: string
   days: TrafficDay[]
   generatedAt: string
 }
