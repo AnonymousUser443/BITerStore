@@ -166,13 +166,25 @@ function putBlob(url: string, blob: Blob, authRequired: boolean, onProgress?: (p
         // Let XMLHttpRequest report malformed upload URLs below.
       }
     }
-    request.open('PUT', uploadUrl);
-    request.withCredentials = authRequired;
-    request.setRequestHeader('Content-Type', blob.type || 'image/jpeg');
+    let retriedAfterRefresh = false;
+    const send = () => {
+      request.open('PUT', uploadUrl);
+      request.withCredentials = authRequired;
+      request.setRequestHeader('Content-Type', blob.type || 'image/jpeg');
+      request.send(blob);
+    };
     request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress?.(event.loaded / event.total); };
     request.onerror = () => reject(new Error('图片上传网络中断，请检查网络后重试'));
-    request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error(`图片上传失败（${request.status}）`));
-    request.send(blob);
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) return resolve();
+      if (request.status === 401 && authRequired && !retriedAfterRefresh) {
+        retriedAfterRefresh = true;
+        void h5ApiRequest('/auth/refresh', { method: 'POST', body: '{}' }, false).then(send).catch(reject);
+        return;
+      }
+      reject(new Error(`图片上传失败（${request.status}）`));
+    };
+    send();
   });
 }
 
