@@ -199,7 +199,6 @@ BITerStore/
 
 本地部署及环境变量见 [`deploy/README.md`](./deploy/README.md)。真实微信、BIT-Login、R2 和 Cloudflare Tunnel 联调需要部署者自己的应用资质、域名与密钥。平台仍不提供在线支付、物流、评价、复杂推荐或音视频聊天。
 
-项目接手、生产发布、运维、回滚、密钥交接和已知风险见 [`docs/项目交接文档.md`](./docs/项目交接文档.md)。
 
 ## 📄 开源许可
 
