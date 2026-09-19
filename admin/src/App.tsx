@@ -223,6 +223,25 @@ function AdminConsole({ identity, onSessionExpired }: { identity: AdminIdentity;
   const [listingSection, setListingSection] = useState<ListingSection>('review')
   const [listingSummary, setListingSummary] = useState<ListingSummary | null>(null)
 
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        await apiRequest('/admin/security/refresh', { method: 'POST', body: '{}' })
+      } catch (cause) {
+        if (active && cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) onSessionExpired()
+      }
+    }
+    const timer = window.setInterval(() => void refresh(), 5 * 60 * 1000)
+    const onVisibilityChange = () => { if (document.visibilityState === 'visible') void refresh() }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [onSessionExpired])
+
   useEffect(() => { void load() }, [view, page, query, reloadKey])
   useEffect(() => {
     if (view !== 'listings') return
