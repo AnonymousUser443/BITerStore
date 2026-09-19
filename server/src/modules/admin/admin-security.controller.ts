@@ -1,6 +1,6 @@
 import { BadRequestException, Controller, ForbiddenException, Get, HttpException, HttpStatus, Post, Body, Optional, Req, UseGuards, ServiceUnavailableException } from '@nestjs/common'
 import type { FastifyRequest } from 'fastify'
-import { AuthGuard, CurrentUser, effectiveCampusStatus, signAccessToken, type AuthUser } from '../../common/auth.js'
+import { AdminGuard, AuthGuard, CurrentUser, effectiveCampusStatus, signAccessToken, type AuthUser } from '../../common/auth.js'
 import { createTotpSecret, decryptTotp, encryptTotp, verifyTotp } from '../../common/totp.js'
 import { PrismaService } from '../../infra/prisma.service.js'
 import { RedisService } from '../../infra/redis.service.js'
@@ -57,6 +57,21 @@ export class AdminSecurityController {
     return {
       user: { id: record.id, nickname: record.nickname, role: record.role, campusStatus: record.campusStatus },
       totpEnabled: record.adminTotpEnabled
+    }
+  }
+
+  @Post('refresh') @UseGuards(AdminGuard)
+  async refresh(@CurrentUser() user: AuthUser) {
+    if (!user.sessionId) throw new ForbiddenException('管理员会话无效，请重新验证动态验证码')
+    const ttlSeconds = Number(process.env.ACCESS_TOKEN_TTL_SECONDS || 900)
+    const session = await this.prisma.session.findFirst({ where: { id: user.sessionId, userId: user.id, platform: 'admin-totp', revokedAt: null } })
+    if (!session || session.expiresAt <= new Date()) throw new ForbiddenException('管理员会话已过期，请重新验证动态验证码')
+    await this.prisma.session.update({ where: { id: session.id }, data: { expiresAt: new Date(Date.now() + ttlSeconds * 1000) } })
+    const record = await this.adminRecord(user.id)
+    return {
+      accessToken: await signAccessToken({ id: record.id, role: record.role, campusStatus: record.campusStatus }, true, session.id),
+      expiresIn: ttlSeconds,
+      user: { id: record.id, nickname: record.nickname, role: record.role }
     }
   }
 

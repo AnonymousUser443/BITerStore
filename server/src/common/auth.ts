@@ -10,6 +10,7 @@ export interface AuthUser {
   /** Set by AuthGuard from the database; optional keeps token helpers backwards compatible. */
   status?: 'ACTIVE' | 'MUTED' | 'BANNED' | 'DELETED'
   adminTotp?: boolean
+  sessionId?: string
 }
 export function assertNotMuted(user: AuthUser | undefined) {
   if (user?.status === 'MUTED') throw new ForbiddenException('当前账号处于禁言状态，暂不能进行互动操作')
@@ -62,7 +63,8 @@ export class AuthGuard implements CanActivate {
         role: record.role,
         campusStatus: effectiveCampusStatus(record),
         status: record.status,
-        adminTotp: payload.adminTotp === true && record.adminTotpEnabled
+        adminTotp: payload.adminTotp === true && record.adminTotpEnabled,
+        sessionId: typeof payload.sid === 'string' ? payload.sid : undefined
       }
       return true
     } catch (error) {

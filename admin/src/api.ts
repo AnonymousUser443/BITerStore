@@ -7,9 +7,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}, tokenOverride?: string | null): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}, tokenOverride?: string | null, allowRefresh = true): Promise<T> {
   const token = tokenOverride === undefined ? sessionStorage.getItem(ADMIN_TOKEN_KEY) : tokenOverride
-  const response = await fetch(`${API_ROOT}${path}`, {
+  let response = await fetch(`${API_ROOT}${path}`, {
     ...init,
     credentials: 'same-origin',
     headers: {
@@ -18,6 +18,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, tokenO
       ...init.headers
     }
   })
+  if (response.status === 401 && token && allowRefresh && path !== '/admin/security/refresh') {
+    const refreshed = await fetch(`${API_ROOT}/admin/security/refresh`, {
+      method: 'POST', body: '{}', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    })
+    if (refreshed.ok) {
+      const session = await refreshed.json() as { accessToken?: string }
+      if (session.accessToken) {
+        sessionStorage.setItem(ADMIN_TOKEN_KEY, session.accessToken)
+        return apiRequest<T>(path, init, session.accessToken, false)
+      }
+    }
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { message?: string | string[] } | null
     const message = Array.isArray(payload?.message) ? payload.message.join('；') : payload?.message
