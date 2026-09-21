@@ -133,6 +133,7 @@ export class OfficialQQClient {
           return
         }
         if (payload.op === 0 && payload.t === 'READY') {
+          console.log('[qq-bot] official QQ gateway ready')
           finish()
           return
         }

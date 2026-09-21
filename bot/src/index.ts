@@ -197,6 +197,7 @@ async function handleOfficialEvent(event: OfficialQQEvent) {
     if (!state.groupOpenIds.includes(groupOpenId)) {
       state.groupOpenIds.push(groupOpenId)
       await saveState()
+      console.log('[qq-bot] discovered an official QQ group')
     }
   }
   if (!groupOpenId || (configuredGroupOpenIds.length > 0 && !configuredGroupOpenIds.includes(groupOpenId))) return
