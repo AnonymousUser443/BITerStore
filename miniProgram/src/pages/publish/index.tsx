@@ -50,6 +50,7 @@ export default function PublishPage() {
   const pick = async () => { const selected = await mediaAdapter.pick({ count: Math.max(1, 6 - draft.mediaIds.length) }); const saved = await mediaAdapter.persist(selected); patch({ mediaIds: [...draft.mediaIds, ...saved.map((item) => item.id)].slice(0, 6) }) }
   const generate = async () => {
     if (!draft.coverMediaId || !draft.isbnMediaId) { await feedbackAdapter.toast('请先拍摄封面和 ISBN 页'); return }
+    if (aiLoading) return
     setAiLoading(true)
     setAiError('')
     let recognizedIsbn = ''
@@ -66,20 +67,21 @@ export default function PublishPage() {
       setStep(2)
       void feedbackAdapter.toast('已识别 ISBN 并补全书籍信息')
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : '识别失败，请手动填写 ISBN'
       if (recognizedIsbn) {
         patch({ isbn: recognizedIsbn })
-        setStep(2)
         void feedbackAdapter.toast('已识别 ISBN；书目信息暂未查到，请手动补全')
       } else {
-        const message = cause instanceof Error ? cause.message : '识别失败，请重试'
         setAiError(message)
         void feedbackAdapter.toast(message)
       }
-    }
-    finally { setAiLoading(false) }
+      // Keep both entry points consistent: after attempting barcode scanning,
+      // let the seller continue with manual ISBN and book details.
+      setStep(2)
+    } finally { setAiLoading(false) }
   }
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0 }
-  const next = async () => { if (step === 1) { if (!draft.coverMediaId || !draft.isbnMediaId) return feedbackAdapter.toast('封面和 ISBN 页均为必拍项'); setStep(2) } else if (validate()) setStep(3) }
+  const next = async () => { if (step === 1) { if (!draft.coverMediaId || !draft.isbnMediaId) return feedbackAdapter.toast('封面和 ISBN 页均为必拍项'); await generate() } else if (validate()) setStep(3) }
   const save = async () => { await demoRepository.saveDraft(draft); await feedbackAdapter.toast('草稿已保存') }
   const publish = async () => { if (publishingRef.current) return; if (!validate()) return setStep(2); publishingRef.current = true; setPublishing(true); setPublishProgress(1); try { await demoRepository.publishListing(draft, setPublishProgress); await navigationAdapter.go('/pages/states/index?type=success') } catch (cause) { publishingRef.current = false; setPublishing(false); setPublishProgress(0); await feedbackAdapter.toast(cause instanceof Error ? cause.message : '发布失败，请稍后重试') } }
   const removeImage = async (id: string) => { await mediaAdapter.remove([id]); patch({ mediaIds: draft.mediaIds.filter((value) => value !== id), ...(draft.coverMediaId === id ? { coverMediaId: undefined } : {}), ...(draft.isbnMediaId === id ? { isbnMediaId: undefined } : {}) }) }

@@ -72,7 +72,11 @@ export async function h5ApiRequest<T>(path: string, init: RequestInit = {}, retr
     }
   }
   if (result.response.status === 401 && path !== '/auth/refresh') notifyAuthExpired();
-  if (!result.response.ok) throw new Error(messageOf(result.body, `请求失败（${result.response.status}）`));
+  if (!result.response.ok) {
+    const error = new Error(messageOf(result.body, `请求失败（${result.response.status}）`)) as Error & { status?: number };
+    error.status = result.response.status;
+    throw error;
+  }
   return result.body as T;
 }
 

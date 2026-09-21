@@ -21,7 +21,7 @@ import {
   type BitLoginChallenge,
 } from '../lib/bit-login';
 import { getH5Profile, h5ApiRequest, loginWithCampusCookie, logoutH5Session, restoreH5Session, updateH5Profile, type H5Profile } from '../lib/h5-auth';
-import { clearImages, compressImage, getImages, imageToBlob, saveImages, scanIsbnBarcode } from '../lib/image-store';
+import { clearImages, compressImage, getImages, getIsbnImageCandidates, saveImages, scanIsbnBarcode } from '../lib/image-store';
 import { defaultFilters, demoRepository, getUser, peekBook, peekBooks, peekFavorites, peekMyListings, peekNotifications, peekThread, peekThreads } from '../lib/repository';
 import { formatMessageTime, formatThreadTime } from '../lib/date-time';
 import { appPathFromUrl, browserPathForAppPath, exactRouteParam, notificationRouteTypes, stateRouteTypes } from '../lib/routes';
@@ -545,33 +545,47 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
   useEffect(() => { demoRepository.getDraft().then((value) => { if (value) { setDraft({ ...value, clientRequestId: value.clientRequestId || newPublishRequestId() }); if (value.imageStoreKey) getImages(value.imageStoreKey).then(setImages); } }); }, []);
   const update = <K extends keyof PublishDraft>(key: K, value: PublishDraft[K]) => setDraft((valueDraft) => ({ ...valueDraft, [key]: value }));
   const persistImages = async (next: string[]) => { const key = draft.imageStoreKey ?? defaultImageStoreKey; await saveImages(key, next); setImages(next); setDraft((current) => ({ ...current, imageStoreKey: key })); };
-  const handleRequired = async (slot: 0 | 1, files: FileList | null) => { const file = files?.[0]; if (!file) return; const image = await compressImage(file); const next = [...images]; next[slot] = image; await persistImages(next); notify(slot === 0 ? '封面已拍摄' : 'ISBN 页已拍摄'); };
+  const handleRequired = async (slot: 0 | 1, files: FileList | null) => { const file = files?.[0]; if (!file) return; const image = slot === 1 ? await compressImage(file, 1600, .86) : await compressImage(file); const next = [...images]; next[slot] = image; await persistImages(next); notify(slot === 0 ? '封面已拍摄' : 'ISBN 页已拍摄'); };
   const handleExtras = async (files: FileList | null) => { if (!files) return; const extras = await Promise.all(Array.from(files).slice(0, Math.max(0, 6 - images.filter(Boolean).length)).map((file) => compressImage(file))); const next = [images[0] || '', images[1] || '', ...images.slice(2).filter(Boolean), ...extras].slice(0, 6); await persistImages(next); notify(`已添加 ${extras.length} 张补充图片`); };
   const removeImage = async (index: number) => { const next = [...images]; if (index < 2) next[index] = ''; else next.splice(index, 1); await persistImages(next); };
-  const runAi = async () => {
-    if (!images[0] || !images[1]) return notify('请先拍摄封面和 ISBN 页');
+  const recognizeAndFill = async () => {
+    if (!images[0] || !images[1]) { notify('请先拍摄封面和 ISBN 页'); return; }
     setAiLoading(true);
     let isbn = '';
     try {
       try {
         isbn = await scanIsbnBarcode(images[1]);
       } catch {
-        const image = await imageToBlob(images[1]);
-        const recognized = await h5ApiRequest<{ isbn: string }>('/books/isbn/recognize', { method: 'POST', headers: { 'Content-Type': image.type || 'image/jpeg' }, body: image });
-        isbn = recognized.isbn;
+        let lastError: unknown;
+        for (const candidate of await getIsbnImageCandidates(images[1])) {
+          try {
+            const recognized = await h5ApiRequest<{ isbn: string }>('/books/isbn/recognize', { method: 'POST', headers: { 'Content-Type': candidate.type || 'image/jpeg' }, body: candidate });
+            isbn = recognized.isbn;
+            break;
+          } catch (cause) {
+            lastError = cause;
+            const status = cause instanceof Error && 'status' in cause ? (cause as Error & { status?: number }).status : undefined;
+            if (status !== 404) throw cause;
+          }
+        }
+        if (!isbn) throw lastError || new Error('ISBN 页中没有识别到清晰条码，请重新拍摄或手动填写');
       }
       setDraft((current) => ({ ...current, isbn }));
       const metadata = await h5ApiRequest<{ isbn: string; title: string; author: string; subjects: string[] }>(`/books/isbn/${isbn}`);
       setDraft((current) => ({ ...current, isbn: metadata.isbn, title: metadata.title, author: metadata.author || current.author, category: metadata.subjects.some((value) => /文学|小说|fiction/i.test(value)) ? '文学小说' : '教材教辅', course: current.course || metadata.title, description: current.description || `${metadata.title}${metadata.author ? `，${metadata.author}著` : ''}。${current.condition}，支持校内当面验书。`, tags: Array.from(new Set([...current.tags, ...metadata.subjects.slice(0, 2)])) }));
-      notify('已识别 ISBN 并补全书籍信息'); setStep(2);
+      notify('已识别 ISBN 并补全书籍信息');
     } catch (cause) {
-      if (isbn) { setDraft((current) => ({ ...current, isbn })); notify('已识别 ISBN；书目信息暂未查到，请手动补全'); setStep(2); }
-      else notify(cause instanceof Error ? cause.message : '识别失败，请重试');
-    } finally { setAiLoading(false); }
+      if (isbn) { setDraft((current) => ({ ...current, isbn })); notify('已识别 ISBN；书目信息暂未查到，请手动补全'); }
+      else notify(cause instanceof Error ? cause.message : '识别失败，请手动填写 ISBN');
+    } finally {
+      setStep(2);
+      setAiLoading(false);
+    }
   };
+  const runAi = () => { void recognizeAndFill(); };
   const validate = () => { const next = [!draft.title && '请填写书名', !draft.author && '请填写作者', !draft.price && '请填写价格', !draft.description && '请填写商品简介'].filter(Boolean) as string[]; setErrors(next); return next.length === 0; };
   const save = async () => { await demoRepository.saveDraft(draft); notify('草稿已保存'); };
-  const nextStep = () => { if (step === 1) { if (!images[0] || !images[1]) return notify('封面和 ISBN 页均为必拍项'); setStep(2); } else if (step === 2 && validate()) setStep(3); };
+  const nextStep = async () => { if (step === 1) { if (!images[0] || !images[1]) return notify('封面和 ISBN 页均为必拍项'); await recognizeAndFill(); } else if (step === 2 && validate()) setStep(3); };
   const publish = async () => {
     if (publishingRef.current) return;
     if (!validate()) return setStep(2);
