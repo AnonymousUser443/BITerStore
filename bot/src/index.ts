@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import WebSocket from 'ws'
+import { OfficialQQClient, type OfficialQQEvent } from './official-qq.js'
 
 type Overview = {
   date: string
@@ -8,10 +9,13 @@ type Overview = {
   today: { submitted: number; approved: number; sold: number; requests: number; visitors: number; trafficObserved: boolean }
 }
 type PendingItem = { id: string; title: string; author: string; isbn: string; campus: string; createdAt: string; seller: { nickname: string } }
-type State = { pendingIds: string[]; initialized?: boolean; lastReportDate?: string }
+type State = { pendingIds: string[]; groupOpenIds: string[]; initialized?: boolean; lastReportDate?: string }
 
 const apiBase = (process.env.BITERSTORE_API_URL || 'http://api:3100/api/v1').replace(/\/$/, '')
 const apiToken = process.env.BOT_API_TOKEN?.trim() || ''
+const qqAppId = process.env.QQ_APP_ID?.trim() || ''
+const qqAppSecret = process.env.QQ_APP_SECRET?.trim() || ''
+const configuredGroupOpenIds = (process.env.QQ_GROUP_OPEN_IDS || '').split(',').map((value) => value.trim()).filter(Boolean)
 const oneBotUrl = process.env.ONEBOT_WS_URL?.trim() || ''
 const oneBotToken = process.env.ONEBOT_ACCESS_TOKEN?.trim()
 const groupIds = (process.env.QQ_GROUP_IDS || '').split(',').map((value) => value.trim()).filter(Boolean)
@@ -22,10 +26,11 @@ const stateFile = process.env.BOT_STATE_FILE || '/data/state.json'
 const notifyExisting = process.env.BOT_NOTIFY_EXISTING_ON_START === 'true'
 const adminBase = (process.env.BITERSTORE_ADMIN_URL || '/admin').trim().replace(/\/$/, '')
 
-let state: State = { pendingIds: [] }
+let state: State = { pendingIds: [], groupOpenIds: [] }
 let socket: WebSocket | undefined
 let socketReady: Promise<void> | undefined
 let echo = 0
+const official = qqAppId && qqAppSecret ? new OfficialQQClient(qqAppId, qqAppSecret, (event) => handleOfficialEvent(event)) : undefined
 
 async function loadState() {
   try {
@@ -33,6 +38,7 @@ async function loadState() {
     const pendingIds = Array.isArray(stored.pendingIds) ? stored.pendingIds.map(String) : []
     state = {
       pendingIds,
+      groupOpenIds: Array.isArray(stored.groupOpenIds) ? stored.groupOpenIds.map(String) : [],
       // State files created before the initialized flag already had a cursor if
       // they had observed a queue, so preserve that behavior after upgrading.
       initialized: typeof stored.initialized === 'boolean' ? stored.initialized : pendingIds.length > 0,
@@ -82,7 +88,21 @@ function sendAction(action: string, params: Record<string, unknown>) {
   })
 }
 
-async function sendGroup(text: string) {
+function officialTargets(target?: string) {
+  if (target) return [target]
+  return configuredGroupOpenIds.length ? configuredGroupOpenIds : state.groupOpenIds
+}
+
+async function sendGroup(text: string, target?: string) {
+  if (official) {
+    const targets = officialTargets(target)
+    if (!targets.length) {
+      console.warn('[qq-bot] no group_openid is known yet; mention the bot in the target group once')
+      return
+    }
+    await Promise.all(targets.map((groupOpenId) => official.sendGroupMessage(groupOpenId, text)))
+    return
+  }
   if (!groupIds.length) return
   await ensureSocket()
   await Promise.all(groupIds.map((groupId) => sendAction('send_group_msg', { group_id: Number(groupId), message: text })))
@@ -121,11 +141,23 @@ async function reportOverview() {
   await sendGroup(formatOverview(overview))
 }
 
+async function reportOverviewTo(groupOpenId: string) {
+  const overview = await api<Overview>('/bot/overview')
+  await sendGroup(formatOverview(overview), groupOpenId)
+}
+
 async function reportPending() {
   const pending = await api<{ items: PendingItem[]; total: number }>('/bot/pending')
   if (!pending.total) return sendGroup('当前没有待审核商品。')
   const names = pending.items.slice(0, 8).map((item, index) => `${index + 1}. ${item.title}（${item.seller?.nickname || '未知卖家'}）`)
   await sendGroup(`当前待审核 ${pending.total} 条\n${names.join('\n')}${pending.total > names.length ? `\n还有 ${pending.total - names.length} 条未展开` : ''}`)
+}
+
+async function reportPendingTo(groupOpenId: string) {
+  const pending = await api<{ items: PendingItem[]; total: number }>('/bot/pending')
+  if (!pending.total) return sendGroup('当前没有待审核商品。', groupOpenId)
+  const names = pending.items.slice(0, 8).map((item, index) => `${index + 1}. ${item.title}（${item.seller?.nickname || '未知卖家'}）`)
+  await sendGroup(`当前待审核 ${pending.total} 条\n${names.join('\n')}${pending.total > names.length ? `\n还有 ${pending.total - names.length} 条未展开` : ''}`, groupOpenId)
 }
 
 async function pollPending() {
@@ -156,6 +188,24 @@ async function handleEvent(raw: string) {
   if (text === '/待审核') return reportPending()
 }
 
+async function handleOfficialEvent(event: OfficialQQEvent) {
+  const type = event.t || ''
+  const data = event.d || {}
+  const groupOpenId = typeof data.group_openid === 'string' ? data.group_openid : ''
+  const allowedGroup = configuredGroupOpenIds.length === 0 || configuredGroupOpenIds.includes(groupOpenId)
+  if (groupOpenId && allowedGroup && (type === 'GROUP_ADD_ROBOT' || type === 'GROUP_AT_MESSAGE_CREATE' || type === 'GROUP_MESSAGE_CREATE')) {
+    if (!state.groupOpenIds.includes(groupOpenId)) {
+      state.groupOpenIds.push(groupOpenId)
+      await saveState()
+    }
+  }
+  if (!groupOpenId || (configuredGroupOpenIds.length > 0 && !configuredGroupOpenIds.includes(groupOpenId))) return
+  if (type !== 'GROUP_AT_MESSAGE_CREATE' && type !== 'GROUP_MESSAGE_CREATE') return
+  const text = String(data.content || '').trim()
+  if (text === '/今日' || text === '/今日数据') return reportOverviewTo(groupOpenId)
+  if (text === '/待审核') return reportPendingTo(groupOpenId)
+}
+
 async function tick() {
   try {
     await pollPending()
@@ -176,7 +226,8 @@ async function tick() {
 
 async function main() {
   await loadState()
-  if (!oneBotUrl) console.warn('[qq-bot] ONEBOT_WS_URL is not configured; API polling will continue but messages cannot be sent')
+  if (official) void official.start().catch((error) => console.error('[qq-bot] official connection failed:', error.message))
+  else if (!oneBotUrl) console.warn('[qq-bot] QQ_APP_ID/QQ_APP_SECRET or ONEBOT_WS_URL is not configured; API polling will continue but messages cannot be sent')
   else void ensureSocket().catch((error) => console.error('[qq-bot] initial connection failed:', error.message))
   await tick()
   setInterval(() => { void tick() }, pollInterval)
