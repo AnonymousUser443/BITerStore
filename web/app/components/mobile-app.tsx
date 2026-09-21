@@ -550,6 +550,7 @@ function PublishPage({ navigate, notify }: { navigate: (to: string) => void; not
   const removeImage = async (index: number) => { const next = [...images]; if (index < 2) next[index] = ''; else next.splice(index, 1); await persistImages(next); };
   const recognizeAndFill = async () => {
     if (!images[0] || !images[1]) { notify('请先拍摄封面和 ISBN 页'); return; }
+    if (aiLoading) return;
     setAiLoading(true);
     let isbn = '';
     try {
