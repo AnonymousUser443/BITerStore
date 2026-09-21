@@ -29,7 +29,7 @@ export class TrafficMetricsService {
     try {
       await this.redis.ensureConnected()
       const now = new Date()
-      if (/^\/api\/v1\/(health|admin)(\/|\?|$)/.test(request.url || '')) return
+      if (/^\/api\/v1\/(health|admin|bot)(\/|\?|$)/.test(request.url || '')) return
       const day = dayKey(now)
       const key = `metrics:traffic:v2:${day}`
       const status = Number(reply.statusCode || 0)
